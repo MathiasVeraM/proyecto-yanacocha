@@ -5,6 +5,10 @@ from src.logica_negocio.auth import hash_password
 
 class UsuarioService:
     @staticmethod
+    def listar_usuarios(db: Session):
+        return UsuarioRepository.obtener_todos(db)
+    
+    @staticmethod
     def crear_nuevo_usuario(db: Session, usuario_in):
         usuario_existente = UsuarioRepository.obtener_por_correo(db, usuario_in.correo)
         if usuario_existente:

@@ -3,6 +3,10 @@ from src.modelos.usuario_model import UsuarioModel
 
 class UsuarioRepository:
     @staticmethod
+    def obtener_todos(db: Session):
+        return db.query(UsuarioModel).all()
+    
+    @staticmethod
     def obtener_por_correo(db: Session, correo: str):
         return db.query(UsuarioModel).filter(UsuarioModel.correo == correo).first()
 

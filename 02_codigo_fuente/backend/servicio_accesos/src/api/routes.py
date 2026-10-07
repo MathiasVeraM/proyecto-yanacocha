@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from src.database import get_db
@@ -25,6 +26,10 @@ def login(form_data: UsuarioLogin, db: Session = Depends(get_db)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 # --- RUTAS PROTEGIDAS EXCLUSIVAS PARA ADMINISTRADOR ---
+
+@router.get("/usuarios", response_model=List[UsuarioResponse])
+def listar_usuarios(db: Session = Depends(get_db), _: dict = Depends(verificar_es_admin)):
+    return UsuarioService.listar_usuarios(db)
 
 @router.post("/usuarios", response_model=UsuarioResponse, status_code=status.HTTP_201_CREATED)
 def crear_usuario(usuario_in: UsuarioCreate, db: Session = Depends(get_db), _: dict = Depends(verificar_es_admin)):
