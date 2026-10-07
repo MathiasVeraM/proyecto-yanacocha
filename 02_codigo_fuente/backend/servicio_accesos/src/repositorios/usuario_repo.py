@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from ..modelos.usuario_model import UsuarioModel
+from src.modelos.usuario_model import UsuarioModel
 
 class UsuarioRepository:
     @staticmethod
