@@ -35,3 +35,11 @@ def verificar_token_access(token: str = Depends(oauth2_scheme)):
         return payload
     except jwt.PyJWTError:
         raise credentials_exception
+    
+def verificar_es_admin(token_valido: dict = Depends(verificar_token_access)):
+    if token_valido.get("id_rol") != 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado. Se requiere rol de Administrador."
+        )
+    return token_valido
