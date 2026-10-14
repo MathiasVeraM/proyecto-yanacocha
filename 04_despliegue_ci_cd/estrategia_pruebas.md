@@ -67,6 +67,8 @@ Comando local:
 
 ## Frontend (TypeScript)
 
+<!-- TODO: Hacer la estrategia de pruebas del frontend usando Jest -->
+
 (Por definir: framework de pruebas, por ejemplo Vitest o Jest, y su reporte `lcov`
 para SonarQube.)
 

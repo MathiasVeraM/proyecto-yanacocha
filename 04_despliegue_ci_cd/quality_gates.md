@@ -8,7 +8,7 @@ Para establecer los umbrales de calidad y realizar una evaluación de código nu
     Los umbrales se revisan al cerrar cada fase del proyecto. Cualquier cambio se registra en este documento mediante un PR.
 </div>
 
-
+<!-- TODO: Revisar los umbrales y que hacer si falla -->
 
 | Condición (código nuevo) | Umbral |
 |---|---|
