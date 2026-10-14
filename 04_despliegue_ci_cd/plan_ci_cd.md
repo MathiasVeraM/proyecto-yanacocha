@@ -18,7 +18,7 @@ El alcance para las pruebas se contempla realizar: pruebas unitarias, de integra
 | Pruebas unitarias | pytest, pytest-cov |
 | Pruebas de integración | pytest + Docker Compose (dentro del runner) |
 | Análisis estático y cobertura | SonarQube Cloud |
-| Seguridad | CodeQL, Gitleaks |
+| Seguridad | CodeQL, Gitleaks, Dependabot |
 | Imágenes | Docker (multi-stage), Docker Hub |
 
 ## 4. Flujo general
