@@ -1,0 +1,53 @@
+name: Backend - Pruebas Unitarias
+
+on:
+  workflow_call:
+
+jobs:
+  descubrir:
+    name: Descubrir servicios
+    runs-on: ubuntu-latest
+    outputs:
+      servicios: ${{ steps.lista.outputs.servicios }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: lista
+        run: |
+          servicios=$(find 02_codigo_fuente/backend -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | jq -R . | jq -sc .)
+          echo "servicios=$servicios" >> "$GITHUB_OUTPUT"
+          echo "Servicios encontrados: $servicios"
+
+  tests:
+    name: tests (${{ matrix.servicio }})
+    needs: descubrir
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        servicio: ${{ fromJson(needs.descubrir.outputs.servicios) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: 02_codigo_fuente/backend/${{ matrix.servicio }}/requirements.txt
+
+      - name: Instalar dependencias
+        run: pip install -r 02_codigo_fuente/backend/${{ matrix.servicio }}/requirements.txt pytest pytest-cov
+
+      - name: Ejecutar pytest con cobertura
+        run: >
+          pytest 02_codigo_fuente/backend/${{ matrix.servicio }}
+          --cov=02_codigo_fuente/backend/${{ matrix.servicio }}
+          --cov-report=xml:coverage-${{ matrix.servicio }}.xml
+          --cov-report=term-missing
+
+      - name: Guardar reporte de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.servicio }}
+          path: coverage-${{ matrix.servicio }}.xml
+          if-no-files-found: ignore

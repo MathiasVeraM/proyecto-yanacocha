@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, test, main]
+  push:
+    branches: [develop, test, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    uses: ./.github/workflows/_backend-tests.yml
+
+  resultado:
+    name: resultado
+    if: always()
+    needs: [backend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar que todo pasó
+        run: |
+          if [ "${{ needs.backend.result }}" != "success" ]; then
+            echo "El CI falló o se omitió"; exit 1
+          fi
