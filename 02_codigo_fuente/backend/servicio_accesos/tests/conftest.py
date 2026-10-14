@@ -16,7 +16,7 @@ from src.database import Base, get_db
 import src.modelos  # noqa: F401  (registra los modelos en Base.metadata)
 from src.main import app
 from src.logica_negocio.auth import create_access_token, hash_password
-from src.modelos.rol_modulo_model import RolModel
+from src.modelos.rol_modulo_model import ModuloModel, RolModel
 from src.modelos.usuario_model import UsuarioModel
 
 ID_ROL_ADMIN = 1
@@ -82,3 +82,27 @@ def client(db):
     app.dependency_overrides[get_db] = lambda: db
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def crear_rol_db(db):
+    """Fábrica de roles persistidos."""
+    def _crear(nombre_rol="Veterinaria", descripcion=None):
+        rol = RolModel(nombre_rol=nombre_rol, descripcion=descripcion)
+        db.add(rol)
+        db.commit()
+        db.refresh(rol)
+        return rol
+    return _crear
+
+
+@pytest.fixture
+def crear_modulo_db(db):
+    """Fábrica de módulos persistidos."""
+    def _crear(nombre_modulo="Fichas de ejemplares", codigo_servicio="servicio-gestion-animal"):
+        modulo = ModuloModel(nombre_modulo=nombre_modulo, codigo_servicio=codigo_servicio)
+        db.add(modulo)
+        db.commit()
+        db.refresh(modulo)
+        return modulo
+    return _crear

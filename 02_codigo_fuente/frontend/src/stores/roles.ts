@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
-import { rolesApi } from '@/api/usuarios'
+import { rolesApi } from '@/api/roles'
 import type { Rol } from '@/types'
 
 // Catálogo de roles compartido entre el layout, la tabla y el formulario

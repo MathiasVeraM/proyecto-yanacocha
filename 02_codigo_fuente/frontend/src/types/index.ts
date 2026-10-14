@@ -25,6 +25,38 @@ export interface Rol {
   descripcion: string | null
 }
 
+export interface RolCreate {
+  nombre_rol: string
+  descripcion?: string | null
+}
+
+export type RolUpdate = Partial<RolCreate>
+
+export interface Modulo {
+  id_modulo: number
+  nombre_modulo: string
+  codigo_servicio: string
+}
+
+export type ModuloCreate = Omit<Modulo, 'id_modulo'>
+
+export type ModuloUpdate = Partial<ModuloCreate>
+
+export interface RolConUsuarios extends Rol {
+  total_usuarios: number
+}
+
+export interface Permiso {
+  id_rol: number
+  id_modulo: number
+}
+
+export interface MatrizPermisos {
+  roles: RolConUsuarios[]
+  modulos: Modulo[]
+  permisos: Permiso[]
+}
+
 export interface TokenResponse {
   access_token: string
   token_type: string
