@@ -12,6 +12,5 @@ Esta carpeta documenta y respalda su diseño y configuraciones necesarias.
 | [estrategia_ramas.md](estrategia_ramas.md) | Flujo de ramas y protecciones |
 | [estrategia_pruebas.md](estrategia_pruebas.md) | Pruebas unitarias e integración |
 | [quality_gates.md](quality_gates.md) | Criterios de calidad (SonarQube) |
-| [diagramas/](diagramas/) | Diagramas del pipeline |
 | [secretos_y_variables.md](secretos_y_variables.md) | Secrets y variables requeridos |
 | [runbook.md](runbook.md) | Guía ante fallos |
