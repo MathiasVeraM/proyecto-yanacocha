@@ -7,6 +7,14 @@ class RolModuloRepository:
         return db.query(RolModel).all()
 
     @staticmethod
+    def obtener_rol_por_id(db: Session, id_rol: int):
+        return db.query(RolModel).filter(RolModel.id_rol == id_rol).first()
+
+    @staticmethod
+    def obtener_rol_por_nombre(db: Session, nombre_rol: str):
+        return db.query(RolModel).filter(RolModel.nombre_rol == nombre_rol).first()
+
+    @staticmethod
     def crear_rol(db: Session, rol_data: dict):
         rol = RolModel(**rol_data)
         db.add(rol)
@@ -17,6 +25,10 @@ class RolModuloRepository:
     @staticmethod
     def obtener_modulos(db: Session):
         return db.query(ModuloModel).all()
+
+    @staticmethod
+    def obtener_modulo_por_nombre(db: Session, nombre_modulo: str):
+        return db.query(ModuloModel).filter(ModuloModel.nombre_modulo == nombre_modulo).first()
 
     @staticmethod
     def crear_modulo(db: Session, modulo_data: dict):
