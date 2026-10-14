@@ -36,7 +36,7 @@ class UsuarioService:
                 detail="Usuario no encontrado"
             )
         
-        update_data = usuario_in.dict(exclude_unset=True)
+        update_data = usuario_in.model_dump(exclude_unset=True)
         if "password" in update_data and update_data["password"]:
             password_plano = update_data.pop("password")
             update_data["password_hash"] = hash_password(password_plano)

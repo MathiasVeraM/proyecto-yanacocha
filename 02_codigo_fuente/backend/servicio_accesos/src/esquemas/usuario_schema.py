@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 class UsuarioCreate(BaseModel):
     nombre: str
@@ -24,8 +24,7 @@ class UsuarioResponse(BaseModel):
     id_rol: int
     activo: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UsuarioLogin(BaseModel):
     correo: EmailStr

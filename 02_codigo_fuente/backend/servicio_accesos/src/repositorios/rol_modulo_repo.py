@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from src.modelos.usuario_model import RolModel, ModuloModel
+from src.modelos.rol_modulo_model import RolModel, ModuloModel
 
 class RolModuloRepository:
     @staticmethod
