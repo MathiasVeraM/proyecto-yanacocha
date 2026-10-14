@@ -32,6 +32,7 @@ export interface TokenResponse {
 
 export interface TokenPayload {
   sub: string
+  id_usuario: number
   id_rol: number
   exp: number
 }

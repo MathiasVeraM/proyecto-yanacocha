@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 from src.repositorios.rol_modulo_repo import RolModuloRepository
 
 class RolModuloService:
@@ -8,7 +9,12 @@ class RolModuloService:
 
     @staticmethod
     def crear_rol(db: Session, rol_in):
-        return RolModuloRepository.crear_rol(db, rol_in.dict())
+        if RolModuloRepository.obtener_rol_por_nombre(db, rol_in.nombre_rol):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ya existe un rol con ese nombre"
+            )
+        return RolModuloRepository.crear_rol(db, rol_in.model_dump())
 
     @staticmethod
     def listar_modulos(db: Session):
@@ -16,4 +22,9 @@ class RolModuloService:
 
     @staticmethod
     def crear_modulo(db: Session, modulo_in):
-        return RolModuloRepository.crear_modulo(db, modulo_in.dict())
+        if RolModuloRepository.obtener_modulo_por_nombre(db, modulo_in.nombre_modulo):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ya existe un módulo con ese nombre"
+            )
+        return RolModuloRepository.crear_modulo(db, modulo_in.model_dump())

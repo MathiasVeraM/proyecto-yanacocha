@@ -1,14 +1,14 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from src.database import get_db
 from src.esquemas.usuario_schema import (
-    UsuarioCreate, UsuarioUpdate, UsuarioResponse, 
+    UsuarioCreate, UsuarioUpdate, UsuarioResponse,
     UsuarioLogin, TokenResponse
 )
 from src.esquemas.rol_modulo_schema import RolCreate, ModuloCreate
-from src.repositorios.usuario_repo import UsuarioRepository
-from src.logica_negocio.auth import verify_password, create_access_token, verificar_es_admin
+from src.logica_negocio.auth import verificar_es_admin
+from src.logica_negocio.auth_service import AuthService
 from src.logica_negocio.usuario_service import UsuarioService
 from src.logica_negocio.rol_modulo_service import RolModuloService
 
@@ -16,13 +16,7 @@ router = APIRouter(prefix="/api/auth", tags=["Autenticación, Usuarios y Roles"]
 
 @router.post("/login", response_model=TokenResponse)
 def login(form_data: UsuarioLogin, db: Session = Depends(get_db)):
-    usuario = UsuarioRepository.obtener_por_correo(db, form_data.correo)
-    if not usuario or not verify_password(form_data.password, usuario.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Correo o contraseña incorrectos"
-        )
-    access_token = create_access_token({"sub": usuario.correo, "id_rol": usuario.id_rol})
+    access_token = AuthService.iniciar_sesion(db, form_data.correo, form_data.password)
     return {"access_token": access_token, "token_type": "bearer"}
 
 # --- RUTAS PROTEGIDAS EXCLUSIVAS PARA ADMINISTRADOR ---
