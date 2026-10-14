@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import AppBadge, { type BadgeTone } from '@/components/AppBadge.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import PermisosMatriz from '@/components/PermisosMatriz.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import UsuarioFormModal from '@/components/UsuarioFormModal.vue'
 import { usuariosApi } from '@/api/usuarios'
@@ -24,10 +25,15 @@ const usuarioEditando = ref<Usuario | null>(null)
 const usuarioADesactivar = ref<Usuario | null>(null)
 const desactivando = ref(false)
 
+// Acepta tanto los nombres de la base de datos (Administrativa, Veterinaria, Voluntarios)
+// como sus variantes en masculino/singular
 const tonosPorRol: Record<string, BadgeTone> = {
+  administrativa: 'green',
   administrador: 'green',
+  veterinaria: 'blue',
   veterinario: 'blue',
   'manejo de animales': 'amber',
+  voluntarios: 'indigo',
   voluntario: 'indigo',
 }
 
@@ -92,9 +98,7 @@ onMounted(cargarUsuarios)
     <button :class="{ active: tab === 'usuarios' }" @click="tab = 'usuarios'">Usuarios</button>
   </div>
 
-  <section v-if="tab === 'permisos'" class="placeholder">
-    La gestión de permisos por roles estará disponible próximamente.
-  </section>
+  <PermisosMatriz v-if="tab === 'permisos'" />
 
   <section v-else>
     <header class="section-header">
@@ -208,14 +212,6 @@ onMounted(cargarUsuarios)
 .tabs button.active {
   background: var(--color-primary);
   color: #fff;
-}
-
-.placeholder {
-  padding: 48px;
-  text-align: center;
-  color: var(--color-text-muted);
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
 }
 
 .section-header {
