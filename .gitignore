@@ -11,6 +11,10 @@ __pycache__/
 # Variables de entorno y secretos
 .env
 
+# Cobertura de pruebas de manera local
+.coverage
+coverage*.xml
+
 # Configuración del editor (VS Code)
 .vscode/
 .idea/
