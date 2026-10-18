@@ -40,7 +40,7 @@ jobs:
       - name: Ejecutar pytest con cobertura
         run: >
           pytest 02_codigo_fuente/backend/${{ matrix.servicio }}
-          --cov=02_codigo_fuente/backend/${{ matrix.servicio }}
+          --cov=02_codigo_fuente/backend/${{ matrix.servicio }}/src
           --cov-report=xml:coverage-${{ matrix.servicio }}.xml
           --cov-report=term-missing
 
