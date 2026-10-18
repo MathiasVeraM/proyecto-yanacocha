@@ -17,14 +17,24 @@ jobs:
   backend:
     uses: ./.github/workflows/_backend-tests.yml
 
+  sonar:
+    needs: backend
+    if: github.event_name == 'pull_request' || github.ref_name == 'main'
+    uses: ./.github/workflows/_sonarqube.yml
+    secrets: 
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
   resultado:
     name: resultado
     if: always()
-    needs: [backend]
+    needs: [backend, sonar]
     runs-on: ubuntu-latest
     steps:
-      - name: Verificar que todo pasó
+      - name: Verificar Resultados
         run: |
           if [ "${{ needs.backend.result }}" != "success" ]; then
-            echo "El CI falló o se omitió"; exit 1
+            echo "Fallaron las pruebas del backend"; exit 1
+          fi
+          if [ "${{ needs.sonar.result }}" = "failure" ] || [ "${{ needs.sonar.result }}" = "cancelled" ]; then
+            echo "Falló SonarQube"; exit 1
           fi
