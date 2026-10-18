@@ -6,7 +6,7 @@ from src.esquemas.usuario_schema import (
     UsuarioCreate, UsuarioUpdate, UsuarioResponse,
     UsuarioLogin, TokenResponse
 )
-from src.esquemas.rol_modulo_schema import RolCreate, ModuloCreate
+from src.esquemas.rol_modulo_schema import RolCreate, RolUpdate, ModuloCreate, ModuloUpdate
 from src.logica_negocio.auth import verificar_es_admin
 from src.logica_negocio.auth_service import AuthService
 from src.logica_negocio.usuario_service import UsuarioService
@@ -44,6 +44,34 @@ def crear_rol(rol_in: RolCreate, db: Session = Depends(get_db), _: dict = Depend
 @router.post("/modulos", status_code=status.HTTP_201_CREATED)
 def crear_modulo(modulo_in: ModuloCreate, db: Session = Depends(get_db), _: dict = Depends(verificar_es_admin)):
     return RolModuloService.crear_modulo(db, modulo_in)
+
+@router.put("/roles/{id_rol}")
+def actualizar_rol(id_rol: int, rol_in: RolUpdate, db: Session = Depends(get_db), _: dict = Depends(verificar_es_admin)):
+    return RolModuloService.actualizar_rol(db, id_rol, rol_in)
+
+@router.delete("/roles/{id_rol}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_rol(id_rol: int, db: Session = Depends(get_db), _: dict = Depends(verificar_es_admin)):
+    RolModuloService.eliminar_rol(db, id_rol)
+
+@router.put("/modulos/{id_modulo}")
+def actualizar_modulo(id_modulo: int, modulo_in: ModuloUpdate, db: Session = Depends(get_db), _: dict = Depends(verificar_es_admin)):
+    return RolModuloService.actualizar_modulo(db, id_modulo, modulo_in)
+
+@router.delete("/modulos/{id_modulo}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_modulo(id_modulo: int, db: Session = Depends(get_db), _: dict = Depends(verificar_es_admin)):
+    RolModuloService.eliminar_modulo(db, id_modulo)
+
+@router.get("/permisos/matriz")
+def obtener_matriz_permisos(db: Session = Depends(get_db), _: dict = Depends(verificar_es_admin)):
+    return RolModuloService.obtener_matriz(db)
+
+@router.put("/permisos/{id_rol}/{id_modulo}")
+def asignar_permiso(id_rol: int, id_modulo: int, db: Session = Depends(get_db), _: dict = Depends(verificar_es_admin)):
+    return RolModuloService.asignar_permiso(db, id_rol, id_modulo)
+
+@router.delete("/permisos/{id_rol}/{id_modulo}", status_code=status.HTTP_204_NO_CONTENT)
+def quitar_permiso(id_rol: int, id_modulo: int, db: Session = Depends(get_db), _: dict = Depends(verificar_es_admin)):
+    RolModuloService.quitar_permiso(db, id_rol, id_modulo)
 
 # --- RUTAS DE CONSULTA PÚBLICAS O GENERALES (según necesites) ---
 
