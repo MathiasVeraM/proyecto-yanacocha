@@ -44,7 +44,7 @@ def test_editar_rol_nombre_vacio_422(client, headers_admin):
 
 def test_eliminar_rol(client, headers_admin):
     assert client.delete("/api/auth/roles/2", headers=headers_admin).status_code == 204
-    ids = [r["id_rol"] for r in client.get("/api/auth/roles").json()]
+    ids = [r["id_rol"] for r in client.get("/api/auth/roles", headers=headers_admin).json()]
     assert 2 not in ids
 
 
@@ -89,7 +89,7 @@ def test_editar_modulo_nombre_duplicado_400(client, headers_admin, crear_modulo_
 def test_eliminar_modulo(client, headers_admin, crear_modulo_db):
     modulo = crear_modulo_db()
     assert client.delete(f"/api/auth/modulos/{modulo.id_modulo}", headers=headers_admin).status_code == 204
-    assert client.get("/api/auth/modulos").json() == []
+    assert client.get("/api/auth/modulos", headers=headers_admin).json() == []
 
 
 def test_eliminar_modulo_inexistente_404(client, headers_admin):

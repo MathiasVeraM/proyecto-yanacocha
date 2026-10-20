@@ -55,3 +55,30 @@ def test_timeout_invalido_falla_al_iniciar(recargar_config, monkeypatch):
 
     with pytest.raises(ValueError):
         recargar_config()
+
+
+def test_lee_secret_key_y_algoritmo_desde_el_entorno(recargar_config, monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "otra-clave")
+    monkeypatch.setenv("ALGORITHM", "HS512")
+
+    config = recargar_config()
+
+    assert (config.SECRET_KEY, config.ALGORITHM) == ("otra-clave", "HS512")
+
+
+def test_algoritmo_por_defecto_es_hs256(recargar_config, monkeypatch):
+    monkeypatch.delenv("ALGORITHM", raising=False)
+
+    assert recargar_config().ALGORITHM == "HS256"
+
+
+@pytest.mark.parametrize("valor", [None, ""])
+def test_sin_secret_key_falla_al_iniciar(recargar_config, monkeypatch, valor):
+    # No hay valor por defecto: evita firmar o validar tokens con un secreto conocido
+    if valor is None:
+        monkeypatch.delenv("SECRET_KEY", raising=False)
+    else:
+        monkeypatch.setenv("SECRET_KEY", valor)
+
+    with pytest.raises(RuntimeError):
+        recargar_config()

@@ -82,3 +82,29 @@ def test_eliminar_permisos_de_un_modulo(db, crear_modulo_db):
     RolModuloRepository.asignar_permiso(db, 2, m2.id_modulo)
     RolModuloRepository.eliminar_permisos_de_modulo(db, m1.id_modulo)
     assert [(p.id_rol, p.id_modulo) for p in db.query(RolPermisoModel).all()] == [(2, m2.id_modulo)]
+
+
+# --- Códigos de servicio permitidos para un rol (van dentro del token) ---
+
+def test_codigos_de_servicio_del_rol(db, crear_modulo_db):
+    m1, m2 = crear_modulo_db("M1", "servicio-a"), crear_modulo_db("M2", "servicio-b")
+    RolModuloRepository.asignar_permiso(db, 2, m1.id_modulo)
+    RolModuloRepository.asignar_permiso(db, 2, m2.id_modulo)
+    RolModuloRepository.asignar_permiso(db, 1, m1.id_modulo)
+    assert sorted(RolModuloRepository.obtener_codigos_servicio_por_rol(db, 2)) == ["servicio-a", "servicio-b"]
+    assert RolModuloRepository.obtener_codigos_servicio_por_rol(db, 1) == ["servicio-a"]
+
+
+def test_codigos_de_servicio_sin_permisos_es_lista_vacia(db, crear_modulo_db):
+    crear_modulo_db()
+    assert RolModuloRepository.obtener_codigos_servicio_por_rol(db, 2) == []
+    assert RolModuloRepository.obtener_codigos_servicio_por_rol(db, 999) == []
+
+
+def test_codigos_de_servicio_sin_repetir(db, crear_modulo_db):
+    # Varios módulos pueden compartir el mismo servicio (p. ej. Animales y Veterinaria)
+    m1 = crear_modulo_db("Animales", "servicio-gestion-animal")
+    m2 = crear_modulo_db("Veterinaria", "servicio-gestion-animal")
+    RolModuloRepository.asignar_permiso(db, 2, m1.id_modulo)
+    RolModuloRepository.asignar_permiso(db, 2, m2.id_modulo)
+    assert RolModuloRepository.obtener_codigos_servicio_por_rol(db, 2) == ["servicio-gestion-animal"]
