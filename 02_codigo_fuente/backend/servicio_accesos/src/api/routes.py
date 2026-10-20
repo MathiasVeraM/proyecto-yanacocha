@@ -7,7 +7,7 @@ from src.esquemas.usuario_schema import (
     UsuarioLogin, TokenResponse
 )
 from src.esquemas.rol_modulo_schema import RolCreate, RolUpdate, ModuloCreate, ModuloUpdate
-from src.logica_negocio.auth import verificar_es_admin
+from src.logica_negocio.auth import verificar_es_admin, verificar_token_access
 from src.logica_negocio.auth_service import AuthService
 from src.logica_negocio.usuario_service import UsuarioService
 from src.logica_negocio.rol_modulo_service import RolModuloService
@@ -73,12 +73,12 @@ def asignar_permiso(id_rol: int, id_modulo: int, db: Session = Depends(get_db), 
 def quitar_permiso(id_rol: int, id_modulo: int, db: Session = Depends(get_db), _: dict = Depends(verificar_es_admin)):
     RolModuloService.quitar_permiso(db, id_rol, id_modulo)
 
-# --- RUTAS DE CONSULTA PÚBLICAS O GENERALES (según necesites) ---
+# --- RUTAS DE CONSULTA: exigen token válido; el permiso por módulo lo aplica el gateway ---
 
 @router.get("/roles")
-def listar_roles(db: Session = Depends(get_db)):
+def listar_roles(db: Session = Depends(get_db), _: dict = Depends(verificar_token_access)):
     return RolModuloService.listar_roles(db)
 
 @router.get("/modulos")
-def listar_modulos(db: Session = Depends(get_db)):
+def listar_modulos(db: Session = Depends(get_db), _: dict = Depends(verificar_token_access)):
     return RolModuloService.listar_modulos(db)

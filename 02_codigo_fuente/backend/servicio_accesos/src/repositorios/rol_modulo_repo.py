@@ -98,6 +98,19 @@ class RolModuloRepository:
         db.commit()
 
     @staticmethod
+    def obtener_codigos_servicio_por_rol(db: Session, id_rol: int):
+        # Varios módulos pueden compartir servicio, por eso se devuelven sin repetir
+        filas = (
+            db.query(ModuloModel.codigo_servicio)
+            .join(RolPermisoModel, RolPermisoModel.id_modulo == ModuloModel.id_modulo)
+            .filter(RolPermisoModel.id_rol == id_rol)
+            .distinct()
+            .order_by(ModuloModel.codigo_servicio)
+            .all()
+        )
+        return [fila.codigo_servicio for fila in filas]
+
+    @staticmethod
     def eliminar_permisos_de_rol(db: Session, id_rol: int):
         db.query(RolPermisoModel).filter(RolPermisoModel.id_rol == id_rol).delete()
         db.commit()
