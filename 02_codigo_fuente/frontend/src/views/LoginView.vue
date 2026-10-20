@@ -16,7 +16,8 @@ async function iniciarSesion() {
   cargando.value = true
   try {
     await auth.login(form.correo, form.password, form.recordar)
-    router.push({ name: 'usuarios' })
+    // "/" redirige a la primera pantalla a la que el usuario tiene acceso
+    router.push('/')
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'No se pudo iniciar sesión'
   } finally {

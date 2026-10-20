@@ -66,5 +66,7 @@ export interface TokenPayload {
   sub: string
   id_usuario: number
   id_rol: number
+  // Códigos de servicio permitidos para su rol; ausente en tokens anteriores a los permisos
+  modulos?: string[]
   exp: number
 }

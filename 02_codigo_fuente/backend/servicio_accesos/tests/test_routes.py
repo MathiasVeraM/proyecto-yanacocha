@@ -25,8 +25,19 @@ def test_admin_con_rol_no_admin_403(client, headers_no_admin, metodo, url, cuerp
 
 
 @pytest.mark.parametrize("url", ["/api/auth/roles", "/api/auth/modulos"])
-def test_listados_publicos(client, url):
-    assert client.get(url).status_code == 200
+def test_listados_sin_token_401(client, url):
+    assert client.get(url).status_code == 401
+
+
+@pytest.mark.parametrize("url", ["/api/auth/roles", "/api/auth/modulos"])
+def test_listados_con_token_invalido_401(client, url):
+    assert client.get(url, headers={"Authorization": "Bearer basura"}).status_code == 401
+
+
+@pytest.mark.parametrize("url", ["/api/auth/roles", "/api/auth/modulos"])
+def test_listados_con_cualquier_token_valido_200(client, headers_no_admin, url):
+    # Basta con estar autenticado: el permiso por módulo lo aplica el gateway
+    assert client.get(url, headers=headers_no_admin).status_code == 200
 
 
 def test_login_ok(client, crear_usuario_db):
@@ -98,11 +109,11 @@ def test_crear_rol_201_y_duplicado_400(client, headers_admin):
     cuerpo = {"nombre_rol": "Veterinario"}
     assert client.post("/api/auth/roles", json=cuerpo, headers=headers_admin).status_code == 201
     assert client.post("/api/auth/roles", json=cuerpo, headers=headers_admin).status_code == 400
-    assert len(client.get("/api/auth/roles").json()) == 3
+    assert len(client.get("/api/auth/roles", headers=headers_admin).json()) == 3
 
 
 def test_crear_modulo_201_y_duplicado_400(client, headers_admin):
     cuerpo = {"nombre_modulo": "Animales", "codigo_servicio": "animales"}
     assert client.post("/api/auth/modulos", json=cuerpo, headers=headers_admin).status_code == 201
     assert client.post("/api/auth/modulos", json=cuerpo, headers=headers_admin).status_code == 400
-    assert len(client.get("/api/auth/modulos").json()) == 1
+    assert len(client.get("/api/auth/modulos", headers=headers_admin).json()) == 1

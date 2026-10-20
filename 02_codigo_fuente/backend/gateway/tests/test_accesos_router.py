@@ -47,10 +47,10 @@ def test_sin_query_params_no_agrega_signo_de_interrogacion(client, servicio):
     assert str(servicio.ultima.url) == f"{URL_DESTINO}/roles"
 
 
-def test_reenvia_el_token_de_autorizacion(client, servicio):
-    client.get("/api/auth/usuarios", headers={"Authorization": "Bearer token-de-prueba"})
+def test_reenvia_el_token_de_autorizacion(client, servicio, headers_admin):
+    client.get("/api/auth/usuarios")
 
-    assert servicio.ultima.headers["authorization"] == "Bearer token-de-prueba"
+    assert servicio.ultima.headers["authorization"] == headers_admin["Authorization"]
 
 
 def test_no_reenvia_el_host_del_gateway(client, servicio):
