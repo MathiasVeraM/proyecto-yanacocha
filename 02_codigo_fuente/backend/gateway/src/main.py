@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.config import CORS_ORIGINS
 from src.proxy import crear_cliente_http
-from src.rutas import accesos_router
+from src.rutas import accesos_router, gestion_animal_router
 
 
 @asynccontextmanager
@@ -28,6 +28,7 @@ app.add_middleware(
 
 # Registramos las rutas del servicio de accesos de forma modular
 app.include_router(accesos_router.router)
+app.include_router(gestion_animal_router.router)
 
 @app.get("/")
 def health_check():
