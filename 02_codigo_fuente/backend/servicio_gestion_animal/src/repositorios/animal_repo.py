@@ -29,3 +29,8 @@ class AnimalRepository:
         db.commit()
         db.refresh(animal)
         return animal
+
+    @staticmethod
+    def eliminar_animal(db: Session, animal: AnimalModel):
+        db.delete(animal)
+        db.commit()

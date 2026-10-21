@@ -19,5 +19,9 @@ ALGORITHM = os.getenv("ALGORITHM", "HS256")
 # Esquema de la base de datos donde viven las tablas de este servicio
 DB_SCHEMA = "gestion_animal"
 
+# Debe coincidir con la columna codigo_servicio de la tabla modulo
+CODIGO_MODULO = "servicio-gestion-animal"
+ID_ROL_ADMIN = 1
+
 # El servidor de la base de datos está en UTC; las fechas se calculan en hora del centro
 ZONA_HORARIA = ZoneInfo("America/Guayaquil")

@@ -21,9 +21,21 @@ class DiagnosticoRepository:
         )
 
     @staticmethod
+    def contar_por_animal(db: Session, id_animal: int):
+        return db.query(DiagnosticoModel).filter(DiagnosticoModel.id_animal == id_animal).count()
+
+    @staticmethod
     def crear_diagnostico(db: Session, diagnostico_data: dict):
         diagnostico = DiagnosticoModel(**diagnostico_data)
         db.add(diagnostico)
+        db.commit()
+        db.refresh(diagnostico)
+        return diagnostico
+
+    @staticmethod
+    def actualizar_diagnostico(db: Session, diagnostico: DiagnosticoModel, datos: dict):
+        for campo, valor in datos.items():
+            setattr(diagnostico, campo, valor)
         db.commit()
         db.refresh(diagnostico)
         return diagnostico
