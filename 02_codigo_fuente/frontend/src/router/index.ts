@@ -38,10 +38,22 @@ const router = createRouter({
       redirect: rutaInicial,
       children: [
         {
+          // Catálogo y ficha anidados: así el menú marca "Fichas de ejemplares" también dentro de una ficha
           path: 'fichas',
-          name: 'fichas',
-          component: () => import('@/views/FichasView.vue'),
           meta: { modulo: MODULO_FICHAS_EJEMPLARES },
+          children: [
+            {
+              path: '',
+              name: 'fichas',
+              component: () => import('@/views/FichasView.vue'),
+            },
+            {
+              path: ':id(\\d+)',
+              name: 'ficha-animal',
+              component: () => import('@/views/AnimalDetalleView.vue'),
+              props: true,
+            },
+          ],
         },
         {
           path: 'planificacion',
