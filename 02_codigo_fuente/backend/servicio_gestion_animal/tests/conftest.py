@@ -7,6 +7,7 @@ os.environ.setdefault("ALGORITHM", "HS256")
 
 from datetime import datetime, timedelta, timezone
 
+import httpx2
 import jwt
 import pytest
 from fastapi.testclient import TestClient
@@ -18,7 +19,8 @@ from src.config import ALGORITHM, CODIGO_MODULO, DB_SCHEMA, ID_ROL_ADMIN, SECRET
 from src.database import Base, get_db
 import src.modelos  # noqa: F401  (registra los modelos en Base.metadata)
 from src.main import app
-from src.modelos.animal_model import AnimalModel, DiagnosticoModel
+from src.logica_negocio import inaturalist
+from src.modelos.animal_model import AnimalModel, DiagnosticoModel, RecintoModel, TaxonomiaModel
 
 ID_USUARIO_VETERINARIO = 7
 ID_ROL_VETERINARIA = 2
@@ -65,15 +67,45 @@ def db(session_factory):
     session.close()
 
 
+def _guardar(db, registro):
+    db.add(registro)
+    db.commit()
+    db.refresh(registro)
+    return registro
+
+
 @pytest.fixture
-def crear_animal_db(db):
-    """Fábrica de animales persistidos."""
-    def _crear(codigo_animal="YNC-001", nombre_comun="Oso de anteojos", **extra):
-        animal = AnimalModel(codigo_animal=codigo_animal, nombre_comun=nombre_comun, **extra)
-        db.add(animal)
-        db.commit()
-        db.refresh(animal)
-        return animal
+def crear_taxonomia_db(db):
+    """Fábrica de especies del catálogo."""
+    def _crear(nombre_comun="Oso de anteojos", especie="Tremarctos ornatus", **extra):
+        datos = {"genero": "Tremarctos", "familia": "Ursidae", **extra}
+        return _guardar(db, TaxonomiaModel(nombre_comun=nombre_comun, especie=especie, **datos))
+    return _crear
+
+
+@pytest.fixture
+def crear_recinto_db(db):
+    """Fábrica de recintos."""
+    def _crear(nombre_recinto="Sector de osos", **extra):
+        return _guardar(db, RecintoModel(nombre_recinto=nombre_recinto, **extra))
+    return _crear
+
+
+@pytest.fixture
+def crear_animal_db(db, crear_taxonomia_db, crear_recinto_db):
+    """Fábrica de animales; si no se indica especie o recinto, crea unos nuevos."""
+    contador = iter(range(1, 1000))
+
+    def _crear(codigo_animal=None, id_taxonomia=None, id_recinto=None, **extra):
+        n = next(contador)
+        if id_taxonomia is None:
+            id_taxonomia = crear_taxonomia_db(nombre_comun=f"Especie {n}", especie=f"Especie prueba{n}").id_taxonomia
+        if id_recinto is None:
+            id_recinto = crear_recinto_db(nombre_recinto=f"Recinto {n}").id_recinto
+        animal = AnimalModel(
+            codigo_animal=codigo_animal or f"EP-{n:03d}", id_taxonomia=id_taxonomia, id_recinto=id_recinto, **extra
+        )
+        return _guardar(db, animal)
     return _crear
 
 
@@ -125,3 +157,33 @@ def headers_con_token():
     def _crear(**datos):
         return {"Authorization": f"Bearer {crear_token(**datos)}"}
     return _crear
+
+
+class INaturalistSimulado:
+    """Reemplaza a la API real de iNaturalist: las pruebas nunca salen a internet."""
+
+    def __init__(self):
+        self.peticiones: list[httpx2.Request] = []
+        self.respuestas: dict[str, httpx2.Response] = {}
+        self.error: Exception | None = None
+
+    def responder(self, ruta: str, cuerpo: dict, codigo: int = 200):
+        self.respuestas[ruta] = httpx2.Response(codigo, json=cuerpo)
+
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
+        self.peticiones.append(request)
+        if self.error:
+            raise self.error
+        ruta = request.url.path.removeprefix("/v1")
+        return self.respuestas.get(ruta, httpx2.Response(200, json={"results": []}))
+
+
+@pytest.fixture(autouse=True)
+def inaturalist_simulado(monkeypatch):
+    simulado = INaturalistSimulado()
+    monkeypatch.setattr(
+        inaturalist,
+        "crear_cliente",
+        lambda: httpx2.Client(base_url="https://api.inaturalist.org/v1", transport=httpx2.MockTransport(simulado)),
+    )
+    return simulado

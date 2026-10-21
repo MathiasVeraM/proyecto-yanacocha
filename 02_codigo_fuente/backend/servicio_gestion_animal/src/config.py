@@ -25,3 +25,8 @@ ID_ROL_ADMIN = 1
 
 # El servidor de la base de datos está en UTC; las fechas se calculan en hora del centro
 ZONA_HORARIA = ZoneInfo("America/Guayaquil")
+
+# API pública y gratuita de iNaturalist para sugerir especies por nombre común en español
+INATURALIST_URL = os.getenv("INATURALIST_URL", "https://api.inaturalist.org/v1")
+# Si iNaturalist tarda más, se responde solo con el catálogo propio
+INATURALIST_TIMEOUT_SECONDS = float(os.getenv("INATURALIST_TIMEOUT_SECONDS", "3"))

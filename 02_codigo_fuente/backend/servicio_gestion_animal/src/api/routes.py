@@ -1,8 +1,8 @@
-from typing import List
-from fastapi import APIRouter, Depends, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 from src.database import get_db
-from src.esquemas.animal_schema import AnimalCreate, AnimalResponse, AnimalUpdate
+from src.esquemas.animal_schema import AnimalCreate, AnimalResponse, AnimalUpdate, EstadoAnimal
 from src.esquemas.diagnostico_schema import DiagnosticoCreate, DiagnosticoResponse, DiagnosticoUpdate
 from src.esquemas.tratamiento_schema import TratamientoCreate, TratamientoResponse, TratamientoUpdate
 from src.logica_negocio.auth import verificar_acceso_modulo
@@ -20,8 +20,14 @@ router = APIRouter(
 # --- ANIMALES ---
 
 @router.get("", response_model=List[AnimalResponse])
-def listar_animales(db: Session = Depends(get_db)):
-    return AnimalService.listar_animales(db)
+def listar_animales(
+    buscar: Optional[str] = Query(None, description="Código o nombre común"),
+    id_taxonomia: Optional[int] = Query(None, description="Filtra por especie"),
+    estado: Optional[EstadoAnimal] = None,
+    id_recinto: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    return AnimalService.listar_animales(db, buscar, id_taxonomia, estado, id_recinto)
 
 @router.post("", response_model=AnimalResponse, status_code=status.HTTP_201_CREATED)
 def crear_animal(animal_in: AnimalCreate, db: Session = Depends(get_db)):
@@ -35,9 +41,7 @@ def obtener_animal(id_animal: int, db: Session = Depends(get_db)):
 def actualizar_animal(id_animal: int, animal_in: AnimalUpdate, db: Session = Depends(get_db)):
     return AnimalService.actualizar_animal(db, id_animal, animal_in)
 
-@router.delete("/{id_animal}", status_code=status.HTTP_204_NO_CONTENT)
-def eliminar_animal(id_animal: int, db: Session = Depends(get_db)):
-    AnimalService.eliminar_animal(db, id_animal)
+# No hay DELETE: ningún animal se elimina físicamente (trazabilidad, HU-02); se cambia su estado_actual
 
 # --- DIAGNÓSTICOS ---
 

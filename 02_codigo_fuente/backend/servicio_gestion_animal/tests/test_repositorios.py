@@ -6,6 +6,8 @@ from sqlalchemy.exc import IntegrityError
 from src.modelos.animal_model import ahora_local, hoy_local
 from src.repositorios.animal_repo import AnimalRepository
 from src.repositorios.diagnostico_repo import DiagnosticoRepository
+from src.repositorios.recinto_repo import RecintoRepository
+from src.repositorios.taxonomia_repo import TaxonomiaRepository
 from src.repositorios.tratamiento_repo import TratamientoRepository
 
 
@@ -16,35 +18,121 @@ def test_fechas_locales_estan_en_hora_de_ecuador():
     assert hoy_local() == ahora_local().date()
 
 
-def _datos_animal(codigo="YNC-010"):
-    return dict(codigo_animal=codigo, nombre_comun="Cóndor andino", especie="Vultur gryphus")
+# ---------- Taxonomía ----------
+
+def test_taxonomia_crear_y_consultar(db):
+    t = TaxonomiaRepository.crear_taxonomia(db, {
+        "nombre_comun": "Perro", "especie": "Canis lupus familiaris", "genero": "Canis", "familia": "Canidae",
+    })
+    assert TaxonomiaRepository.obtener_por_id(db, t.id_taxonomia).especie == "Canis lupus familiaris"
+    assert TaxonomiaRepository.obtener_por_id(db, 999) is None
+
+
+def test_taxonomia_nombre_comun_sin_distinguir_mayusculas(db, crear_taxonomia_db):
+    perro = crear_taxonomia_db(nombre_comun="Perro", especie="Canis lupus familiaris")
+    assert TaxonomiaRepository.obtener_por_nombre_comun(db, "PERRO").id_taxonomia == perro.id_taxonomia
+    assert TaxonomiaRepository.obtener_por_nombre_comun(db, "gato") is None
+
+
+def test_taxonomia_nombre_comun_repetido_lanza_error(db, crear_taxonomia_db):
+    crear_taxonomia_db(nombre_comun="Perro", especie="Canis lupus familiaris")
+    with pytest.raises(IntegrityError):
+        TaxonomiaRepository.crear_taxonomia(db, {"nombre_comun": "perro", "especie": "Otra"})
+
+
+def test_taxonomia_buscar_por_nombre_comun_o_cientifico(db, crear_taxonomia_db):
+    crear_taxonomia_db(nombre_comun="Oso de anteojos", especie="Tremarctos ornatus")
+    crear_taxonomia_db(nombre_comun="Cóndor andino", especie="Vultur gryphus")
+    assert [t.nombre_comun for t in TaxonomiaRepository.buscar(db, "oso")] == ["Oso de anteojos"]
+    assert [t.nombre_comun for t in TaxonomiaRepository.buscar(db, "vultur")] == ["Cóndor andino"]
+    assert len(TaxonomiaRepository.buscar(db)) == 2
+    assert len(TaxonomiaRepository.buscar(db, limite=1)) == 1
+
+
+def test_taxonomia_por_id_inaturalist(db, crear_taxonomia_db):
+    crear_taxonomia_db(id_inaturalist=41657)
+    assert TaxonomiaRepository.obtener_por_id_inaturalist(db, 41657) is not None
+    assert TaxonomiaRepository.obtener_por_id_inaturalist(db, 1) is None
+    assert TaxonomiaRepository.obtener_ids_inaturalist(db, [41657, 1]) == {41657}
+    assert TaxonomiaRepository.obtener_ids_inaturalist(db, []) == set()
+
+
+def test_taxonomia_actualizar(db, crear_taxonomia_db):
+    t = crear_taxonomia_db()
+    t = TaxonomiaRepository.actualizar_taxonomia(db, t, {"familia": "Ursidae (osos)"})
+    assert t.familia == "Ursidae (osos)"
+
+
+# ---------- Recinto ----------
+
+def test_recinto_crear_con_estado_por_defecto(db):
+    r = RecintoRepository.crear_recinto(db, {"nombre_recinto": "Aviario 1", "tipo": "aviario", "capacidad": 10})
+    assert r.estado == "disponible"
+    assert RecintoRepository.obtener_por_id(db, r.id_recinto).nombre_recinto == "Aviario 1"
+    assert RecintoRepository.obtener_por_nombre(db, "Aviario 1").id_recinto == r.id_recinto
+    assert RecintoRepository.obtener_por_id(db, 999) is None
+
+
+def test_recinto_listar_y_actualizar(db, crear_recinto_db):
+    crear_recinto_db(nombre_recinto="Zona B")
+    a = crear_recinto_db(nombre_recinto="Zona A")
+    assert [r.nombre_recinto for r in RecintoRepository.obtener_todos(db)] == ["Zona A", "Zona B"]
+    a = RecintoRepository.actualizar_recinto(db, a, {"estado": "en_limpieza"})
+    assert a.estado == "en_limpieza"
+
+
+def test_recinto_nombre_repetido_lanza_error(db, crear_recinto_db):
+    crear_recinto_db(nombre_recinto="Zona A")
+    with pytest.raises(IntegrityError):
+        RecintoRepository.crear_recinto(db, {"nombre_recinto": "Zona A"})
 
 
 # ---------- Animal ----------
 
-def test_animal_crear_con_valores_por_defecto(db):
-    animal = AnimalRepository.crear_animal(db, _datos_animal())
-    assert animal.id_animal is not None
+def test_animal_crear_con_valores_por_defecto(db, crear_taxonomia_db, crear_recinto_db):
+    animal = AnimalRepository.crear_animal(db, {
+        "codigo_animal": "TO-001",
+        "id_taxonomia": crear_taxonomia_db().id_taxonomia,
+        "id_recinto": crear_recinto_db().id_recinto,
+    })
     assert animal.estado_actual == "en_centro"
     assert animal.fecha_ingreso == hoy_local()
+    # La taxonomía y el recinto se cargan con el animal
+    assert animal.taxonomia.especie == "Tremarctos ornatus"
+    assert animal.recinto.nombre_recinto == "Sector de osos"
 
 
-def test_animal_consultar(db):
-    animal = AnimalRepository.crear_animal(db, _datos_animal())
-    assert AnimalRepository.obtener_por_id(db, animal.id_animal).codigo_animal == "YNC-010"
-    assert AnimalRepository.obtener_por_codigo(db, "YNC-010").id_animal == animal.id_animal
+def test_animal_sin_taxonomia_o_recinto_validos_lanza_error(db, crear_taxonomia_db, crear_recinto_db):
+    with pytest.raises(IntegrityError):
+        AnimalRepository.crear_animal(db, {
+            "codigo_animal": "X-001", "id_taxonomia": 999, "id_recinto": crear_recinto_db().id_recinto,
+        })
+    db.rollback()
+    with pytest.raises(IntegrityError):
+        AnimalRepository.crear_animal(db, {
+            "codigo_animal": "X-001", "id_taxonomia": crear_taxonomia_db().id_taxonomia, "id_recinto": 999,
+        })
 
 
-def test_animal_inexistente_devuelve_none(db):
+def test_animal_consultar(db, crear_animal_db):
+    animal = crear_animal_db(codigo_animal="TO-001")
+    assert AnimalRepository.obtener_por_id(db, animal.id_animal).codigo_animal == "TO-001"
+    assert AnimalRepository.obtener_por_codigo(db, "TO-001").id_animal == animal.id_animal
     assert AnimalRepository.obtener_por_id(db, 999) is None
-    assert AnimalRepository.obtener_por_codigo(db, "NO-EXISTE") is None
+    assert AnimalRepository.obtener_por_codigo(db, "NO-001") is None
 
 
-def test_animal_listar_ordenado_por_codigo(db, crear_animal_db):
-    crear_animal_db(codigo_animal="YNC-003")
-    crear_animal_db(codigo_animal="YNC-001")
-    codigos = [a.codigo_animal for a in AnimalRepository.obtener_todos(db)]
-    assert codigos == ["YNC-001", "YNC-003"]
+def test_animal_codigo_duplicado_lanza_error(db, crear_animal_db):
+    crear_animal_db(codigo_animal="TO-001")
+    with pytest.raises(IntegrityError):
+        crear_animal_db(codigo_animal="TO-001")
+
+
+def test_animal_codigos_con_prefijo_no_mezcla_prefijos_parecidos(db, crear_animal_db):
+    crear_animal_db(codigo_animal="CL-001")
+    crear_animal_db(codigo_animal="CL-002")
+    crear_animal_db(codigo_animal="CLF-001")
+    assert sorted(AnimalRepository.obtener_codigos_con_prefijo(db, "CL")) == ["CL-001", "CL-002"]
 
 
 def test_animal_actualizar(db, crear_animal_db):
@@ -53,10 +141,46 @@ def test_animal_actualizar(db, crear_animal_db):
     assert (animal.estado_actual, animal.sexo) == ("liberado", "hembra")
 
 
-def test_animal_codigo_duplicado_lanza_error(db):
-    AnimalRepository.crear_animal(db, _datos_animal())
-    with pytest.raises(IntegrityError):
-        AnimalRepository.crear_animal(db, _datos_animal())
+@pytest.fixture
+def animales_para_filtrar(crear_taxonomia_db, crear_recinto_db, crear_animal_db):
+    oso = crear_taxonomia_db(nombre_comun="Oso de anteojos", especie="Tremarctos ornatus")
+    condor = crear_taxonomia_db(nombre_comun="Cóndor andino", especie="Vultur gryphus")
+    zona_a = crear_recinto_db(nombre_recinto="Zona A")
+    zona_b = crear_recinto_db(nombre_recinto="Zona B")
+    crear_animal_db(codigo_animal="TO-001", id_taxonomia=oso.id_taxonomia, id_recinto=zona_a.id_recinto)
+    crear_animal_db(
+        codigo_animal="TO-002", id_taxonomia=oso.id_taxonomia, id_recinto=zona_b.id_recinto, estado_actual="liberado"
+    )
+    crear_animal_db(codigo_animal="VG-001", id_taxonomia=condor.id_taxonomia, id_recinto=zona_a.id_recinto)
+    return {"oso": oso, "condor": condor, "zona_a": zona_a, "zona_b": zona_b}
+
+
+def _codigos(animales):
+    return [a.codigo_animal for a in animales]
+
+
+def test_animal_listar_sin_filtros_ordenado_por_codigo(db, animales_para_filtrar):
+    assert _codigos(AnimalRepository.obtener_todos(db)) == ["TO-001", "TO-002", "VG-001"]
+
+
+def test_animal_filtrar_por_texto_en_codigo_o_nombre_comun(db, animales_para_filtrar):
+    assert _codigos(AnimalRepository.obtener_todos(db, buscar="cóndor")) == ["VG-001"]
+    assert _codigos(AnimalRepository.obtener_todos(db, buscar="to-00")) == ["TO-001", "TO-002"]
+
+
+def test_animal_filtrar_por_especie_estado_y_recinto(db, animales_para_filtrar):
+    datos = animales_para_filtrar
+    assert _codigos(AnimalRepository.obtener_todos(db, id_taxonomia=datos["oso"].id_taxonomia)) == ["TO-001", "TO-002"]
+    assert _codigos(AnimalRepository.obtener_todos(db, estado="liberado")) == ["TO-002"]
+    assert _codigos(AnimalRepository.obtener_todos(db, id_recinto=datos["zona_a"].id_recinto)) == ["TO-001", "VG-001"]
+
+
+def test_animal_filtros_combinados(db, animales_para_filtrar):
+    datos = animales_para_filtrar
+    resultado = AnimalRepository.obtener_todos(
+        db, id_taxonomia=datos["oso"].id_taxonomia, id_recinto=datos["zona_a"].id_recinto, estado="en_centro"
+    )
+    assert _codigos(resultado) == ["TO-001"]
 
 
 # ---------- Diagnóstico ----------
@@ -81,8 +205,8 @@ def test_diagnostico_consultar_por_id(db, crear_animal_db, crear_diagnostico_db)
 
 
 def test_diagnostico_listar_solo_los_del_animal(db, crear_animal_db, crear_diagnostico_db):
-    oso = crear_animal_db(codigo_animal="YNC-001")
-    condor = crear_animal_db(codigo_animal="YNC-002")
+    oso = crear_animal_db()
+    condor = crear_animal_db()
     primero = crear_diagnostico_db(oso.id_animal, diagnostico="Primero")
     segundo = crear_diagnostico_db(oso.id_animal, diagnostico="Segundo")
     crear_diagnostico_db(condor.id_animal, diagnostico="De otro animal")
@@ -90,6 +214,12 @@ def test_diagnostico_listar_solo_los_del_animal(db, crear_animal_db, crear_diagn
     ids = [d.id_diagnostico for d in DiagnosticoRepository.obtener_por_animal(db, oso.id_animal)]
     # Los más recientes primero
     assert ids == [segundo.id_diagnostico, primero.id_diagnostico]
+
+
+def test_diagnostico_actualizar(db, crear_animal_db, crear_diagnostico_db):
+    diagnostico = crear_diagnostico_db(crear_animal_db().id_animal)
+    diagnostico = DiagnosticoRepository.actualizar_diagnostico(db, diagnostico, {"es_critico": True})
+    assert diagnostico.es_critico is True
 
 
 def test_diagnostico_de_animal_inexistente_lanza_error(db, id_veterinario):
@@ -109,7 +239,6 @@ def test_tratamiento_crear_con_valores_por_defecto(db, crear_animal_db, crear_di
         "dosis": "50 ml",
         "frecuencia": "cada 8 h",
     })
-    assert tratamiento.id_tratamiento is not None
     assert tratamiento.estado == "en_curso"
     assert tratamiento.fecha_inicio == hoy_local()
     assert tratamiento.fecha_fin is None
