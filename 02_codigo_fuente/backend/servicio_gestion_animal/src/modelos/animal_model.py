@@ -26,6 +26,8 @@ class TaxonomiaModel(Base):
     especie = Column(String(150), nullable=False)  # nombre científico; de aquí salen las iniciales del código
     genero = Column(String(100))  # género taxonómico, no sexo
     familia = Column(String(100))
+    orden = Column(String(100))
+    clase = Column(String(100), index=True)  # ej. Mammalia, Aves, Reptilia
     id_inaturalist = Column(Integer, unique=True)
 
 class RecintoModel(Base):
@@ -42,6 +44,7 @@ class AnimalModel(Base):
     __table_args__ = {"schema": DB_SCHEMA}
     id_animal = Column(Integer, primary_key=True, index=True, autoincrement=True)
     codigo_animal = Column(String(30), unique=True, nullable=False)
+    nombre = Column(String(100))  # nombre propio del ejemplar, ej. "Yaku"
     id_taxonomia = Column(Integer, ForeignKey(f"{DB_SCHEMA}.taxonomia.id_taxonomia"), nullable=False, index=True)
     id_recinto = Column(Integer, ForeignKey(f"{DB_SCHEMA}.recinto.id_recinto"), nullable=False, index=True)
     edad_aproximada = Column(String(50))

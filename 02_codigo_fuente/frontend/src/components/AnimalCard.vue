@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AnimalFoto from './AnimalFoto.vue'
-import { ESTADOS_ANIMAL, formatearFecha, iniciales } from '@/config/animales'
+import { ESTADOS_ANIMAL, formatearFecha, iniciales, nombreClase } from '@/config/animales'
 import type { Animal } from '@/types/animales'
 
 defineProps<{ animal: Animal }>()
@@ -17,17 +17,18 @@ defineProps<{ animal: Animal }>()
 
     <div class="cuerpo">
       <div class="titulo">
-        <span class="avatar">{{ iniciales(animal.taxonomia.nombre_comun) }}</span>
+        <span class="avatar">{{ iniciales(animal.nombre ?? animal.taxonomia.nombre_comun) }}</span>
+        <!-- Con nombre propio: "Yaku / Caimán de anteojos"; sin él: "Caimán de anteojos / Caiman crocodilus" -->
         <div>
-          <strong>{{ animal.taxonomia.nombre_comun }}</strong>
-          <em>{{ animal.taxonomia.especie }}</em>
+          <strong>{{ animal.nombre ?? animal.taxonomia.nombre_comun }}</strong>
+          <em>{{ animal.nombre ? animal.taxonomia.nombre_comun : animal.taxonomia.especie }}</em>
         </div>
       </div>
 
       <dl>
         <div>
-          <dt>Familia</dt>
-          <dd>{{ animal.taxonomia.familia ?? '—' }}</dd>
+          <dt>Clase</dt>
+          <dd>{{ nombreClase(animal.taxonomia.clase) }}</dd>
         </div>
         <div>
           <dt>Recinto</dt>

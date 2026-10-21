@@ -8,7 +8,7 @@ import ModuloPlaceholder from '@/components/ModuloPlaceholder.vue'
 import SalidaModal from '@/components/SalidaModal.vue'
 import { animalesApi } from '@/api/animales'
 import { ApiError } from '@/api/http'
-import { ESTADOS_ANIMAL, ESTADOS_SALIDA, SEXOS, formatearFecha } from '@/config/animales'
+import { ESTADOS_ANIMAL, ESTADOS_SALIDA, SEXOS, formatearFecha, nombreClase } from '@/config/animales'
 import type { Animal } from '@/types/animales'
 
 const props = defineProps<{ id: string }>()
@@ -67,10 +67,13 @@ watch(() => props.id, cargar, { immediate: true })
       <AnimalFoto :url="animal.url_imagen" :nombre="animal.taxonomia.nombre_comun" class="foto" />
 
       <div class="encabezado">
-        <h1>{{ animal.taxonomia.nombre_comun }}</h1>
+        <h1>{{ animal.nombre ?? animal.taxonomia.nombre_comun }}</h1>
         <AppBadge v-if="estado" :tone="estado.tono">{{ estado.label }}</AppBadge>
       </div>
-      <p class="cientifico">{{ animal.taxonomia.especie }}</p>
+      <p class="cientifico">
+        <template v-if="animal.nombre">{{ animal.taxonomia.nombre_comun }} · </template>
+        <em>{{ animal.taxonomia.especie }}</em>
+      </p>
 
       <dl class="datos">
         <div>
@@ -113,27 +116,35 @@ watch(() => props.id, cargar, { immediate: true })
           <dl class="ficha">
             <div>
               <dt>Código</dt>
-              <dd class="mono">{{ animal.codigo_animal }} <span class="auto">· auto</span></dd>
+              <dd><span class="mono">{{ animal.codigo_animal }}</span> <span class="auto">· auto</span></dd>
+            </div>
+            <div>
+              <dt>Nombre del ejemplar</dt>
+              <dd>{{ animal.nombre ?? '—' }}</dd>
             </div>
             <div>
               <dt>Nombre común</dt>
               <dd>{{ animal.taxonomia.nombre_comun }}</dd>
             </div>
             <div>
-              <dt>Lugar de estancia</dt>
-              <dd class="mono">{{ animal.recinto.nombre_recinto }}</dd>
-            </div>
-            <div>
               <dt>Nombre científico</dt>
               <dd><em>{{ animal.taxonomia.especie }}</em></dd>
+            </div>
+            <div>
+              <dt>Lugar de estancia</dt>
+              <dd><span class="mono">{{ animal.recinto.nombre_recinto }}</span></dd>
+            </div>
+            <div>
+              <dt>Clase</dt>
+              <dd>{{ nombreClase(animal.taxonomia.clase) }}</dd>
             </div>
             <div>
               <dt>Sexo</dt>
               <dd>{{ animal.sexo ? SEXOS[animal.sexo] : '—' }}</dd>
             </div>
             <div>
-              <dt>Género</dt>
-              <dd><em>{{ animal.taxonomia.genero ?? '—' }}</em></dd>
+              <dt>Orden</dt>
+              <dd>{{ animal.taxonomia.orden ?? '—' }}</dd>
             </div>
             <div>
               <dt>Edad</dt>
@@ -146,6 +157,10 @@ watch(() => props.id, cargar, { immediate: true })
             <div>
               <dt>Estado</dt>
               <dd>{{ estado?.label }}</dd>
+            </div>
+            <div>
+              <dt>Género</dt>
+              <dd><em>{{ animal.taxonomia.genero ?? '—' }}</em></dd>
             </div>
             <div>
               <dt>Fecha de ingreso</dt>

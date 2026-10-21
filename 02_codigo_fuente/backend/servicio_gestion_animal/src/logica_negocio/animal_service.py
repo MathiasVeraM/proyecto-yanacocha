@@ -27,8 +27,10 @@ class AnimalService:
         return animal
 
     @staticmethod
-    def listar_animales(db: Session, buscar=None, id_taxonomia=None, estado=None, id_recinto=None):
-        return AnimalRepository.obtener_todos(db, buscar, id_taxonomia, estado, id_recinto)
+    def listar_animales(
+        db: Session, buscar=None, id_taxonomia=None, estado=None, id_recinto=None, clase=None
+    ):
+        return AnimalRepository.obtener_todos(db, buscar, id_taxonomia, estado, id_recinto, clase)
 
     @staticmethod
     def crear_animal(db: Session, animal_in):

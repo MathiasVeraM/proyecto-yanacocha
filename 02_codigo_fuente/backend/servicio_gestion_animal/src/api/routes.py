@@ -22,13 +22,14 @@ router = APIRouter(
 
 @router.get("", response_model=List[AnimalResponse])
 def listar_animales(
-    buscar: Optional[str] = Query(None, description="Código o nombre común"),
+    buscar: Optional[str] = Query(None, description="Código, nombre del ejemplar o nombre común"),
     id_taxonomia: Optional[int] = Query(None, description="Filtra por especie"),
     estado: Optional[EstadoAnimal] = None,
     id_recinto: Optional[int] = None,
+    clase: Optional[str] = Query(None, description="Clase taxonómica, ej. Mammalia, Aves, Reptilia"),
     db: Session = Depends(get_db),
 ):
-    return AnimalService.listar_animales(db, buscar, id_taxonomia, estado, id_recinto)
+    return AnimalService.listar_animales(db, buscar, id_taxonomia, estado, id_recinto, clase)
 
 @router.post("", response_model=AnimalResponse, status_code=status.HTTP_201_CREATED)
 def crear_animal(animal_in: AnimalCreate, db: Session = Depends(get_db)):

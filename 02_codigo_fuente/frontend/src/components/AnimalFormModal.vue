@@ -4,7 +4,7 @@ import BaseModal from './BaseModal.vue'
 import EspecieAutocomplete from './EspecieAutocomplete.vue'
 import { animalesApi, recintosApi, taxonomiaApi } from '@/api/animales'
 import { ApiError } from '@/api/http'
-import { ESTADOS_ANIMAL, ESTADOS_EN_CENTRO, SEXOS, hoyIso } from '@/config/animales'
+import { CLASES, ESTADOS_ANIMAL, ESTADOS_EN_CENTRO, SEXOS, hoyIso, nombreClase } from '@/config/animales'
 import type { Animal, EstadoAnimal, Recinto, Sexo, Taxonomia } from '@/types/animales'
 
 const props = defineProps<{
@@ -25,7 +25,7 @@ const esEdicion = computed(() => props.animal !== null)
 // Especie: elegida del autocompletado o escrita a mano si no existe en ningún lado
 const especie = ref<Taxonomia | null>(null)
 const especieManual = ref(false)
-const manual = reactive({ nombre_comun: '', especie: '', genero: '', familia: '' })
+const manual = reactive({ nombre_comun: '', especie: '', genero: '', familia: '', orden: '', clase: '' })
 
 // Recinto: uno existente o uno nuevo creado desde aquí mismo
 const recintos = ref<Recinto[]>([])
@@ -33,6 +33,7 @@ const recintoNuevo = ref(false)
 const nuevo = reactive({ nombre_recinto: '', tipo: '', capacidad: '' })
 
 const form = reactive({
+  nombre: '',
   id_recinto: 0,
   sexo: '' as Sexo | '',
   edad_aproximada: '',
@@ -97,10 +98,11 @@ watch(
     const a = props.animal
     especie.value = a?.taxonomia ?? null
     especieManual.value = false
-    Object.assign(manual, { nombre_comun: '', especie: '', genero: '', familia: '' })
+    Object.assign(manual, { nombre_comun: '', especie: '', genero: '', familia: '', orden: '', clase: '' })
     recintoNuevo.value = false
     Object.assign(nuevo, { nombre_recinto: '', tipo: '', capacidad: '' })
     Object.assign(form, {
+      nombre: a?.nombre ?? '',
       id_recinto: a?.id_recinto ?? 0,
       sexo: a?.sexo ?? '',
       edad_aproximada: a?.edad_aproximada ?? '',
@@ -137,6 +139,8 @@ async function obtenerIdTaxonomia(): Promise<number> {
     especie: manual.especie,
     genero: manual.genero || null,
     familia: manual.familia || null,
+    orden: manual.orden || null,
+    clase: manual.clase || null,
   })
   // Si el animal no se llega a guardar, la especie ya queda en el catálogo para el siguiente intento
   especie.value = creada
@@ -167,6 +171,7 @@ async function guardar() {
   try {
     const comunes = {
       id_recinto: await obtenerIdRecinto(),
+      nombre: form.nombre || null,
       sexo: form.sexo || null,
       edad_aproximada: form.edad_aproximada || null,
       fecha_ingreso: form.fecha_ingreso,
@@ -219,7 +224,8 @@ async function guardar() {
             <strong>{{ especie.nombre_comun }}</strong>
             <em>{{ especie.especie }}</em>
             <small>
-              Género: {{ especie.genero ?? '—' }} · Familia: {{ especie.familia ?? '—' }}
+              Clase: {{ nombreClase(especie.clase) }} · Orden: {{ especie.orden ?? '—' }} ·
+              Familia: {{ especie.familia ?? '—' }} · Género: {{ especie.genero ?? '—' }}
             </small>
           </div>
           <button v-if="!esEdicion" type="button" class="link" @click="cambiarEspecie">Cambiar</button>
@@ -253,6 +259,19 @@ async function guardar() {
               <input id="manual-familia" v-model.trim="manual.familia" class="input" maxlength="100" />
             </div>
           </div>
+          <div class="row">
+            <div class="field">
+              <label for="manual-clase">Clase</label>
+              <select id="manual-clase" v-model="manual.clase" class="input">
+                <option value="">Sin registrar</option>
+                <option v-for="(label, valor) in CLASES" :key="valor" :value="valor">{{ label }} ({{ valor }})</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="manual-orden">Orden</label>
+              <input id="manual-orden" v-model.trim="manual.orden" class="input" placeholder="Ej. Carnivora" maxlength="100" />
+            </div>
+          </div>
           <button type="button" class="link" @click="cambiarEspecie">← Volver a buscar</button>
         </template>
 
@@ -269,6 +288,11 @@ async function guardar() {
       <!-- ---- Ubicación y datos del ejemplar ---- -->
       <section class="bloque">
         <h3>Datos del ejemplar</h3>
+
+        <div class="field">
+          <label for="nombre-ejemplar">Nombre del ejemplar <span class="opcional">(opcional)</span></label>
+          <input id="nombre-ejemplar" v-model.trim="form.nombre" class="input" placeholder="Ej. Yaku" maxlength="100" />
+        </div>
 
         <div v-if="!recintoNuevo" class="field">
           <label for="recinto">Recinto asignado</label>
@@ -461,6 +485,10 @@ async function guardar() {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.opcional {
+  color: var(--color-text-subtle);
 }
 
 .zona-foto {

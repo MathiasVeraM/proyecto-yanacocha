@@ -15,6 +15,22 @@ export const ESTADOS_SALIDA: EstadoAnimal[] = ['liberado', 'trasladado', 'fallec
 // Al registrar un ingreso o editar la ficha solo se elige entre estos; la salida tiene su propio flujo
 export const ESTADOS_EN_CENTRO: EstadoAnimal[] = ['en_centro', 'en_tratamiento']
 
+// La base guarda la clase con su nombre científico; en pantalla se muestra en español.
+// El orden de este objeto es el orden de los filtros del catálogo.
+export const CLASES: Record<string, string> = {
+  Mammalia: 'Mamíferos',
+  Aves: 'Aves',
+  Reptilia: 'Reptiles',
+  Amphibia: 'Anfibios',
+  Actinopterygii: 'Peces',
+  Insecta: 'Insectos',
+  Arachnida: 'Arácnidos',
+}
+
+export function nombreClase(clase: string | null) {
+  return clase ? (CLASES[clase] ?? clase) : '—'
+}
+
 export const SEXOS: Record<Sexo, string> = {
   macho: 'Macho',
   hembra: 'Hembra',

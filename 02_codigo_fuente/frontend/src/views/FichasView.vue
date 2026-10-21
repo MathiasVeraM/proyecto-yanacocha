@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AnimalCard from '@/components/AnimalCard.vue'
 import AnimalFormModal from '@/components/AnimalFormModal.vue'
 import { animalesApi, recintosApi, taxonomiaApi } from '@/api/animales'
 import { ApiError } from '@/api/http'
-import { ESTADOS_ANIMAL } from '@/config/animales'
+import { CLASES, ESTADOS_ANIMAL, nombreClase } from '@/config/animales'
 import type { Animal, EstadoAnimal, Recinto, Taxonomia } from '@/types/animales'
 
 const router = useRouter()
@@ -22,9 +22,18 @@ const filtros = reactive({
   estado: '' as EstadoAnimal | '',
   id_taxonomia: 0,
   id_recinto: 0,
+  clase: '',
 })
 
 const ESTADOS = Object.entries(ESTADOS_ANIMAL) as [EstadoAnimal, { label: string }][]
+
+// Un botón por cada clase que tenga especies en el catálogo (Mamíferos, Aves, Reptiles…)
+const clases = computed(() => {
+  const presentes = new Set(especies.value.map((t) => t.clase).filter((c): c is string => !!c))
+  const orden = Object.keys(CLASES)
+  const posicion = (c: string) => (orden.includes(c) ? orden.indexOf(c) : orden.length)
+  return [...presentes].sort((a, b) => posicion(a) - posicion(b) || a.localeCompare(b))
+})
 
 // Evita que una respuesta lenta reemplace a la de filtros más recientes
 let consultaActual = 0
@@ -39,6 +48,7 @@ async function cargarAnimales() {
       estado: filtros.estado || undefined,
       id_taxonomia: filtros.id_taxonomia || undefined,
       id_recinto: filtros.id_recinto || undefined,
+      clase: filtros.clase || undefined,
     })
     if (id === consultaActual) animales.value = resultado
   } catch (e) {
@@ -67,7 +77,7 @@ watch(
     temporizador = setTimeout(cargarAnimales, 300)
   },
 )
-watch(() => [filtros.estado, filtros.id_taxonomia, filtros.id_recinto], cargarAnimales)
+watch(() => [filtros.estado, filtros.id_taxonomia, filtros.id_recinto, filtros.clase], cargarAnimales)
 onBeforeUnmount(() => clearTimeout(temporizador))
 
 function onRegistrado(animal: Animal, aviso?: string) {
@@ -89,7 +99,7 @@ onMounted(() => {
         <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
         <path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
       </svg>
-      <input v-model="filtros.buscar" type="search" placeholder="Buscar por código o nombre común…" />
+      <input v-model="filtros.buscar" type="search" placeholder="Buscar por nombre, código o especie…" />
     </label>
 
     <select v-model.number="filtros.id_taxonomia" class="input select" aria-label="Filtrar por especie">
@@ -102,18 +112,23 @@ onMounted(() => {
       <option v-for="r in recintos" :key="r.id_recinto" :value="r.id_recinto">{{ r.nombre_recinto }}</option>
     </select>
 
+    <select v-model="filtros.estado" class="input select" aria-label="Filtrar por estado">
+      <option value="">Todos los estados</option>
+      <option v-for="[valor, { label }] in ESTADOS" :key="valor" :value="valor">{{ label }}</option>
+    </select>
+
     <button class="btn btn-primary registrar" @click="formAbierto = true">+ Registrar ingreso</button>
   </div>
 
-  <div class="chips" role="group" aria-label="Filtrar por estado">
-    <button :class="{ activo: !filtros.estado }" @click="filtros.estado = ''">Todos</button>
+  <div class="chips" role="group" aria-label="Filtrar por clase">
+    <button :class="{ activo: !filtros.clase }" @click="filtros.clase = ''">Todas</button>
     <button
-      v-for="[valor, { label }] in ESTADOS"
-      :key="valor"
-      :class="{ activo: filtros.estado === valor }"
-      @click="filtros.estado = valor"
+      v-for="clase in clases"
+      :key="clase"
+      :class="{ activo: filtros.clase === clase }"
+      @click="filtros.clase = clase"
     >
-      {{ label }}
+      {{ nombreClase(clase) }}
     </button>
   </div>
 

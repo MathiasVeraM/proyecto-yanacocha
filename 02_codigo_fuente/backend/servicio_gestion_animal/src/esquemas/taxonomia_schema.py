@@ -8,6 +8,8 @@ class TaxonomiaCreate(BaseModel):
     especie: str = Field(min_length=1, max_length=150)
     genero: Optional[str] = Field(None, max_length=100)
     familia: Optional[str] = Field(None, max_length=100)
+    orden: Optional[str] = Field(None, max_length=100)
+    clase: Optional[str] = Field(None, max_length=100)
 
 class TaxonomiaUpdate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -16,6 +18,8 @@ class TaxonomiaUpdate(BaseModel):
     especie: Optional[str] = Field(None, min_length=1, max_length=150)
     genero: Optional[str] = Field(None, max_length=100)
     familia: Optional[str] = Field(None, max_length=100)
+    orden: Optional[str] = Field(None, max_length=100)
+    clase: Optional[str] = Field(None, max_length=100)
 
 class TaxonomiaResponse(BaseModel):
     id_taxonomia: int
@@ -23,6 +27,8 @@ class TaxonomiaResponse(BaseModel):
     especie: str
     genero: Optional[str]
     familia: Optional[str]
+    orden: Optional[str]
+    clase: Optional[str]
     id_inaturalist: Optional[int]
 
     model_config = ConfigDict(from_attributes=True)

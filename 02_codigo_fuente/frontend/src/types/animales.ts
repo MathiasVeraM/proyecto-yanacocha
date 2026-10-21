@@ -10,6 +10,9 @@ export interface Taxonomia {
   especie: string
   genero: string | null
   familia: string | null
+  orden: string | null
+  // Nombre científico de la clase: Mammalia, Aves, Reptilia…
+  clase: string | null
   id_inaturalist: number | null
 }
 
@@ -18,6 +21,8 @@ export interface TaxonomiaCreate {
   especie: string
   genero?: string | null
   familia?: string | null
+  orden?: string | null
+  clase?: string | null
 }
 
 // "catalogo": ya está guardada; "inaturalist": hay que importarla antes de usarla
@@ -46,6 +51,8 @@ export interface RecintoCreate {
 export interface Animal {
   id_animal: number
   codigo_animal: string
+  // Nombre propio del ejemplar (ej. "Yaku"); el nombre común es de la especie
+  nombre: string | null
   id_taxonomia: number
   id_recinto: number
   edad_aproximada: string | null
@@ -62,6 +69,7 @@ export interface Animal {
 export interface AnimalCreate {
   id_taxonomia: number
   id_recinto: number
+  nombre?: string | null
   edad_aproximada?: string | null
   sexo?: Sexo | null
   estado_actual?: EstadoAnimal
@@ -76,4 +84,5 @@ export interface FiltrosAnimales {
   id_taxonomia?: number
   estado?: EstadoAnimal
   id_recinto?: number
+  clase?: string
 }

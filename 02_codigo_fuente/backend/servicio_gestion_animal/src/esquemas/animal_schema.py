@@ -14,6 +14,8 @@ class AnimalCreate(BaseModel):
 
     id_taxonomia: int
     id_recinto: int
+    # Nombre propio del ejemplar (ej. "Yaku"); el nombre común es de la especie
+    nombre: Optional[str] = Field(None, max_length=100)
     edad_aproximada: Optional[str] = Field(None, max_length=50)
     sexo: Optional[Sexo] = None
     estado_actual: EstadoAnimal = "en_centro"
@@ -25,6 +27,7 @@ class AnimalUpdate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     id_recinto: Optional[int] = None
+    nombre: Optional[str] = Field(None, max_length=100)
     edad_aproximada: Optional[str] = Field(None, max_length=50)
     sexo: Optional[Sexo] = None
     estado_actual: Optional[EstadoAnimal] = None
@@ -33,6 +36,7 @@ class AnimalUpdate(BaseModel):
 class AnimalResponse(BaseModel):
     id_animal: int
     codigo_animal: str
+    nombre: Optional[str]
     id_taxonomia: int
     id_recinto: int
     edad_aproximada: Optional[str]

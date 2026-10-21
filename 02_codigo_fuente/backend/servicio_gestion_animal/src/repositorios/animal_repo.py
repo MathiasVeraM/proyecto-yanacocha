@@ -9,14 +9,21 @@ class AnimalRepository:
         id_taxonomia: int | None = None,
         estado: str | None = None,
         id_recinto: int | None = None,
+        clase: str | None = None,
     ):
         # Todos los filtros son opcionales y se combinan entre sí
         consulta = db.query(AnimalModel)
+        if buscar or clase:
+            consulta = consulta.join(AnimalModel.taxonomia)
         if buscar:
             patron = f"%{buscar}%"
-            consulta = consulta.join(AnimalModel.taxonomia).filter(
-                AnimalModel.codigo_animal.ilike(patron) | TaxonomiaModel.nombre_comun.ilike(patron)
+            consulta = consulta.filter(
+                AnimalModel.codigo_animal.ilike(patron)
+                | AnimalModel.nombre.ilike(patron)
+                | TaxonomiaModel.nombre_comun.ilike(patron)
             )
+        if clase:
+            consulta = consulta.filter(TaxonomiaModel.clase == clase)
         if id_taxonomia is not None:
             consulta = consulta.filter(AnimalModel.id_taxonomia == id_taxonomia)
         if estado:

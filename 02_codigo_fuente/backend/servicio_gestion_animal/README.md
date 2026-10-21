@@ -11,8 +11,8 @@ Microservicio de fichas de ejemplares (HU-02): registro de animales con código 
 1. **El gateway necesita una variable nueva** en su `.env`:
    `GESTION_ANIMAL_SERVICE_URL="http://localhost:8002"` (si falta, usa ese valor por defecto).
 2. **Base de datos**: los scripts de `sql/` ya se ejecutaron en el servidor. Solo hay que correrlos, en orden,
-   si se monta una base nueva: `01_esquema_gestion_animal.sql`, `02_taxonomia_y_recintos.sql` y
-   `03_imagen_animal.sql`.
+   si se monta una base nueva: `01_esquema_gestion_animal.sql`, `02_taxonomia_y_recintos.sql`,
+   `03_imagen_animal.sql` y `04_clase_orden_y_nombre.sql`.
 3. **El servidor de PostgreSQL está en hora UTC** (5 horas adelante de Ecuador). Este servicio guarda las
    fechas en hora de Ecuador desde Python; otros servicios que usen `NOW()` o `CURRENT_DATE` quedarán adelantados
    (por ejemplo `usuario.fecha_creacion` en accesos).
@@ -25,8 +25,9 @@ Microservicio de fichas de ejemplares (HU-02): registro de animales con código 
 ## 📌 Pendientes
 
 - [ ] **Actualizar el diagrama ER**: agregar la tabla `Taxonomia` (`id_taxonomia`, `nombre_comun`, `especie`,
-  `genero`, `familia`, `id_inaturalist`) y las relaciones `Animal → Taxonomia` y `Animal → Recinto`. Las columnas
-  `nombre_comun`, `especie`, `genero` y `familia` salen de `Animal` (ahora viven en `Taxonomia`).
+  `genero`, `familia`, `orden`, `clase`, `id_inaturalist`), la tabla `AnimalImagen` (foto del ejemplar) y las
+  relaciones `Animal → Taxonomia` y `Animal → Recinto`. Las columnas `nombre_comun`, `especie`, `genero` y
+  `familia` salen de `Animal` (ahora viven en `Taxonomia`) y `Animal` gana `nombre` (nombre propio del ejemplar).
 - [ ] **Probar el registro completo con datos reales** desde el frontend (crear un recinto, elegir la especie y
   registrar un animal). Ojo: lo que se registre **no se puede borrar**, así que conviene usar datos reales del
   centro y no de prueba.
@@ -54,7 +55,7 @@ pytest --cov=src
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/animales?buscar=&id_taxonomia=&estado=&id_recinto=` | Lista con filtros combinables |
+| GET | `/api/animales?buscar=&clase=&id_taxonomia=&estado=&id_recinto=` | Lista con filtros combinables (`clase`: Mammalia, Aves, Reptilia…) |
 | POST | `/api/animales` | Registra un animal; el código (`TO-001`, `CLF-002`…) se genera solo |
 | GET / PUT | `/api/animales/{id}` | Ficha del animal / editarla (código y especie no se editan) |
 | GET | `/api/animales/taxonomia/sugerencias?buscar=` | Autocompletado: catálogo propio + iNaturalist |
@@ -79,5 +80,7 @@ su extensión. `url_imagen` la llena el servicio al subir la foto (no se puede e
 
 ### Taxonomía e iNaturalist
 Las sugerencias combinan el catálogo propio con la API pública y gratuita de [iNaturalist](https://www.inaturalist.org)
-(en español, solo especies animales). Al elegir una sugerencia de iNaturalist se guarda en el catálogo.
+(en español, solo especies animales). Al elegir una sugerencia de iNaturalist se guarda en el catálogo con su
+clase, orden, familia y género. El catálogo hace de caché: `id_inaturalist` es único, así que una especie no se
+importa dos veces; si `id_inaturalist` está vacío, la especie se cargó a mano.
 Si iNaturalist no responde en 3 segundos, se devuelve solo el catálogo y el registro sigue funcionando.

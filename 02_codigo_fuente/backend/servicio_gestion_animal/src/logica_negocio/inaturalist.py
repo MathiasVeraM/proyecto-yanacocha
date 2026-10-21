@@ -62,4 +62,6 @@ def obtener_especie(id_inaturalist: int) -> dict | None:
         "especie": taxon["name"],
         "genero": ancestros.get("genus"),
         "familia": ancestros.get("family"),
+        "orden": ancestros.get("order"),
+        "clase": ancestros.get("class"),
     }

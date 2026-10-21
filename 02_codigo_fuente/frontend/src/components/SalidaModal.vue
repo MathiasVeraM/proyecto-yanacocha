@@ -50,7 +50,7 @@ async function confirmar() {
   <BaseModal
     :open="open"
     title="Registrar salida del ejemplar"
-    :subtitle="animal ? `${animal.codigo_animal} · ${animal.taxonomia.nombre_comun}` : ''"
+    :subtitle="animal ? `${animal.codigo_animal} · ${animal.nombre ?? animal.taxonomia.nombre_comun}` : ''"
     width="520px"
     @close="emit('close')"
   >
