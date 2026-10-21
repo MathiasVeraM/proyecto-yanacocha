@@ -6,7 +6,7 @@ rutas que no exigen permiso de módulo, listarlas en RUTAS_PUBLICAS o RUTAS_SOLO
 from dataclasses import dataclass
 from typing import Optional
 
-from src.modulos import MODULO_ACCESOS
+from src.modulos import MODULO_ACCESOS, MODULO_FICHAS_EJEMPLARES
 
 NIVEL_PUBLICA = "publica"  # no exige token
 NIVEL_TOKEN = "token"  # exige token válido, sin permiso de módulo
@@ -33,6 +33,7 @@ RUTAS_SOLO_TOKEN = {
 # TODO : agregar los prefijos de los nuevos módulos
 MAPA_MODULOS = {
     "/api/auth": MODULO_ACCESOS,
+    "/api/animales": MODULO_FICHAS_EJEMPLARES,
 }
 
 
