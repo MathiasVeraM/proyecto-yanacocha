@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AnimalFoto from '@/components/AnimalFoto.vue'
 import AnimalFormModal from '@/components/AnimalFormModal.vue'
 import AppBadge from '@/components/AppBadge.vue'
@@ -19,6 +19,11 @@ const error = ref('')
 const tab = ref<'resumen' | 'veterinaria' | 'actividades'>('resumen')
 const editarAbierto = ref(false)
 const salidaAbierta = ref(false)
+// Ficha guardada pero foto sin subir (puede venir del registro, en la URL)
+const route = useRoute()
+const router = useRouter()
+const aviso = ref(typeof route.query.aviso === 'string' ? route.query.aviso : '')
+if (route.query.aviso) router.replace({ query: {} })
 
 const yaSalio = computed(() => !!animal.value && ESTADOS_SALIDA.includes(animal.value.estado_actual))
 const estado = computed(() => (animal.value ? ESTADOS_ANIMAL[animal.value.estado_actual] : null))
@@ -35,8 +40,9 @@ async function cargar() {
   }
 }
 
-function onGuardado(actualizado: Animal) {
+function onGuardado(actualizado: Animal, nuevoAviso?: string) {
   animal.value = actualizado
+  aviso.value = nuevoAviso ?? ''
   editarAbierto.value = false
   salidaAbierta.value = false
 }
@@ -46,6 +52,11 @@ watch(() => props.id, cargar, { immediate: true })
 
 <template>
   <RouterLink :to="{ name: 'fichas' }" class="volver">‹ Volver a fichas</RouterLink>
+
+  <p v-if="aviso" class="alert-error aviso">
+    {{ aviso }} Puedes volver a adjuntarla desde «Editar ficha».
+    <button type="button" aria-label="Cerrar aviso" @click="aviso = ''">×</button>
+  </p>
 
   <p v-if="cargando" class="vacio">Cargando ficha…</p>
   <p v-else-if="error" class="alert-error">{{ error }}</p>
@@ -188,6 +199,22 @@ watch(() => props.id, cargar, { immediate: true })
 
 .volver:hover {
   color: var(--color-text);
+}
+
+.aviso {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.aviso button {
+  border: none;
+  background: none;
+  font-size: 18px;
+  line-height: 1;
+  color: inherit;
 }
 
 .layout {

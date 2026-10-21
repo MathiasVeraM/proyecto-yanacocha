@@ -57,7 +57,8 @@ export interface Animal {
   recinto: Recinto
 }
 
-// El código no se envía: lo genera el servicio a partir del nombre científico
+// El código no se envía: lo genera el servicio a partir del nombre científico.
+// La foto se sube aparte con animalesApi.subirImagen y el servicio llena url_imagen
 export interface AnimalCreate {
   id_taxonomia: number
   id_recinto: number
@@ -65,7 +66,6 @@ export interface AnimalCreate {
   sexo?: Sexo | null
   estado_actual?: EstadoAnimal
   fecha_ingreso?: string
-  url_imagen?: string | null
 }
 
 // El código y la especie no se pueden editar

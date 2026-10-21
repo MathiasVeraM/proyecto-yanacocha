@@ -1,5 +1,7 @@
 from datetime import date, datetime
-from sqlalchemy import Boolean, Column, Date, ForeignKey, Index, Integer, String, Text, TIMESTAMP, false, text
+from sqlalchemy import (
+    Boolean, Column, Date, ForeignKey, Index, Integer, LargeBinary, String, Text, TIMESTAMP, false, text
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from src.config import DB_SCHEMA, ZONA_HORARIA
@@ -51,6 +53,17 @@ class AnimalModel(Base):
     # Se cargan junto con el animal para devolver la ficha completa en una sola consulta
     taxonomia = relationship(TaxonomiaModel, lazy="joined")
     recinto = relationship(RecintoModel, lazy="joined")
+
+# La foto va en su propia tabla para no cargar los bytes cada vez que se lista o consulta un animal
+class AnimalImagenModel(Base):
+    __tablename__ = "animal_imagen"
+    __table_args__ = {"schema": DB_SCHEMA}
+    id_animal = Column(Integer, ForeignKey(f"{DB_SCHEMA}.animal.id_animal"), primary_key=True)
+    contenido = Column(LargeBinary, nullable=False)
+    tipo_mime = Column(String(50), nullable=False)
+    fecha_actualizacion = Column(
+        TIMESTAMP, nullable=False, default=ahora_local, onupdate=ahora_local, server_default=func.now()
+    )
 
 class DiagnosticoModel(Base):
     __tablename__ = "diagnostico"

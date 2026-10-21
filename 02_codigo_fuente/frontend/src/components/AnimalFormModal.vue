@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import EspecieAutocomplete from './EspecieAutocomplete.vue'
 import { animalesApi, recintosApi, taxonomiaApi } from '@/api/animales'
@@ -13,7 +13,12 @@ const props = defineProps<{
   animal: Animal | null
 }>()
 
-const emit = defineEmits<{ close: []; saved: [animal: Animal] }>()
+// aviso: la ficha se guardó pero la foto no se pudo subir
+const emit = defineEmits<{ close: []; saved: [animal: Animal, aviso?: string] }>()
+
+// Mismos límites que valida el servicio
+const TIPOS_FOTO = ['image/jpeg', 'image/png', 'image/webp']
+const TAMANO_MAXIMO_MB = 5
 
 const esEdicion = computed(() => props.animal !== null)
 
@@ -33,11 +38,51 @@ const form = reactive({
   edad_aproximada: '',
   estado_actual: 'en_centro' as EstadoAnimal,
   fecha_ingreso: '',
-  url_imagen: '',
 })
+
+// Foto adjunta: se sube después de guardar la ficha, porque necesita el id del animal
+const archivo = ref<File | null>(null)
+const vistaPrevia = ref<string | null>(null)
+const arrastrando = ref(false)
 
 const error = ref('')
 const guardando = ref(false)
+
+function quitarFoto() {
+  if (vistaPrevia.value) URL.revokeObjectURL(vistaPrevia.value)
+  archivo.value = null
+  vistaPrevia.value = null
+}
+
+function adjuntar(elegido: File | undefined) {
+  if (!elegido) return
+  error.value = ''
+  if (!TIPOS_FOTO.includes(elegido.type)) {
+    error.value = 'La fotografía debe ser una imagen JPG, PNG o WEBP'
+    return
+  }
+  if (elegido.size > TAMANO_MAXIMO_MB * 1024 * 1024) {
+    error.value = `La fotografía no puede superar los ${TAMANO_MAXIMO_MB} MB`
+    return
+  }
+  quitarFoto()
+  archivo.value = elegido
+  vistaPrevia.value = URL.createObjectURL(elegido)
+}
+
+function onSeleccion(evento: Event) {
+  const input = evento.target as HTMLInputElement
+  adjuntar(input.files?.[0])
+  // Permite volver a elegir el mismo archivo después de quitarlo
+  input.value = ''
+}
+
+onBeforeUnmount(quitarFoto)
+
+function onSoltar(evento: DragEvent) {
+  arrastrando.value = false
+  adjuntar(evento.dataTransfer?.files[0])
+}
 
 // Un animal que ya salió conserva su estado: la salida se registra con su propio flujo
 const yaSalio = computed(
@@ -61,8 +106,8 @@ watch(
       edad_aproximada: a?.edad_aproximada ?? '',
       estado_actual: a?.estado_actual ?? 'en_centro',
       fecha_ingreso: a?.fecha_ingreso ?? hoyIso(),
-      url_imagen: a?.url_imagen ?? '',
     })
+    quitarFoto()
     try {
       recintos.value = await recintosApi.listar()
       // Si todavía no hay recintos, se ofrece crear el primero
@@ -125,13 +170,23 @@ async function guardar() {
       sexo: form.sexo || null,
       edad_aproximada: form.edad_aproximada || null,
       fecha_ingreso: form.fecha_ingreso,
-      url_imagen: form.url_imagen || null,
       ...(yaSalio.value ? {} : { estado_actual: form.estado_actual }),
     }
     const animal = props.animal
       ? await animalesApi.actualizar(props.animal.id_animal, comunes)
       : await animalesApi.crear({ id_taxonomia: await obtenerIdTaxonomia(), ...comunes })
-    emit('saved', animal)
+
+    if (!archivo.value) {
+      emit('saved', animal)
+      return
+    }
+    try {
+      emit('saved', await animalesApi.subirImagen(animal.id_animal, archivo.value))
+    } catch (e) {
+      // La ficha ya quedó guardada: se avisa para volver a intentar la foto desde "Editar ficha"
+      const motivo = e instanceof ApiError ? e.message : 'error de conexión'
+      emit('saved', animal, `La ficha se guardó, pero la fotografía no se pudo subir (${motivo}).`)
+    }
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'No se pudo guardar la ficha'
   } finally {
@@ -271,18 +326,41 @@ async function guardar() {
           </div>
         </div>
 
-        <div class="row">
-          <div v-if="!yaSalio" class="field">
+        <div v-if="!yaSalio" class="row">
+          <div class="field">
             <label for="estado">Estado</label>
             <select id="estado" v-model="form.estado_actual" class="input">
               <option v-for="e in ESTADOS_EN_CENTRO" :key="e" :value="e">{{ ESTADOS_ANIMAL[e].label }}</option>
             </select>
           </div>
-          <div class="field">
-            <label for="imagen">URL de la fotografía</label>
-            <input id="imagen" v-model.trim="form.url_imagen" type="url" class="input" placeholder="https://…" maxlength="500" />
+        </div>
+      </section>
+
+      <!-- ---- Fotografía ---- -->
+      <section class="bloque">
+        <h3>Fotografía</h3>
+        <div v-if="vistaPrevia" class="vista-previa">
+          <img :src="vistaPrevia" alt="Vista previa de la fotografía" />
+          <div>
+            <strong>{{ archivo?.name }}</strong>
+            <small>{{ ((archivo?.size ?? 0) / 1024 / 1024).toFixed(2) }} MB</small>
+            <button type="button" class="link quitar" @click="quitarFoto">Quitar</button>
           </div>
         </div>
+        <label
+          v-else
+          class="zona-foto"
+          :class="{ arrastrando }"
+          @dragover.prevent="arrastrando = true"
+          @dragleave="arrastrando = false"
+          @drop.prevent="onSoltar"
+        >
+          <input type="file" :accept="TIPOS_FOTO.join(',')" class="oculto" @change="onSeleccion" />
+          <span>
+            + {{ animal?.url_imagen ? 'Reemplazar la fotografía del ejemplar' : 'Adjuntar fotografía del ejemplar' }}
+          </span>
+          <small>JPG, PNG o WEBP · máximo {{ TAMANO_MAXIMO_MB }} MB · haz clic o arrastra el archivo aquí</small>
+        </label>
       </section>
 
       <p v-if="error" class="alert-error">{{ error }}</p>
@@ -383,6 +461,76 @@ async function guardar() {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.zona-foto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 26px 16px;
+  border: 1.5px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.zona-foto:hover,
+.zona-foto.arrastrando {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.zona-foto span {
+  font-weight: 500;
+}
+
+.zona-foto small {
+  font-size: 11px;
+  color: var(--color-text-subtle);
+}
+
+.oculto {
+  display: none;
+}
+
+.vista-previa {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+
+.vista-previa img {
+  width: 96px;
+  height: 72px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+}
+
+.vista-previa strong,
+.vista-previa small {
+  display: block;
+}
+
+.vista-previa strong {
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.vista-previa small {
+  margin: 2px 0 6px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.quitar {
+  color: var(--color-danger);
 }
 
 .link {

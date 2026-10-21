@@ -11,7 +11,8 @@ Microservicio de fichas de ejemplares (HU-02): registro de animales con código 
 1. **El gateway necesita una variable nueva** en su `.env`:
    `GESTION_ANIMAL_SERVICE_URL="http://localhost:8002"` (si falta, usa ese valor por defecto).
 2. **Base de datos**: los scripts de `sql/` ya se ejecutaron en el servidor. Solo hay que correrlos, en orden,
-   si se monta una base nueva: `01_esquema_gestion_animal.sql` y luego `02_taxonomia_y_recintos.sql`.
+   si se monta una base nueva: `01_esquema_gestion_animal.sql`, `02_taxonomia_y_recintos.sql` y
+   `03_imagen_animal.sql`.
 3. **El servidor de PostgreSQL está en hora UTC** (5 horas adelante de Ecuador). Este servicio guarda las
    fechas en hora de Ecuador desde Python; otros servicios que usen `NOW()` o `CURRENT_DATE` quedarán adelantados
    (por ejemplo `usuario.fecha_creacion` en accesos).
@@ -60,6 +61,8 @@ pytest --cov=src
 | POST | `/api/animales/taxonomia/importar` | Guarda en el catálogo una especie de iNaturalist |
 | GET / POST / PUT | `/api/animales/taxonomia` | Catálogo de especies |
 | GET / POST / PUT | `/api/animales/recintos` | Recintos |
+| PUT | `/api/animales/{id}/imagen` | Sube o reemplaza la foto (archivo JPG, PNG o WEBP, máx. 5 MB) |
+| GET | `/api/animales/{id}/imagen` | Descarga la foto (exige token, como todo el servicio) |
 | GET / POST | `/api/animales/{id}/diagnosticos` | Historial clínico |
 | PUT | `/api/animales/diagnosticos/{id}` | Corregir un diagnóstico |
 | GET / POST | `/api/animales/diagnosticos/{id}/tratamientos` | Tratamientos de un diagnóstico |
@@ -68,6 +71,11 @@ pytest --cov=src
 ### Código del animal
 Iniciales del nombre científico + número correlativo por iniciales: *Canis lupus familiaris* → `CLF-001`,
 `CLF-002`…; *Tremarctos ornatus* → `TO-001`. Especies con las mismas iniciales comparten el contador.
+
+### Fotografía
+Se sube como archivo y se guarda en la base de datos (tabla `animal_imagen`, una por animal), así se respalda con
+el resto de los datos y no depende del disco del servidor. El tipo se valida por el contenido del archivo, no por
+su extensión. `url_imagen` la llena el servicio al subir la foto (no se puede escribir a mano).
 
 ### Taxonomía e iNaturalist
 Las sugerencias combinan el catálogo propio con la API pública y gratuita de [iNaturalist](https://www.inaturalist.org)

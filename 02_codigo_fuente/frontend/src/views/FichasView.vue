@@ -70,9 +70,10 @@ watch(
 watch(() => [filtros.estado, filtros.id_taxonomia, filtros.id_recinto], cargarAnimales)
 onBeforeUnmount(() => clearTimeout(temporizador))
 
-function onRegistrado(animal: Animal) {
+function onRegistrado(animal: Animal, aviso?: string) {
   formAbierto.value = false
-  router.push({ name: 'ficha-animal', params: { id: animal.id_animal } })
+  // Si la foto no se pudo subir, la ficha lo muestra al abrirse
+  router.push({ name: 'ficha-animal', params: { id: animal.id_animal }, query: aviso ? { aviso } : {} })
 }
 
 onMounted(() => {

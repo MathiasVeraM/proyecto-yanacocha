@@ -1,4 +1,5 @@
-import { request } from './http'
+import { API_URL, ApiError, request } from './http'
+import { useAuthStore } from '@/stores/auth'
 import type {
   Animal,
   AnimalCreate,
@@ -19,6 +20,27 @@ function query(params: Record<string, string | number | undefined>) {
   return valores.length ? `?${new URLSearchParams(valores.map(([k, v]) => [k, String(v)]))}` : ''
 }
 
+// La foto no viaja como JSON: se sube como archivo y se descarga como imagen, con el token igual que el resto
+async function fetchConToken(method: 'GET' | 'PUT', path: string, body?: FormData) {
+  const auth = useAuthStore()
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method,
+      headers: auth.token ? { Authorization: `Bearer ${auth.token}` } : {},
+      body,
+    })
+  } catch {
+    throw new ApiError(0, 'No se pudo conectar con el servidor')
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => null)
+    const detalle = (data as { detail?: unknown } | null)?.detail
+    throw new ApiError(response.status, typeof detalle === 'string' ? detalle : 'No se pudo procesar la fotografía')
+  }
+  return response
+}
+
 export const animalesApi = {
   listar: (filtros: FiltrosAnimales = {}) => request<Animal[]>('GET', `${URL}${query({ ...filtros })}`),
 
@@ -27,6 +49,16 @@ export const animalesApi = {
   crear: (datos: AnimalCreate) => request<Animal>('POST', URL, datos),
 
   actualizar: (id: number, datos: AnimalUpdate) => request<Animal>('PUT', `${URL}/${id}`, datos),
+
+  // Sube o reemplaza la foto; devuelve el animal con su url_imagen nueva
+  subirImagen: async (id: number, archivo: File) => {
+    const datos = new FormData()
+    datos.append('archivo', archivo)
+    return (await (await fetchConToken('PUT', `${URL}/${id}/imagen`, datos)).json()) as Animal
+  },
+
+  // Recibe la url_imagen del animal (ruta de la API) y devuelve la imagen para mostrarla
+  descargarImagen: async (urlImagen: string) => (await fetchConToken('GET', urlImagen)).blob(),
 }
 
 export const taxonomiaApi = {
