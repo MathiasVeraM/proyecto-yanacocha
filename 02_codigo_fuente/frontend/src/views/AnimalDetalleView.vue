@@ -6,6 +6,7 @@ import AnimalFormModal from '@/components/AnimalFormModal.vue'
 import AppBadge from '@/components/AppBadge.vue'
 import ModuloPlaceholder from '@/components/ModuloPlaceholder.vue'
 import SalidaModal from '@/components/SalidaModal.vue'
+import VeterinariaPanel from '@/components/VeterinariaPanel.vue'
 import { animalesApi } from '@/api/animales'
 import { ApiError } from '@/api/http'
 import { ESTADOS_ANIMAL, ESTADOS_SALIDA, SEXOS, formatearFecha, nombreClase } from '@/config/animales'
@@ -187,11 +188,7 @@ watch(() => props.id, cargar, { immediate: true })
         </article>
       </template>
 
-      <ModuloPlaceholder
-        v-else-if="tab === 'veterinaria'"
-        titulo="Veterinaria"
-        descripcion="Los diagnósticos y tratamientos del ejemplar estarán disponibles próximamente."
-      />
+      <VeterinariaPanel v-else-if="tab === 'veterinaria'" :id-animal="animal.id_animal" />
       <ModuloPlaceholder
         v-else
         titulo="Actividades"
