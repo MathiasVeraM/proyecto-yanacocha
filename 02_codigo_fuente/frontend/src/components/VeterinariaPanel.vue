@@ -45,6 +45,27 @@ function etiquetaTratamiento(estado: Tratamiento['estado']) {
   return 'Suspendido'
 }
 
+function formatoNumero(valor: number, decimales = 1) {
+  return new Intl.NumberFormat('es-EC', { maximumFractionDigits: decimales }).format(valor)
+}
+
+function condicionCorporal(valor: number) {
+  const etiquetas = ['Caquéctico', 'Delgado', 'Óptimo', 'Sobrepeso', 'Obeso']
+  return `${valor}/5 · ${etiquetas[valor - 1]}`
+}
+
+function etiquetaCategoria(valor: string) {
+  const etiquetas: Record<string, string> = {
+    deshidratacion_leve: 'Deshidratación leve',
+    deshidratacion_moderada: 'Deshidratación moderada',
+    deshidratacion_severa: 'Deshidratación severa',
+    palidas: 'Pálidas',
+    cianoticas: 'Cianóticas',
+    ictericas: 'Ictéricas',
+  }
+  return etiquetas[valor] ?? valor.charAt(0).toUpperCase() + valor.slice(1)
+}
+
 async function cargar() {
   const idAnimal = props.idAnimal
   cargando.value = true
@@ -169,6 +190,35 @@ watch(() => props.idAnimal, cargar, { immediate: true })
           </header>
           <h3>{{ diagnostico.diagnostico }}</h3>
           <p v-if="diagnostico.observaciones" class="descripcion">{{ diagnostico.observaciones }}</p>
+          <dl v-if="diagnostico.signos_vitales" class="signos-vitales">
+            <div v-if="diagnostico.signos_vitales.peso_kg !== null">
+              <dt>Peso</dt><dd>{{ formatoNumero(diagnostico.signos_vitales.peso_kg, 3) }} kg</dd>
+            </div>
+            <div v-if="diagnostico.signos_vitales.temperatura_c !== null">
+              <dt>Temperatura</dt><dd>{{ formatoNumero(diagnostico.signos_vitales.temperatura_c) }} °C</dd>
+            </div>
+            <div v-if="diagnostico.signos_vitales.frecuencia_cardiaca_lpm !== null">
+              <dt>Frec. cardíaca</dt><dd>{{ diagnostico.signos_vitales.frecuencia_cardiaca_lpm }} lpm</dd>
+            </div>
+            <div v-if="diagnostico.signos_vitales.frecuencia_respiratoria_rpm !== null">
+              <dt>Frec. respiratoria</dt><dd>{{ diagnostico.signos_vitales.frecuencia_respiratoria_rpm }} rpm</dd>
+            </div>
+            <div v-if="diagnostico.signos_vitales.tiempo_llenado_capilar_s !== null">
+              <dt>Llenado capilar</dt><dd>{{ formatoNumero(diagnostico.signos_vitales.tiempo_llenado_capilar_s) }} s</dd>
+            </div>
+            <div v-if="diagnostico.signos_vitales.hidratacion">
+              <dt>Hidratación</dt><dd>{{ etiquetaCategoria(diagnostico.signos_vitales.hidratacion) }}</dd>
+            </div>
+            <div v-if="diagnostico.signos_vitales.condicion_corporal !== null">
+              <dt>Condición corporal</dt><dd>{{ condicionCorporal(diagnostico.signos_vitales.condicion_corporal) }}</dd>
+            </div>
+            <div v-if="diagnostico.signos_vitales.mucosas">
+              <dt>Mucosas</dt><dd>{{ etiquetaCategoria(diagnostico.signos_vitales.mucosas) }}</dd>
+            </div>
+            <div v-if="diagnostico.signos_vitales.actitud">
+              <dt>Actitud</dt><dd>{{ etiquetaCategoria(diagnostico.signos_vitales.actitud) }}</dd>
+            </div>
+          </dl>
           <p class="registrado-por">Registrado por usuario #{{ diagnostico.id_usuario }}</p>
 
           <div
@@ -414,6 +464,31 @@ watch(() => props.idAnimal, cargar, { immediate: true })
   font-size: 13px;
   line-height: 1.55;
   white-space: pre-line;
+}
+
+.signos-vitales {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  padding: 11px;
+  border-radius: var(--radius-sm);
+  background: var(--color-input);
+}
+
+.signos-vitales div {
+  display: grid;
+  gap: 3px;
+}
+
+.signos-vitales dt {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.signos-vitales dd {
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .registrado-por {

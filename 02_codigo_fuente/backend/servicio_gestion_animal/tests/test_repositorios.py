@@ -196,6 +196,42 @@ def test_diagnostico_crear_con_valores_por_defecto(db, crear_animal_db, id_veter
     assert diagnostico.es_critico is False
     # Se guarda en hora de Ecuador, no en la hora UTC del servidor
     assert abs(diagnostico.fecha_registro - ahora_local()) < timedelta(minutes=1)
+    assert diagnostico.signos_vitales is None
+
+
+def test_diagnostico_crear_con_signos_vitales_en_la_misma_transaccion(
+    db, crear_animal_db, id_veterinario
+):
+    animal = crear_animal_db()
+    diagnostico = DiagnosticoRepository.crear_diagnostico(
+        db,
+        {
+            "id_animal": animal.id_animal,
+            "id_usuario": id_veterinario,
+            "diagnostico": "Control clínico",
+        },
+        {"peso_kg": 0.125, "hidratacion": "normal"},
+    )
+    assert diagnostico.signos_vitales.id_signos_vitales is not None
+    assert diagnostico.signos_vitales.id_diagnostico == diagnostico.id_diagnostico
+    assert diagnostico.signos_vitales.peso_kg == 0.125
+
+
+def test_fallo_al_guardar_signos_vitales_no_guarda_el_diagnostico(
+    db, crear_animal_db, id_veterinario
+):
+    animal = crear_animal_db()
+    with pytest.raises(IntegrityError):
+        DiagnosticoRepository.crear_diagnostico(
+            db,
+            {
+                "id_animal": animal.id_animal,
+                "id_usuario": id_veterinario,
+                "diagnostico": "Registro que debe revertirse",
+            },
+            {"peso_kg": -1},
+        )
+    assert DiagnosticoRepository.obtener_por_animal(db, animal.id_animal) == []
 
 
 def test_diagnostico_consultar_por_id(db, crear_animal_db, crear_diagnostico_db):
@@ -214,6 +250,30 @@ def test_diagnostico_listar_solo_los_del_animal(db, crear_animal_db, crear_diagn
     ids = [d.id_diagnostico for d in DiagnosticoRepository.obtener_por_animal(db, oso.id_animal)]
     # Los más recientes primero
     assert ids == [segundo.id_diagnostico, primero.id_diagnostico]
+
+
+def test_historial_signos_vitales_filtra_por_animal_y_ordena_por_diagnostico(
+    db, crear_animal_db, id_veterinario
+):
+    animal = crear_animal_db()
+    otro_animal = crear_animal_db()
+    anterior = DiagnosticoRepository.crear_diagnostico(
+        db,
+        {"id_animal": animal.id_animal, "id_usuario": id_veterinario, "diagnostico": "Anterior"},
+        {"peso_kg": 2.0},
+    )
+    reciente = DiagnosticoRepository.crear_diagnostico(
+        db,
+        {"id_animal": animal.id_animal, "id_usuario": id_veterinario, "diagnostico": "Reciente"},
+        {"peso_kg": 2.5},
+    )
+    DiagnosticoRepository.crear_diagnostico(
+        db,
+        {"id_animal": otro_animal.id_animal, "id_usuario": id_veterinario, "diagnostico": "Otro"},
+        {"peso_kg": 3.0},
+    )
+    historial = DiagnosticoRepository.obtener_signos_vitales_por_animal(db, animal.id_animal)
+    assert [s.id_diagnostico for s in historial] == [reciente.id_diagnostico, anterior.id_diagnostico]
 
 
 def test_diagnostico_actualizar(db, crear_animal_db, crear_diagnostico_db):

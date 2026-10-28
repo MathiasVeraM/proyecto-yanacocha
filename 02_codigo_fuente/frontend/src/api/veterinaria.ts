@@ -3,6 +3,7 @@ import type {
   Diagnostico,
   DiagnosticoCreate,
   DiagnosticoUpdate,
+  SignosVitalesHistorial,
   Tratamiento,
   TratamientoCreate,
   TratamientoUpdate,
@@ -13,6 +14,9 @@ const URL = '/api/animales'
 export const veterinariaApi = {
   listarDiagnosticos: (idAnimal: number) =>
     request<Diagnostico[]>('GET', `${URL}/${idAnimal}/diagnosticos`),
+
+  listarSignosVitales: (idAnimal: number) =>
+    request<SignosVitalesHistorial[]>('GET', `${URL}/${idAnimal}/signos-vitales`),
 
   crearDiagnostico: (idAnimal: number, datos: DiagnosticoCreate) =>
     request<Diagnostico>('POST', `${URL}/${idAnimal}/diagnosticos`, datos),

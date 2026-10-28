@@ -1,4 +1,5 @@
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, Text, TIMESTAMP, false
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from src.config import DB_SCHEMA
@@ -19,3 +20,10 @@ class DiagnosticoModel(Base):
     observaciones = Column(Text)
     es_critico = Column(Boolean, nullable=False, server_default=false())
     fecha_registro = Column(TIMESTAMP, nullable=False, default=ahora_local, server_default=func.now())
+
+    signos_vitales = relationship(
+        "SignosVitalesModel",
+        back_populates="diagnostico",
+        uselist=False,
+        lazy="joined",
+    )

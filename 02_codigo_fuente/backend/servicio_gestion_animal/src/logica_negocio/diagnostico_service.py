@@ -22,9 +22,14 @@ class DiagnosticoService:
     @staticmethod
     def crear_diagnostico(db: Session, id_animal: int, id_usuario: int, diagnostico_in):
         AnimalService.animal_o_404(db, id_animal)
-        datos = diagnostico_in.model_dump()
+        datos = diagnostico_in.model_dump(exclude={"signos_vitales"})
         datos.update(id_animal=id_animal, id_usuario=id_usuario)
-        return DiagnosticoRepository.crear_diagnostico(db, datos)
+        signos_vitales = (
+            diagnostico_in.signos_vitales.model_dump()
+            if diagnostico_in.signos_vitales is not None
+            else None
+        )
+        return DiagnosticoRepository.crear_diagnostico(db, datos, signos_vitales)
 
     @staticmethod
     def actualizar_diagnostico(db: Session, id_diagnostico: int, diagnostico_in):

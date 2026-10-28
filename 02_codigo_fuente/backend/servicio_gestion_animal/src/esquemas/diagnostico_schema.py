@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
+from src.esquemas.signos_vitales_schema import SignosVitalesCreate, SignosVitalesResponse
 
 # id_animal viene en la ruta e id_usuario en el token, por eso no se piden en el cuerpo
 class DiagnosticoCreate(BaseModel):
@@ -9,6 +10,7 @@ class DiagnosticoCreate(BaseModel):
     diagnostico: str = Field(min_length=1)
     observaciones: Optional[str] = None
     es_critico: bool = False
+    signos_vitales: Optional[SignosVitalesCreate] = None
 
 # No se permite cambiar el animal ni el usuario que registró el diagnóstico
 class DiagnosticoUpdate(BaseModel):
@@ -26,5 +28,6 @@ class DiagnosticoResponse(BaseModel):
     observaciones: Optional[str]
     es_critico: bool
     fecha_registro: datetime
+    signos_vitales: Optional[SignosVitalesResponse] = None
 
     model_config = ConfigDict(from_attributes=True)

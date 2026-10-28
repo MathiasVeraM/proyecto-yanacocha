@@ -59,6 +59,7 @@ ENDPOINTS = [
     ("GET", f"{URL}/1/diagnosticos", None),
     ("POST", f"{URL}/1/diagnosticos", {"diagnostico": "X"}),
     ("PUT", f"{URL}/diagnosticos/1", {"diagnostico": "X"}),
+    ("GET", f"{URL}/1/signos-vitales", None),
     ("GET", f"{URL}/diagnosticos/1/tratamientos", None),
     ("POST", f"{URL}/diagnosticos/1/tratamientos", {"medicamento_o_proceso": "X"}),
     ("PUT", f"{URL}/tratamientos/1", {"estado": "finalizado"}),
@@ -277,6 +278,102 @@ def test_crear_diagnostico_usa_el_usuario_del_token(client, h, id_veterinario, c
     assert diagnostico["id_usuario"] == id_veterinario
     assert diagnostico["id_animal"] == animal["id_animal"]
     assert diagnostico["es_critico"] is True
+    assert diagnostico["signos_vitales"] is None
+
+
+def test_crear_diagnostico_con_signos_vitales(client, h, crear_animal):
+    animal = crear_animal()
+    diagnostico = _crear_diagnostico(
+        client,
+        h,
+        animal["id_animal"],
+        signos_vitales={
+            "peso_kg": 0.125,
+            "temperatura_c": 37.5,
+            "frecuencia_cardiaca_lpm": 120,
+            "frecuencia_respiratoria_rpm": 24,
+            "tiempo_llenado_capilar_s": 1.5,
+            "hidratacion": "deshidratacion_leve",
+            "condicion_corporal": 3,
+            "mucosas": "rosadas",
+            "actitud": "alerta",
+        },
+    )
+    signos = diagnostico["signos_vitales"]
+    assert signos["id_signos_vitales"] > 0
+    assert signos["id_diagnostico"] == diagnostico["id_diagnostico"]
+    assert signos["peso_kg"] == 0.125
+    assert signos["temperatura_c"] == 37.5
+    assert signos["hidratacion"] == "deshidratacion_leve"
+
+
+@pytest.mark.parametrize(
+    "signos",
+    [
+        {},
+        {"peso_kg": 0},
+        {"peso_kg": 0.0001},
+        {"frecuencia_cardiaca_lpm": 0},
+        {"frecuencia_respiratoria_rpm": -1},
+        {"tiempo_llenado_capilar_s": 0},
+        {"temperatura_c": 60.1},
+        {"temperatura_c": 36.55},
+        {"hidratacion": "critica"},
+        {"condicion_corporal": 6},
+        {"mucosas": "verdes"},
+        {"actitud": "inconsciente"},
+    ],
+)
+def test_signos_vitales_invalidos_rechazados(client, h, crear_animal, signos):
+    animal = crear_animal()
+    resp = client.post(
+        f"{URL}/{animal['id_animal']}/diagnosticos",
+        json={"diagnostico": "Control clínico", "signos_vitales": signos},
+        headers=h,
+    )
+    assert resp.status_code == 422
+
+
+def test_listar_historial_signos_vitales_ordenado_por_fecha(client, h, crear_animal):
+    animal = crear_animal()
+    anterior = _crear_diagnostico(
+        client,
+        h,
+        animal["id_animal"],
+        diagnostico="Control anterior",
+        signos_vitales={"peso_kg": 2.5},
+    )
+    reciente = _crear_diagnostico(
+        client,
+        h,
+        animal["id_animal"],
+        diagnostico="Control reciente",
+        signos_vitales={"temperatura_c": 38.2},
+    )
+
+    resp = client.get(f"{URL}/{animal['id_animal']}/signos-vitales", headers=h)
+    assert resp.status_code == 200
+    historial = resp.json()
+    assert [s["id_diagnostico"] for s in historial] == [
+        reciente["id_diagnostico"],
+        anterior["id_diagnostico"],
+    ]
+    assert all(s["fecha_diagnostico"] for s in historial)
+
+
+def test_historial_signos_vitales_animal_inexistente_404(client, h):
+    assert client.get(f"{URL}/999/signos-vitales", headers=h).status_code == 404
+
+
+def test_signos_vitales_no_exigen_rango_normal_por_especie(client, h, crear_animal):
+    animal = crear_animal()
+    diagnostico = _crear_diagnostico(
+        client,
+        h,
+        animal["id_animal"],
+        signos_vitales={"peso_kg": 0.001, "temperatura_c": 0, "frecuencia_cardiaca_lpm": 1},
+    )
+    assert diagnostico["signos_vitales"]["temperatura_c"] == 0
 
 
 def test_crear_diagnostico_animal_inexistente_404(client, h):
