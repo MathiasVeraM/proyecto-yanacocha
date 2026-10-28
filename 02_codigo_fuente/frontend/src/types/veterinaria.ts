@@ -47,7 +47,9 @@ export interface DiagnosticoCreate {
   signos_vitales?: SignosVitalesCreate | null
 }
 
-export type DiagnosticoUpdate = Partial<Omit<DiagnosticoCreate, 'signos_vitales'>>
+export type DiagnosticoUpdate = Partial<Omit<DiagnosticoCreate, 'signos_vitales'>> & {
+  signos_vitales?: SignosVitalesCreate | null
+}
 
 export interface Tratamiento {
   id_tratamiento: number

@@ -20,14 +20,29 @@ const error = ref('')
 const modalAbierto = ref(false)
 const registroEditando = ref<RegistroExistente | null>(null)
 const tipoNuevo = ref<'diagnostico' | 'tratamiento'>('diagnostico')
+const paginaHistorial = ref(1)
+const registrosPorPagina = 5
 
 const cantidadTratamientos = computed(
   () => Object.values(tratamientos.value).reduce((total, items) => total + items.length, 0),
 )
-const cantidadCriticos = computed(() => diagnosticos.value.filter((d) => d.es_critico).length)
-const tratamientosEnCurso = computed(
-  () => Object.values(tratamientos.value).flat().filter((t) => t.estado === 'en_curso').length,
+const ultimaRevision = computed(
+  () =>
+    [...diagnosticos.value].sort(
+      (a, b) => new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime(),
+    )[0] ?? null,
 )
+const signosUltimaRevision = computed(() => ultimaRevision.value?.signos_vitales ?? null)
+const diagnosticosOrdenados = computed(() =>
+  [...diagnosticos.value].sort(
+    (a, b) => new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime(),
+  ),
+)
+const paginasHistorial = computed(() => Math.max(1, Math.ceil(diagnosticosOrdenados.value.length / registrosPorPagina)))
+const diagnosticosPaginados = computed(() => {
+  const inicio = (paginaHistorial.value - 1) * registrosPorPagina
+  return diagnosticosOrdenados.value.slice(inicio, inicio + registrosPorPagina)
+})
 
 function fechaHora(fecha: string) {
   return new Intl.DateTimeFormat('es-EC', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(fecha))
@@ -112,34 +127,93 @@ function editarTratamiento(datos: Tratamiento) {
   modalAbierto.value = true
 }
 
-watch(() => props.idAnimal, cargar, { immediate: true })
+watch(
+  () => props.idAnimal,
+  () => {
+    paginaHistorial.value = 1
+    void cargar()
+  },
+  { immediate: true },
+)
+
+watch(paginasHistorial, (total) => {
+  if (paginaHistorial.value > total) paginaHistorial.value = total
+})
 </script>
 
 <template>
   <section class="veterinaria">
-    <div class="resumen-grid" aria-label="Resumen veterinario">
-      <article class="resumen-card">
-        <span class="resumen-icono">+</span>
-        <div>
-          <strong>{{ diagnosticos.length + cantidadTratamientos }}</strong>
-          <span>Registros clínicos</span>
-        </div>
-      </article>
-      <article class="resumen-card">
-        <span class="resumen-icono critico">!</span>
-        <div>
-          <strong>{{ cantidadCriticos }}</strong>
-          <span>Diagnósticos críticos</span>
-        </div>
-      </article>
-      <article class="resumen-card">
-        <span class="resumen-icono tratamiento">↻</span>
-        <div>
-          <strong>{{ tratamientosEnCurso }}</strong>
-          <span>Tratamientos en curso</span>
-        </div>
-      </article>
-    </div>
+    <section class="ultima-revision" aria-label="Signos vitales de la última revisión">
+      <header class="ultima-revision-header">
+        <h2>Signos vitales · última revisión</h2>
+        <time v-if="ultimaRevision" :datetime="ultimaRevision.fecha_registro">
+          {{ fechaHora(ultimaRevision.fecha_registro) }}
+        </time>
+        <span v-else>Sin revisiones registradas</span>
+      </header>
+      <div class="signos-resumen">
+        <article class="signo-resumen">
+          <span>Temperatura</span>
+          <strong>
+            {{ signosUltimaRevision?.temperatura_c !== null && signosUltimaRevision?.temperatura_c !== undefined
+              ? `${formatoNumero(signosUltimaRevision.temperatura_c)} °C`
+              : '—' }}
+          </strong>
+        </article>
+        <article class="signo-resumen">
+          <span>Hidratación</span>
+          <strong>{{ signosUltimaRevision?.hidratacion ? etiquetaCategoria(signosUltimaRevision.hidratacion) : '—' }}</strong>
+        </article>
+        <article class="signo-resumen">
+          <span>Condición corporal</span>
+          <strong>
+            {{ signosUltimaRevision?.condicion_corporal
+              ? condicionCorporal(signosUltimaRevision.condicion_corporal)
+              : '—' }}
+          </strong>
+        </article>
+        <article class="signo-resumen">
+          <span>Frec. cardíaca</span>
+          <strong>
+            {{ signosUltimaRevision?.frecuencia_cardiaca_lpm != null
+              ? `${signosUltimaRevision.frecuencia_cardiaca_lpm} lpm`
+              : '—' }}
+          </strong>
+        </article>
+        <article class="signo-resumen">
+          <span>Frec. respiratoria</span>
+          <strong>
+            {{ signosUltimaRevision?.frecuencia_respiratoria_rpm != null
+              ? `${signosUltimaRevision.frecuencia_respiratoria_rpm} rpm`
+              : '—' }}
+          </strong>
+        </article>
+        <article class="signo-resumen">
+          <span>Peso actual</span>
+          <strong>
+            {{ signosUltimaRevision?.peso_kg != null
+              ? `${formatoNumero(signosUltimaRevision.peso_kg, 3)} kg`
+              : '—' }}
+          </strong>
+        </article>
+        <article class="signo-resumen">
+          <span>Llenado capilar</span>
+          <strong>
+            {{ signosUltimaRevision?.tiempo_llenado_capilar_s != null
+              ? `${formatoNumero(signosUltimaRevision.tiempo_llenado_capilar_s)} s`
+              : '—' }}
+          </strong>
+        </article>
+        <article class="signo-resumen">
+          <span>Mucosas</span>
+          <strong>{{ signosUltimaRevision?.mucosas ? etiquetaCategoria(signosUltimaRevision.mucosas) : '—' }}</strong>
+        </article>
+        <article class="signo-resumen">
+          <span>Actitud</span>
+          <strong>{{ signosUltimaRevision?.actitud ? etiquetaCategoria(signosUltimaRevision.actitud) : '—' }}</strong>
+        </article>
+      </div>
+    </section>
 
     <div class="historial-cabecera">
       <div>
@@ -149,6 +223,7 @@ watch(() => props.idAnimal, cargar, { immediate: true })
         </p>
       </div>
       <div class="acciones-cabecera">
+        <button class="btn btn-secondary" type="button">Generar PDF</button>
         <button class="btn btn-secondary" :disabled="diagnosticos.length === 0" @click="nuevoTratamiento">
           + Tratamiento
         </button>
@@ -169,7 +244,7 @@ watch(() => props.idAnimal, cargar, { immediate: true })
     </div>
 
     <ol v-else class="linea-tiempo">
-      <li v-for="diagnostico in diagnosticos" :key="diagnostico.id_diagnostico" class="evento">
+      <li v-for="diagnostico in diagnosticosPaginados" :key="diagnostico.id_diagnostico" class="evento">
         <span class="evento-punto" :class="{ critico: diagnostico.es_critico }" />
         <article class="evento-card">
           <header class="evento-header">
@@ -259,6 +334,29 @@ watch(() => props.idAnimal, cargar, { immediate: true })
         </article>
       </li>
     </ol>
+    <nav
+      v-if="!cargando && !error && diagnosticosOrdenados.length > registrosPorPagina"
+      class="paginacion"
+      aria-label="Paginación del historial clínico"
+    >
+      <button
+        class="btn btn-secondary"
+        type="button"
+        :disabled="paginaHistorial === 1"
+        @click="paginaHistorial--"
+      >
+        Anterior
+      </button>
+      <span>Página {{ paginaHistorial }} de {{ paginasHistorial }}</span>
+      <button
+        class="btn btn-secondary"
+        type="button"
+        :disabled="paginaHistorial === paginasHistorial"
+        @click="paginaHistorial++"
+      >
+        Siguiente
+      </button>
+    </nav>
   </section>
 
   <VeterinariaRegistroModal
@@ -277,60 +375,61 @@ watch(() => props.idAnimal, cargar, { immediate: true })
   min-width: 0;
 }
 
-.resumen-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 22px;
-}
-
-.resumen-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 76px;
-  padding: 14px;
+.ultima-revision {
+  margin-bottom: 20px;
+  padding: 16px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
 }
 
-.resumen-icono {
-  display: grid;
-  flex: 0 0 34px;
-  place-items: center;
-  height: 34px;
-  border-radius: 10px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: 19px;
-  font-weight: 600;
+.ultima-revision-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
-.resumen-icono.critico {
-  background: #f5e9c4;
-  color: #87661a;
-}
-
-.resumen-icono.tratamiento {
-  background: #e3e6f3;
-  color: #4a538f;
-}
-
-.resumen-card strong,
-.resumen-card span:not(.resumen-icono) {
-  display: block;
-}
-
-.resumen-card strong {
-  font-family: var(--font-serif);
-  font-size: 21px;
-}
-
-.resumen-card div span {
-  margin-top: 2px;
+.ultima-revision-header h2 {
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ultima-revision-header time,
+.ultima-revision-header > span {
+  color: var(--color-text-subtle);
+  font-size: 10px;
+}
+
+.signos-resumen {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.signo-resumen {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-height: 68px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-input);
+}
+
+.signo-resumen span {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.signo-resumen strong {
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .historial-cabecera {
@@ -584,9 +683,22 @@ watch(() => props.idAnimal, cargar, { immediate: true })
   gap: 12px;
 }
 
+.paginacion {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.paginacion span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
 @media (max-width: 720px) {
-  .resumen-grid {
-    grid-template-columns: 1fr;
+  .signos-resumen {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .historial-cabecera {
@@ -605,6 +717,12 @@ watch(() => props.idAnimal, cargar, { immediate: true })
   .evento-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 420px) {
+  .signos-resumen {
+    grid-template-columns: 1fr;
   }
 }
 </style>

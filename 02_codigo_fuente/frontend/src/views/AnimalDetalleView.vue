@@ -8,13 +8,20 @@ import ModuloPlaceholder from '@/components/ModuloPlaceholder.vue'
 import SalidaModal from '@/components/SalidaModal.vue'
 import VeterinariaPanel from '@/components/VeterinariaPanel.vue'
 import { animalesApi } from '@/api/animales'
+import { veterinariaApi } from '@/api/veterinaria'
 import { ApiError } from '@/api/http'
 import { ESTADOS_ANIMAL, ESTADOS_SALIDA, SEXOS, formatearFecha, nombreClase } from '@/config/animales'
 import type { Animal } from '@/types/animales'
+import type { Diagnostico } from '@/types/veterinaria'
 
 const props = defineProps<{ id: string }>()
 
 const animal = ref<Animal | null>(null)
+const diagnosticos = ref<Diagnostico[]>([])
+const cargandoDiagnosticos = ref(false)
+const errorDiagnosticos = ref('')
+const paginaLineaVida = ref(1)
+const eventosPorPagina = 5
 const cargando = ref(true)
 const error = ref('')
 const tab = ref<'resumen' | 'veterinaria' | 'actividades'>('resumen')
@@ -28,6 +35,34 @@ if (route.query.aviso) router.replace({ query: {} })
 
 const yaSalio = computed(() => !!animal.value && ESTADOS_SALIDA.includes(animal.value.estado_actual))
 const estado = computed(() => (animal.value ? ESTADOS_ANIMAL[animal.value.estado_actual] : null))
+type EventoLineaVida =
+  | { tipo: 'ingreso'; fecha: string; clave: string }
+  | { tipo: 'diagnostico'; fecha: string; clave: string; datos: Diagnostico }
+  | { tipo: 'salida'; fecha: null; clave: string }
+
+const eventosLineaVida = computed<EventoLineaVida[]>(() => {
+  if (!animal.value) return []
+  const eventos: EventoLineaVida[] = [
+    { tipo: 'ingreso', fecha: animal.value.fecha_ingreso, clave: 'ingreso' },
+    ...diagnosticos.value.map((diagnostico) => ({
+      tipo: 'diagnostico' as const,
+      fecha: diagnostico.fecha_registro,
+      clave: `diagnostico-${diagnostico.id_diagnostico}`,
+      datos: diagnostico,
+    })),
+  ]
+  if (yaSalio.value) eventos.push({ tipo: 'salida', fecha: null, clave: 'salida' })
+  return eventos.sort((a, b) => {
+    if (a.fecha === null) return b.fecha === null ? 0 : 1
+    if (b.fecha === null) return -1
+    return new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
+  })
+})
+const paginasLineaVida = computed(() => Math.max(1, Math.ceil(eventosLineaVida.value.length / eventosPorPagina)))
+const eventosLineaVidaPaginados = computed(() => {
+  const inicio = (paginaLineaVida.value - 1) * eventosPorPagina
+  return eventosLineaVida.value.slice(inicio, inicio + eventosPorPagina)
+})
 
 async function cargar() {
   cargando.value = true
@@ -41,6 +76,29 @@ async function cargar() {
   }
 }
 
+async function cargarDiagnosticos() {
+  const idAnimal = Number(props.id)
+  cargandoDiagnosticos.value = true
+  errorDiagnosticos.value = ''
+  try {
+    const registros = await veterinariaApi.listarDiagnosticos(idAnimal)
+    if (idAnimal !== Number(props.id)) return
+    diagnosticos.value = registros
+    paginaLineaVida.value = 1
+  } catch (e) {
+    if (idAnimal === Number(props.id)) {
+      errorDiagnosticos.value =
+        e instanceof ApiError ? e.message : 'No se pudieron cargar los diagnósticos de la línea de vida'
+    }
+  } finally {
+    if (idAnimal === Number(props.id)) cargandoDiagnosticos.value = false
+  }
+}
+
+function cargarLineaVidaNuevamente() {
+  void cargarDiagnosticos()
+}
+
 function onGuardado(actualizado: Animal, nuevoAviso?: string) {
   animal.value = actualizado
   aviso.value = nuevoAviso ?? ''
@@ -48,7 +106,20 @@ function onGuardado(actualizado: Animal, nuevoAviso?: string) {
   salidaAbierta.value = false
 }
 
-watch(() => props.id, cargar, { immediate: true })
+watch(
+  () => props.id,
+  () => {
+    diagnosticos.value = []
+    paginaLineaVida.value = 1
+    void cargar()
+    void cargarDiagnosticos()
+  },
+  { immediate: true },
+)
+
+watch(tab, (valor) => {
+  if (valor === 'resumen') void cargarDiagnosticos()
+})
 </script>
 
 <template>
@@ -174,17 +245,58 @@ watch(() => props.id, cargar, { immediate: true })
           <h2>Línea de vida general</h2>
           <p class="sub">Eventos relevantes del ejemplar, en orden cronológico</p>
           <ol class="linea">
-            <li>
-              <time>{{ formatearFecha(animal.fecha_ingreso) }}</time>
-              <AppBadge tone="green">Ingreso</AppBadge>
-              <span>Ingreso al centro · {{ animal.recinto.nombre_recinto }}</span>
-            </li>
-            <li v-if="yaSalio">
-              <time>—</time>
-              <AppBadge :tone="estado?.tono">Salida</AppBadge>
-              <span>{{ estado?.label }}</span>
+            <li v-for="evento in eventosLineaVidaPaginados" :key="evento.clave">
+              <time>{{ evento.fecha ? formatearFecha(evento.fecha) : '—' }}</time>
+              <template v-if="evento.tipo === 'ingreso'">
+                <AppBadge tone="green">Ingreso</AppBadge>
+                <span>Ingreso al centro · {{ animal.recinto.nombre_recinto }}</span>
+              </template>
+              <template v-else-if="evento.tipo === 'diagnostico'">
+                <AppBadge :tone="evento.datos.es_critico ? 'amber' : 'blue'">Diagnóstico</AppBadge>
+                <span class="evento-diagnostico">
+                  {{ evento.datos.diagnostico }}
+                  <strong v-if="evento.datos.es_critico"> · Crítico</strong>
+                </span>
+              </template>
+              <template v-else>
+                <AppBadge :tone="estado?.tono">Salida</AppBadge>
+                <span>{{ estado?.label }}</span>
+              </template>
             </li>
           </ol>
+          <p v-if="cargandoDiagnosticos" class="estado-linea">Cargando diagnósticos…</p>
+          <p v-else-if="errorDiagnosticos" class="alert-error error-linea">
+            {{ errorDiagnosticos }}
+            <button type="button" class="accion-reintentar" @click="cargarLineaVidaNuevamente">
+              Reintentar
+            </button>
+          </p>
+          <p v-else-if="diagnosticos.length === 0" class="estado-linea">
+            Aún no hay diagnósticos registrados.
+          </p>
+          <nav
+            v-if="!cargandoDiagnosticos && !errorDiagnosticos && eventosLineaVida.length > eventosPorPagina"
+            class="paginacion-linea"
+            aria-label="Paginación de la línea de vida"
+          >
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :disabled="paginaLineaVida === 1"
+              @click="paginaLineaVida--"
+            >
+              Anterior
+            </button>
+            <span>Página {{ paginaLineaVida }} de {{ paginasLineaVida }}</span>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :disabled="paginaLineaVida === paginasLineaVida"
+              @click="paginaLineaVida++"
+            >
+              Siguiente
+            </button>
+          </nav>
         </article>
       </template>
 
@@ -394,11 +506,55 @@ dd {
   font-size: 13px;
 }
 
+.evento-diagnostico {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.evento-diagnostico strong {
+  color: var(--color-warning, #87661a);
+}
+
 .linea time {
   min-width: 90px;
   font-family: ui-monospace, 'Cascadia Code', monospace;
   font-size: 12px;
   color: var(--color-text-muted);
+}
+
+.estado-linea {
+  margin-top: 12px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.error-linea {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+
+.accion-reintentar {
+  border: 0;
+  background: none;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.paginacion-linea {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.paginacion-linea span {
+  color: var(--color-text-muted);
+  font-size: 12px;
 }
 
 .vacio {
@@ -411,6 +567,18 @@ dd {
   .layout,
   .ficha {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .panel {
+    padding: 18px;
+  }
+
+  .linea li {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 }
 </style>
