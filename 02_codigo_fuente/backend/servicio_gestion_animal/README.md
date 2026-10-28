@@ -63,8 +63,8 @@ las rutas públicas se mantienen bajo el prefijo `/api/animales`.
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/animales?buscar=&clase=&id_taxonomia=&estado=&id_recinto=` | Lista con filtros combinables (`clase`: Mammalia, Aves, Reptilia…) |
-| POST | `/api/animales` | Registra un animal; el código (`TO-001`, `CLF-002`…) se genera solo |
-| GET / PUT | `/api/animales/{id}` | Ficha del animal / editarla (código y especie no se editan) |
+| POST | `/api/animales` | Registra un animal; el código (`YC-2026-0001`…) se genera solo |
+| GET / PUT | `/api/animales/{id}` | Ficha del animal / editarla (el código no cambia; se puede corregir la taxonomía) |
 | GET | `/api/animales/taxonomia/sugerencias?buscar=` | Autocompletado: catálogo propio + iNaturalist |
 | POST | `/api/animales/taxonomia/importar` | Guarda en el catálogo una especie de iNaturalist |
 | GET / POST / PUT | `/api/animales/taxonomia` | Catálogo de especies |
@@ -78,8 +78,9 @@ las rutas públicas se mantienen bajo el prefijo `/api/animales`.
 | PUT | `/api/animales/tratamientos/{id}` | Editar o finalizar un tratamiento |
 
 ### Código del animal
-Iniciales del nombre científico + número correlativo por iniciales: *Canis lupus familiaris* → `CLF-001`,
-`CLF-002`…; *Tremarctos ornatus* → `TO-001`. Especies con las mismas iniciales comparten el contador.
+Formato `YC-AAAA-NNNN`: prefijo de Yanacocha, año local de Ecuador y correlativo anual con al menos cuatro dígitos
+(por ejemplo, `YC-2026-0001`). El correlativo se comparte entre todas las especies y el código no cambia si se corrige
+la taxonomía del animal.
 
 ### Fotografía
 Se sube como archivo y se guarda en la base de datos (tabla `animal_imagen`, una por animal), así se respalda con

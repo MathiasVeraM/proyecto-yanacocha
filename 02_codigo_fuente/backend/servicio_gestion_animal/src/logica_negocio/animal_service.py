@@ -1,14 +1,15 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from src.logica_negocio.codigo_animal import iniciales, siguiente_codigo
+from src.logica_negocio.codigo_animal import siguiente_codigo
+from src.modelos.fechas import hoy_local
 from src.logica_negocio.utilidades import datos_a_actualizar
 from src.repositorios.animal_repo import AnimalRepository
 from src.repositorios.recinto_repo import RecintoRepository
 from src.repositorios.taxonomia_repo import TaxonomiaRepository
 
-CAMPOS_OBLIGATORIOS = {"id_recinto", "estado_actual", "fecha_ingreso"}
-# Si dos personas registran a la vez un animal de la misma especie, el segundo reintenta con el siguiente número
+CAMPOS_OBLIGATORIOS = {"id_taxonomia", "id_recinto", "estado_actual", "fecha_ingreso"}
+# Si dos personas registran a la vez, el segundo reintenta con el siguiente número disponible
 INTENTOS_CODIGO = 3
 
 def _validar_recinto(db: Session, id_recinto: int):
@@ -42,7 +43,7 @@ class AnimalService:
             )
         _validar_recinto(db, animal_in.id_recinto)
 
-        prefijo = iniciales(taxonomia.especie)
+        prefijo = f"YC-{hoy_local().year}"
         # exclude_none: los campos no enviados toman su valor por defecto (ej. fecha de hoy)
         datos = animal_in.model_dump(exclude_none=True)
         for _ in range(INTENTOS_CODIGO):
@@ -62,6 +63,11 @@ class AnimalService:
     def actualizar_animal(db: Session, id_animal: int, animal_in):
         animal = AnimalService.animal_o_404(db, id_animal)
         datos = datos_a_actualizar(animal_in, CAMPOS_OBLIGATORIOS)
+        if "id_taxonomia" in datos and not TaxonomiaRepository.obtener_por_id(db, datos["id_taxonomia"]):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La especie indicada no existe en el catálogo"
+            )
         if "id_recinto" in datos:
             _validar_recinto(db, datos["id_recinto"])
         return AnimalRepository.actualizar_animal(db, animal, datos)

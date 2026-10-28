@@ -5,6 +5,7 @@ import pytest
 from src.modelos.fechas import hoy_local
 
 URL = "/api/animales"
+CODIGO_PRIMER_ANIMAL = f"YC-{hoy_local().year}-0001"
 
 
 @pytest.fixture
@@ -88,7 +89,7 @@ def test_todas_las_rutas_sin_permiso_403(client, headers_sin_permiso, metodo, ur
 
 def test_crear_animal_genera_codigo_y_valores_por_defecto(crear_animal):
     animal = crear_animal()
-    assert animal["codigo_animal"] == "TO-001"
+    assert animal["codigo_animal"] == CODIGO_PRIMER_ANIMAL
     assert animal["estado_actual"] == "en_centro"
     assert animal["fecha_ingreso"] == hoy_local().isoformat()
     # La ficha incluye la taxonomía y el recinto completos
@@ -97,27 +98,19 @@ def test_crear_animal_genera_codigo_y_valores_por_defecto(crear_animal):
     assert animal["recinto"]["nombre_recinto"] == "Sector de osos"
 
 
-def test_codigo_aumenta_por_especie(crear_animal, crear_taxonomia_db):
+def test_codigo_aumenta_globalmente_por_anio(crear_animal, crear_taxonomia_db):
     perro = crear_taxonomia_db(nombre_comun="Perro", especie="Canis lupus familiaris")
-    assert crear_animal()["codigo_animal"] == "TO-001"
-    assert crear_animal(id_taxonomia=perro.id_taxonomia)["codigo_animal"] == "CLF-001"
-    assert crear_animal(id_taxonomia=perro.id_taxonomia)["codigo_animal"] == "CLF-002"
-    assert crear_animal()["codigo_animal"] == "TO-002"
-
-
-def test_especies_con_mismas_iniciales_comparten_contador(crear_animal, crear_taxonomia_db):
-    lobo = crear_taxonomia_db(nombre_comun="Lobo", especie="Canis lupus")
-    capuchino = crear_taxonomia_db(nombre_comun="Capuchino", especie="Cebus libidinosus")
-    assert crear_animal(id_taxonomia=lobo.id_taxonomia)["codigo_animal"] == "CL-001"
-    assert crear_animal(id_taxonomia=capuchino.id_taxonomia)["codigo_animal"] == "CL-002"
+    assert crear_animal()["codigo_animal"] == CODIGO_PRIMER_ANIMAL
+    assert crear_animal(id_taxonomia=perro.id_taxonomia)["codigo_animal"] == f"YC-{hoy_local().year}-0002"
+    assert crear_animal()["codigo_animal"] == f"YC-{hoy_local().year}-0003"
 
 
 def test_el_codigo_enviado_por_el_cliente_se_ignora(crear_animal):
-    assert crear_animal(codigo_animal="MIO-999")["codigo_animal"] == "TO-001"
+    assert crear_animal(codigo_animal="MIO-999")["codigo_animal"] == CODIGO_PRIMER_ANIMAL
 
 
 def test_si_el_codigo_se_ocupa_a_la_vez_reintenta_con_el_siguiente(crear_animal, monkeypatch):
-    # Simula que otro registro tomó TO-001 justo antes: la primera consulta no lo ve
+    # Simula que otro registro tomó el primer código justo antes: la primera consulta no lo ve
     from src.repositorios.animal_repo import AnimalRepository
     crear_animal()
     original = AnimalRepository.obtener_codigos_con_prefijo
@@ -128,7 +121,7 @@ def test_si_el_codigo_se_ocupa_a_la_vez_reintenta_con_el_siguiente(crear_animal,
         return [] if len(llamadas) == 1 else original(db, prefijo)
 
     monkeypatch.setattr(AnimalRepository, "obtener_codigos_con_prefijo", staticmethod(_desactualizado))
-    assert crear_animal()["codigo_animal"] == "TO-002"
+    assert crear_animal()["codigo_animal"] == f"YC-{hoy_local().year}-0002"
     assert len(llamadas) == 2
 
 
@@ -171,7 +164,7 @@ def test_crear_animal_datos_invalidos_422(client, h, nuevo_animal, cambio):
 def test_obtener_animal(client, h, crear_animal):
     creado = crear_animal()
     resp = client.get(f"{URL}/{creado['id_animal']}", headers=h)
-    assert resp.status_code == 200 and resp.json()["codigo_animal"] == "TO-001"
+    assert resp.status_code == 200 and resp.json()["codigo_animal"] == CODIGO_PRIMER_ANIMAL
 
 
 def test_obtener_animal_inexistente_404(client, h):
@@ -183,9 +176,9 @@ def test_obtener_animal_inexistente_404(client, h):
 def varios_animales(crear_animal, crear_taxonomia_db, crear_recinto_db):
     condor = crear_taxonomia_db(nombre_comun="Cóndor andino", especie="Vultur gryphus")
     aviario = crear_recinto_db(nombre_recinto="Aviario")
-    crear_animal()  # TO-001 en Sector de osos
-    crear_animal(estado_actual="liberado")  # TO-002
-    crear_animal(id_taxonomia=condor.id_taxonomia, id_recinto=aviario.id_recinto)  # VG-001
+    crear_animal()  # Primer animal en Sector de osos
+    crear_animal(estado_actual="liberado")
+    crear_animal(id_taxonomia=condor.id_taxonomia, id_recinto=aviario.id_recinto)
     return {"condor": condor, "aviario": aviario}
 
 
@@ -195,18 +188,26 @@ def _codigos(resp):
 
 
 def test_listar_sin_filtros(client, h, varios_animales):
-    assert _codigos(client.get(URL, headers=h)) == ["TO-001", "TO-002", "VG-001"]
+    assert _codigos(client.get(URL, headers=h)) == [
+        f"YC-{hoy_local().year}-0001",
+        f"YC-{hoy_local().year}-0002",
+        f"YC-{hoy_local().year}-0003",
+    ]
 
 
 def test_listar_filtrando_por_especie(client, h, varios_animales):
     resp = client.get(URL, params={"id_taxonomia": varios_animales["condor"].id_taxonomia}, headers=h)
-    assert _codigos(resp) == ["VG-001"]
+    assert _codigos(resp) == [f"YC-{hoy_local().year}-0003"]
 
 
 def test_listar_filtrando_por_estado_recinto_y_texto(client, h, varios_animales):
-    assert _codigos(client.get(URL, params={"estado": "liberado"}, headers=h)) == ["TO-002"]
-    assert _codigos(client.get(URL, params={"id_recinto": varios_animales["aviario"].id_recinto}, headers=h)) == ["VG-001"]
-    assert _codigos(client.get(URL, params={"buscar": "oso"}, headers=h)) == ["TO-001", "TO-002"]
+    assert _codigos(client.get(URL, params={"estado": "liberado"}, headers=h)) == [f"YC-{hoy_local().year}-0002"]
+    assert _codigos(client.get(URL, params={"id_recinto": varios_animales["aviario"].id_recinto}, headers=h)) == [
+        f"YC-{hoy_local().year}-0003"
+    ]
+    assert _codigos(client.get(URL, params={"buscar": "oso"}, headers=h)) == [
+        f"YC-{hoy_local().year}-0001", f"YC-{hoy_local().year}-0002"
+    ]
 
 
 def test_listar_estado_invalido_422(client, h):
@@ -247,15 +248,38 @@ def test_actualizar_animal_ignora_null_en_obligatorios(client, h, crear_animal):
     assert resp.json()["estado_actual"] == "en_centro"
 
 
-def test_codigo_y_especie_no_se_pueden_editar(client, h, crear_animal, crear_taxonomia_db):
+def test_actualizar_taxonomia_manual_cambia_nombre_comun_y_conserva_codigo(client, h, crear_animal):
     animal = crear_animal()
-    perro = crear_taxonomia_db(nombre_comun="Perro", especie="Canis lupus familiaris")
-    resp = client.put(
-        f"{URL}/{animal['id_animal']}",
-        json={"codigo_animal": "OTRO-001", "id_taxonomia": perro.id_taxonomia},
+    perro_resp = client.post(
+        "/api/animales/taxonomia",
+        json={"nombre_comun": "Perro", "especie": "Canis lupus familiaris", "genero": "Canis"},
         headers=h,
     )
-    assert (resp.json()["codigo_animal"], resp.json()["taxonomia"]["nombre_comun"]) == ("TO-001", "Oso de anteojos")
+    assert perro_resp.status_code == 201
+    perro = perro_resp.json()
+    resp = client.put(
+        f"{URL}/{animal['id_animal']}",
+        json={"codigo_animal": "OTRO-001", "id_taxonomia": perro["id_taxonomia"]},
+        headers=h,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["codigo_animal"] == CODIGO_PRIMER_ANIMAL
+    assert resp.json()["id_taxonomia"] == perro["id_taxonomia"]
+    assert resp.json()["taxonomia"]["nombre_comun"] == "Perro"
+
+
+def test_actualizar_animal_con_taxonomia_inexistente_400(client, h, crear_animal):
+    animal = crear_animal()
+    resp = client.put(f"{URL}/{animal['id_animal']}", json={"id_taxonomia": 999}, headers=h)
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "La especie indicada no existe en el catálogo"
+
+
+def test_actualizar_animal_ignora_taxonomia_null(client, h, crear_animal):
+    animal = crear_animal()
+    resp = client.put(f"{URL}/{animal['id_animal']}", json={"id_taxonomia": None}, headers=h)
+    assert resp.status_code == 200
+    assert resp.json()["id_taxonomia"] == animal["id_taxonomia"]
 
 
 def test_actualizar_animal_inexistente_404(client, h):

@@ -7,7 +7,7 @@ from src.esquemas.taxonomia_schema import TaxonomiaResponse
 EstadoAnimal = Literal["en_centro", "en_tratamiento", "liberado", "trasladado", "fallecido"]
 Sexo = Literal["macho", "hembra", "indeterminado"]
 
-# El código no se envía: lo genera el servicio a partir del nombre científico.
+# El código no se envía: lo genera el servicio con el formato YC-año-número.
 # La foto se sube aparte (PUT /api/animales/{id}/imagen) y el servicio llena url_imagen
 class AnimalCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -22,10 +22,11 @@ class AnimalCreate(BaseModel):
     # Si no se envía, se usa la fecha de hoy
     fecha_ingreso: Optional[date] = None
 
-# El código y la especie no se editan: el código depende del nombre científico
+# El código se conserva al editar; la taxonomía puede corregirse seleccionando otra del catálogo
 class AnimalUpdate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
+    id_taxonomia: Optional[int] = None
     id_recinto: Optional[int] = None
     nombre: Optional[str] = Field(None, max_length=100)
     edad_aproximada: Optional[str] = Field(None, max_length=50)
