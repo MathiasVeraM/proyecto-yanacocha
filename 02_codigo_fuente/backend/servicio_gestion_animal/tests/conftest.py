@@ -20,7 +20,8 @@ from src.database import Base, get_db
 import src.modelos  # noqa: F401  (registra los modelos en Base.metadata)
 from src.main import app
 from src.logica_negocio import inaturalist
-from src.modelos.animal_model import AnimalModel, DiagnosticoModel, RecintoModel, TaxonomiaModel
+from src.modelos.animal_model import AnimalModel, RecintoModel, TaxonomiaModel
+from src.modelos.diagnostico_model import DiagnosticoModel
 
 ID_USUARIO_VETERINARIO = 7
 ID_ROL_VETERINARIA = 2

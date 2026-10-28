@@ -51,6 +51,13 @@ Pruebas (usan SQLite en memoria y un iNaturalist simulado: no tocan la base real
 pytest --cov=src
 ```
 
+## Organización del código
+
+Las fichas y fotografías de animales, los diagnósticos y los tratamientos se mantienen separados por modelo
+y router (`animal_model.py` / `animal_routes.py`, `diagnostico_model.py` / `diagnostico_routes.py` y
+`tratamiento_model.py` / `tratamiento_routes.py`). Sus servicios y repositorios también están separados;
+las rutas públicas se mantienen bajo el prefijo `/api/animales`.
+
 ## Endpoints principales
 
 | Método | Ruta | Descripción |

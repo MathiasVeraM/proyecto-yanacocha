@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from src.modelos.animal_model import ahora_local, hoy_local
+from src.modelos.fechas import ahora_local, hoy_local
 from src.repositorios.animal_repo import AnimalRepository
 from src.repositorios.diagnostico_repo import DiagnosticoRepository
 from src.repositorios.recinto_repo import RecintoRepository

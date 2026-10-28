@@ -2,7 +2,7 @@ from datetime import timedelta
 
 import pytest
 
-from src.modelos.animal_model import hoy_local
+from src.modelos.fechas import hoy_local
 
 URL = "/api/animales"
 

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from src.modelos.animal_model import DiagnosticoModel
+from src.modelos.diagnostico_model import DiagnosticoModel
 
 class DiagnosticoRepository:
     @staticmethod
