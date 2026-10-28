@@ -282,6 +282,68 @@ def test_diagnostico_actualizar(db, crear_animal_db, crear_diagnostico_db):
     assert diagnostico.es_critico is True
 
 
+def test_diagnostico_actualizar_signos_vitales_agrega_y_edita(db, crear_animal_db, crear_diagnostico_db):
+    diagnostico = crear_diagnostico_db(crear_animal_db().id_animal)
+    diagnostico = DiagnosticoRepository.actualizar_diagnostico(
+        db,
+        diagnostico,
+        {},
+        {"peso_kg": 0.125},
+        actualizar_signos_vitales=True,
+    )
+    assert diagnostico.signos_vitales.peso_kg == 0.125
+
+    diagnostico = DiagnosticoRepository.actualizar_diagnostico(
+        db,
+        diagnostico,
+        {},
+        {"peso_kg": 0.25, "hidratacion": "normal"},
+        actualizar_signos_vitales=True,
+    )
+    assert diagnostico.signos_vitales.peso_kg == 0.25
+    assert diagnostico.signos_vitales.hidratacion == "normal"
+
+
+def test_diagnostico_actualizar_signos_vitales_null_elimina_el_registro(
+    db, crear_animal_db, crear_diagnostico_db
+):
+    diagnostico = crear_diagnostico_db(crear_animal_db().id_animal)
+    diagnostico = DiagnosticoRepository.actualizar_diagnostico(
+        db,
+        diagnostico,
+        {},
+        {"peso_kg": 0.125},
+        actualizar_signos_vitales=True,
+    )
+    diagnostico = DiagnosticoRepository.actualizar_diagnostico(
+        db,
+        diagnostico,
+        {},
+        actualizar_signos_vitales=True,
+    )
+    assert diagnostico.signos_vitales is None
+
+
+def test_diagnostico_actualizar_omite_signos_vitales_si_no_se_envian(
+    db, crear_animal_db, crear_diagnostico_db
+):
+    diagnostico = crear_diagnostico_db(crear_animal_db().id_animal)
+    diagnostico = DiagnosticoRepository.actualizar_diagnostico(
+        db,
+        diagnostico,
+        {},
+        {"peso_kg": 0.125},
+        actualizar_signos_vitales=True,
+    )
+    diagnostico = DiagnosticoRepository.actualizar_diagnostico(
+        db,
+        diagnostico,
+        {"es_critico": True},
+    )
+    assert diagnostico.es_critico is True
+    assert diagnostico.signos_vitales.peso_kg == 0.125
+
+
 def test_diagnostico_de_animal_inexistente_lanza_error(db, id_veterinario):
     with pytest.raises(IntegrityError):
         DiagnosticoRepository.crear_diagnostico(db, {

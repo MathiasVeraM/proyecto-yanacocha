@@ -414,6 +414,74 @@ def test_actualizar_diagnostico(client, h, crear_animal):
     assert resp.json()["diagnostico"] == "Deshidratación leve"
 
 
+def test_actualizar_diagnostico_agrega_signos_vitales(client, h, crear_animal):
+    diagnostico = _crear_diagnostico(client, h, crear_animal()["id_animal"])
+    resp = client.put(
+        f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}",
+        json={"signos_vitales": {"peso_kg": 0.125, "hidratacion": "normal"}},
+        headers=h,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["signos_vitales"]["peso_kg"] == 0.125
+    assert resp.json()["signos_vitales"]["hidratacion"] == "normal"
+
+
+def test_actualizar_diagnostico_edita_signos_vitales(client, h, crear_animal):
+    diagnostico = _crear_diagnostico(
+        client,
+        h,
+        crear_animal()["id_animal"],
+        signos_vitales={"peso_kg": 1.25, "temperatura_c": 37.5},
+    )
+    resp = client.put(
+        f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}",
+        json={"signos_vitales": {"peso_kg": 1.5, "temperatura_c": 38.2}},
+        headers=h,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["signos_vitales"]["peso_kg"] == 1.5
+    assert resp.json()["signos_vitales"]["temperatura_c"] == 38.2
+
+
+def test_actualizar_diagnostico_null_elimina_signos_vitales(client, h, crear_animal):
+    diagnostico = _crear_diagnostico(
+        client,
+        h,
+        crear_animal()["id_animal"],
+        signos_vitales={"peso_kg": 1.25},
+    )
+    resp = client.put(
+        f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}",
+        json={"signos_vitales": None},
+        headers=h,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["signos_vitales"] is None
+
+
+def test_actualizar_diagnostico_signos_vitales_invalidos_no_modifica(
+    client, h, crear_animal
+):
+    diagnostico = _crear_diagnostico(
+        client,
+        h,
+        crear_animal()["id_animal"],
+        signos_vitales={"peso_kg": 1.25},
+    )
+    resp = client.put(
+        f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}",
+        json={"diagnostico": "Texto modificado", "signos_vitales": {"peso_kg": 0}},
+        headers=h,
+    )
+    assert resp.status_code == 422
+    actual = client.get(
+        f"{URL}/{diagnostico['id_animal']}/diagnosticos",
+        headers=h,
+    ).json()[0]
+    assert actual["diagnostico"] == diagnostico["diagnostico"]
+    assert actual["signos_vitales"]["peso_kg"] == 1.25
+
+
 def test_actualizar_diagnostico_no_cambia_animal_ni_usuario(client, h, id_veterinario, crear_animal):
     animal = crear_animal()
     diagnostico = _crear_diagnostico(client, h, animal["id_animal"])

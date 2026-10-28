@@ -19,6 +19,7 @@ class DiagnosticoUpdate(BaseModel):
     diagnostico: Optional[str] = Field(None, min_length=1)
     observaciones: Optional[str] = None
     es_critico: Optional[bool] = None
+    signos_vitales: Optional[SignosVitalesCreate] = None
 
 class DiagnosticoResponse(BaseModel):
     id_diagnostico: int

@@ -39,11 +39,32 @@ class DiagnosticoRepository:
         return diagnostico
 
     @staticmethod
-    def actualizar_diagnostico(db: Session, diagnostico: DiagnosticoModel, datos: dict):
+    def actualizar_diagnostico(
+        db: Session,
+        diagnostico: DiagnosticoModel,
+        datos: dict,
+        signos_vitales_data: dict | None = None,
+        actualizar_signos_vitales: bool = False,
+    ):
         for campo, valor in datos.items():
             setattr(diagnostico, campo, valor)
-        db.commit()
-        db.refresh(diagnostico)
+        if actualizar_signos_vitales:
+            signos_vitales = diagnostico.signos_vitales
+            if signos_vitales_data is None:
+                if signos_vitales is not None:
+                    db.delete(signos_vitales)
+            elif signos_vitales is None:
+                diagnostico.signos_vitales = SignosVitalesModel(**signos_vitales_data)
+            else:
+                for campo, valor in signos_vitales_data.items():
+                    setattr(signos_vitales, campo, valor)
+
+        try:
+            db.commit()
+            db.refresh(diagnostico)
+        except SQLAlchemyError:
+            db.rollback()
+            raise
         return diagnostico
 
     @staticmethod

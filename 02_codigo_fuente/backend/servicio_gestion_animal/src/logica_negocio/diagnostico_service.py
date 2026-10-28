@@ -35,4 +35,15 @@ class DiagnosticoService:
     def actualizar_diagnostico(db: Session, id_diagnostico: int, diagnostico_in):
         diagnostico = DiagnosticoService.diagnostico_o_404(db, id_diagnostico)
         datos = datos_a_actualizar(diagnostico_in, CAMPOS_OBLIGATORIOS)
-        return DiagnosticoRepository.actualizar_diagnostico(db, diagnostico, datos)
+        actualizar_signos_vitales = "signos_vitales" in diagnostico_in.model_fields_set
+        datos_signos_vitales = None
+        if diagnostico_in.signos_vitales is not None:
+            datos_signos_vitales = diagnostico_in.signos_vitales.model_dump()
+        datos.pop("signos_vitales", None)
+        return DiagnosticoRepository.actualizar_diagnostico(
+            db,
+            diagnostico,
+            datos,
+            datos_signos_vitales,
+            actualizar_signos_vitales,
+        )
