@@ -16,7 +16,7 @@ class TaxonomiaModel(Base):
     )
     id_taxonomia = Column(Integer, primary_key=True, index=True, autoincrement=True)
     nombre_comun = Column(String(100), nullable=False)
-    especie = Column(String(150), nullable=False)  # nombre científico; de aquí salen las iniciales del código
+    especie = Column(String(150), nullable=False)
     genero = Column(String(100))  # género taxonómico, no sexo
     familia = Column(String(100))
     orden = Column(String(100))

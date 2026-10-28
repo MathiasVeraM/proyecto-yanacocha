@@ -2,6 +2,8 @@
 import httpx2
 import pytest
 
+from src.modelos.fechas import hoy_local
+
 URL_TAX = "/api/animales/taxonomia"
 URL_REC = "/api/animales/recintos"
 
@@ -201,7 +203,46 @@ def test_la_especie_importada_sirve_para_registrar_un_animal(client, h, crear_re
         headers=h,
     ).json()
 
-    assert animal["codigo_animal"] == "TO-001"
+    assert animal["codigo_animal"] == f"YC-{hoy_local().year}-0001"
+
+
+def test_actualizar_animal_con_taxonomia_importada_de_inaturalist(
+    client, h, crear_recinto_db, inaturalist_simulado
+):
+    inaturalist_simulado.responder("/taxa/41657", {"results": [OSO_INAT]})
+    oso = client.post(f"{URL_TAX}/importar", json={"id_inaturalist": 41657}, headers=h).json()
+    recinto = crear_recinto_db()
+    animal = client.post(
+        "/api/animales",
+        json={"id_taxonomia": oso["id_taxonomia"], "id_recinto": recinto.id_recinto},
+        headers=h,
+    ).json()
+
+    condor_inat = {
+        **OSO_INAT,
+        "id": 12345,
+        "name": "Vultur gryphus",
+        "preferred_common_name": "Cóndor andino",
+        "ancestor_ids": [1, 2, 3],
+        "ancestors": [
+            {"rank": "class", "name": "Aves"},
+            {"rank": "family", "name": "Cathartidae"},
+            {"rank": "genus", "name": "Vultur"},
+        ],
+    }
+    inaturalist_simulado.responder("/taxa/12345", {"results": [condor_inat]})
+    condor = client.post(f"{URL_TAX}/importar", json={"id_inaturalist": 12345}, headers=h).json()
+
+    resp = client.put(
+        f"/api/animales/{animal['id_animal']}",
+        json={"id_taxonomia": condor["id_taxonomia"]},
+        headers=h,
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["codigo_animal"] == animal["codigo_animal"]
+    assert resp.json()["taxonomia"]["nombre_comun"] == "Cóndor andino"
+    assert resp.json()["taxonomia"]["id_inaturalist"] == 12345
 
 
 # ---------- Recintos ----------
