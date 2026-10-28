@@ -76,8 +76,8 @@ export interface AnimalCreate {
   fecha_ingreso?: string
 }
 
-// El código y la especie no se pueden editar
-export type AnimalUpdate = Partial<Omit<AnimalCreate, 'id_taxonomia'>>
+// El código no se edita; la taxonomía puede corregirse en la ficha
+export type AnimalUpdate = Partial<AnimalCreate>
 
 export interface FiltrosAnimales {
   buscar?: string

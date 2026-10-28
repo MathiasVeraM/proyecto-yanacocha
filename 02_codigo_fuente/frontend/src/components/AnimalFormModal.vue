@@ -19,6 +19,12 @@ const emit = defineEmits<{ close: []; saved: [animal: Animal, aviso?: string] }>
 // Mismos límites que valida el servicio
 const TIPOS_FOTO = ['image/jpeg', 'image/png', 'image/webp']
 const TAMANO_MAXIMO_MB = 5
+const MAX_NOMBRE = 100
+const MAX_ESPECIE = 150
+const MAX_TAXONOMIA = 100
+const MAX_EDAD = 50
+const MAX_NOMBRE_RECINTO = 100
+const MAX_TIPO_RECINTO = 50
 
 const esEdicion = computed(() => props.animal !== null)
 
@@ -132,6 +138,33 @@ function cambiarEspecie() {
   especieManual.value = false
 }
 
+function validarTaxonomiaManual(): string | null {
+  const nombreComun = manual.nombre_comun.trim()
+  const nombreCientifico = manual.especie.trim()
+  if (!nombreComun || !nombreCientifico) return 'Ingresa el nombre común y el nombre científico'
+  if (nombreComun.length > MAX_NOMBRE) return `El nombre común no puede superar los ${MAX_NOMBRE} caracteres`
+  if (nombreCientifico.length > MAX_ESPECIE) {
+    return `El nombre científico no puede superar los ${MAX_ESPECIE} caracteres`
+  }
+  // El backend requiere que el nombre científico contenga al menos una letra latina.
+  if (!/[A-Za-z]/.test(nombreCientifico.normalize('NFKD'))) {
+    return 'El nombre científico debe contener letras'
+  }
+
+  const campos = [
+    ['género', manual.genero],
+    ['familia', manual.familia],
+    ['orden', manual.orden],
+    ['clase', manual.clase],
+  ] as const
+  for (const [etiqueta, valor] of campos) {
+    if (valor.trim().length > MAX_TAXONOMIA) {
+      return `${etiqueta[0]!.toUpperCase()}${etiqueta.slice(1)} no puede superar los ${MAX_TAXONOMIA} caracteres`
+    }
+  }
+  return null
+}
+
 async function obtenerIdTaxonomia(): Promise<number> {
   if (especie.value) return especie.value.id_taxonomia
   const creada = await taxonomiaApi.crear({
@@ -163,13 +196,42 @@ async function obtenerIdRecinto(): Promise<number> {
 
 async function guardar() {
   error.value = ''
-  if (!esEdicion.value && !especie.value && !especieManual.value) {
+  if (!especie.value && !especieManual.value) {
     error.value = 'Elige la especie del animal'
     return
+  }
+  if (especieManual.value) {
+    const errorTaxonomia = validarTaxonomiaManual()
+    if (errorTaxonomia) {
+      error.value = errorTaxonomia
+      return
+    }
+  }
+  if (recintoNuevo.value) {
+    if (!nuevo.nombre_recinto.trim()) {
+      error.value = 'Ingresa el nombre del recinto'
+      return
+    }
+    if (nuevo.nombre_recinto.trim().length > MAX_NOMBRE_RECINTO) {
+      error.value = `El nombre del recinto no puede superar los ${MAX_NOMBRE_RECINTO} caracteres`
+      return
+    }
+    if (nuevo.tipo.trim().length > MAX_TIPO_RECINTO) {
+      error.value = `El tipo de recinto no puede superar los ${MAX_TIPO_RECINTO} caracteres`
+      return
+    }
+    if (
+      nuevo.capacidad !== '' &&
+      (!Number.isInteger(Number(nuevo.capacidad)) || Number(nuevo.capacidad) <= 0)
+    ) {
+      error.value = 'La capacidad debe ser un número entero mayor que cero'
+      return
+    }
   }
   guardando.value = true
   try {
     const comunes = {
+      id_taxonomia: await obtenerIdTaxonomia(),
       id_recinto: await obtenerIdRecinto(),
       nombre: form.nombre || null,
       sexo: form.sexo || null,
@@ -179,7 +241,7 @@ async function guardar() {
     }
     const animal = props.animal
       ? await animalesApi.actualizar(props.animal.id_animal, comunes)
-      : await animalesApi.crear({ id_taxonomia: await obtenerIdTaxonomia(), ...comunes })
+      : await animalesApi.crear(comunes)
 
     if (!archivo.value) {
       emit('saved', animal)
@@ -214,6 +276,10 @@ async function guardar() {
         (si no la cambias) y la <strong>información taxonómica</strong> (nombre científico, género y
         familia) a partir del nombre común.
       </p>
+      <p v-else class="info">
+        Puedes corregir la especie de este ejemplar. El cambio no modifica la taxonomía de los demás animales
+        y su código se conserva.
+      </p>
 
       <!-- ---- Especie ---- -->
       <section class="bloque">
@@ -228,14 +294,21 @@ async function guardar() {
               Familia: {{ especie.familia ?? '—' }} · Género: {{ especie.genero ?? '—' }}
             </small>
           </div>
-          <button v-if="!esEdicion" type="button" class="link" @click="cambiarEspecie">Cambiar</button>
+          <button type="button" class="link" @click="cambiarEspecie">Cambiar</button>
         </div>
 
         <template v-else-if="especieManual">
           <div class="row">
             <div class="field">
               <label for="manual-comun">Nombre común</label>
-              <input id="manual-comun" v-model.trim="manual.nombre_comun" class="input" maxlength="100" required />
+              <input
+                id="manual-comun"
+                v-model.trim="manual.nombre_comun"
+                class="input"
+                minlength="1"
+                :maxlength="MAX_NOMBRE"
+                required
+              />
             </div>
             <div class="field">
               <label for="manual-cientifico">Nombre científico</label>
@@ -244,7 +317,8 @@ async function guardar() {
                 v-model.trim="manual.especie"
                 class="input"
                 placeholder="Ej. Tapirus terrestris"
-                maxlength="150"
+                minlength="1"
+                :maxlength="MAX_ESPECIE"
                 required
               />
             </div>
@@ -252,24 +326,37 @@ async function guardar() {
           <div class="row">
             <div class="field">
               <label for="manual-genero">Género</label>
-              <input id="manual-genero" v-model.trim="manual.genero" class="input" maxlength="100" />
+              <input id="manual-genero" v-model.trim="manual.genero" class="input" :maxlength="MAX_TAXONOMIA" />
             </div>
             <div class="field">
               <label for="manual-familia">Familia</label>
-              <input id="manual-familia" v-model.trim="manual.familia" class="input" maxlength="100" />
+              <input id="manual-familia" v-model.trim="manual.familia" class="input" :maxlength="MAX_TAXONOMIA" />
             </div>
           </div>
           <div class="row">
             <div class="field">
-              <label for="manual-clase">Clase</label>
-              <select id="manual-clase" v-model="manual.clase" class="input">
-                <option value="">Sin registrar</option>
-                <option v-for="(label, valor) in CLASES" :key="valor" :value="valor">{{ label }} ({{ valor }})</option>
-              </select>
+              <label for="manual-clase">Clase <span class="opcional">(opcional)</span></label>
+              <input
+                id="manual-clase"
+                v-model.trim="manual.clase"
+                class="input"
+                placeholder="Ej. Mammalia"
+                :maxlength="MAX_TAXONOMIA"
+                list="clases-disponibles"
+              />
+              <datalist id="clases-disponibles">
+                <option v-for="(label, valor) in CLASES" :key="valor" :value="valor">{{ label }}</option>
+              </datalist>
             </div>
             <div class="field">
               <label for="manual-orden">Orden</label>
-              <input id="manual-orden" v-model.trim="manual.orden" class="input" placeholder="Ej. Carnivora" maxlength="100" />
+              <input
+                id="manual-orden"
+                v-model.trim="manual.orden"
+                class="input"
+                placeholder="Ej. Carnivora"
+                :maxlength="MAX_TAXONOMIA"
+              />
             </div>
           </div>
           <button type="button" class="link" @click="cambiarEspecie">← Volver a buscar</button>
@@ -291,7 +378,13 @@ async function guardar() {
 
         <div class="field">
           <label for="nombre-ejemplar">Nombre del ejemplar <span class="opcional">(opcional)</span></label>
-          <input id="nombre-ejemplar" v-model.trim="form.nombre" class="input" placeholder="Ej. Yaku" maxlength="100" />
+          <input
+            id="nombre-ejemplar"
+            v-model.trim="form.nombre"
+            class="input"
+            placeholder="Ej. Yaku"
+            :maxlength="MAX_NOMBRE"
+          />
         </div>
 
         <div v-if="!recintoNuevo" class="field">
@@ -314,17 +407,31 @@ async function guardar() {
                 v-model.trim="nuevo.nombre_recinto"
                 class="input"
                 placeholder="Ej. R-12"
-                maxlength="100"
+                minlength="1"
+                :maxlength="MAX_NOMBRE_RECINTO"
                 required
               />
             </div>
             <div class="field">
               <label for="recinto-tipo">Tipo</label>
-              <input id="recinto-tipo" v-model.trim="nuevo.tipo" class="input" placeholder="Ej. aviario" maxlength="50" />
+              <input
+                id="recinto-tipo"
+                v-model.trim="nuevo.tipo"
+                class="input"
+                placeholder="Ej. aviario"
+                :maxlength="MAX_TIPO_RECINTO"
+              />
             </div>
             <div class="field">
               <label for="recinto-capacidad">Capacidad</label>
-              <input id="recinto-capacidad" v-model="nuevo.capacidad" type="number" min="1" class="input" />
+              <input
+                id="recinto-capacidad"
+                v-model="nuevo.capacidad"
+                type="number"
+                min="1"
+                step="1"
+                class="input"
+              />
             </div>
           </div>
           <button v-if="recintos.length" type="button" class="link" @click="recintoNuevo = false">
@@ -342,7 +449,13 @@ async function guardar() {
           </div>
           <div class="field">
             <label for="edad">Edad aproximada</label>
-            <input id="edad" v-model.trim="form.edad_aproximada" class="input" placeholder="Ej. Adulto (~10 años)" maxlength="50" />
+            <input
+              id="edad"
+              v-model.trim="form.edad_aproximada"
+              class="input"
+              placeholder="Ej. Adulto (~10 años)"
+              :maxlength="MAX_EDAD"
+            />
           </div>
           <div class="field">
             <label for="fecha">Fecha de ingreso</label>
