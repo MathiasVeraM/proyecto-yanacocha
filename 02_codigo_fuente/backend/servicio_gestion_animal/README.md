@@ -12,7 +12,7 @@ Microservicio de fichas de ejemplares (HU-02): registro de animales con código 
    `GESTION_ANIMAL_SERVICE_URL="http://localhost:8002"` (si falta, usa ese valor por defecto).
 2. **Base de datos**: los scripts de `sql/` ya se ejecutaron en el servidor. Solo hay que correrlos, en orden,
    si se monta una base nueva: `01_esquema_gestion_animal.sql`, `02_taxonomia_y_recintos.sql`,
-   `03_imagen_animal.sql` y `04_clase_orden_y_nombre.sql`.
+   `03_imagen_animal.sql`, `04_clase_orden_y_nombre.sql` y `05_signos_vitales.sql`.
 3. **El servidor de PostgreSQL está en hora UTC** (5 horas adelante de Ecuador). Este servicio guarda las
    fechas en hora de Ecuador desde Python; otros servicios que usen `NOW()` o `CURRENT_DATE` quedarán adelantados
    (por ejemplo `usuario.fecha_creacion` en accesos).
@@ -51,6 +51,13 @@ Pruebas (usan SQLite en memoria y un iNaturalist simulado: no tocan la base real
 pytest --cov=src
 ```
 
+## Organización del código
+
+Las fichas y fotografías de animales, los diagnósticos y los tratamientos se mantienen separados por modelo
+y router (`animal_model.py` / `animal_routes.py`, `diagnostico_model.py` / `diagnostico_routes.py` y
+`tratamiento_model.py` / `tratamiento_routes.py`). Sus servicios y repositorios también están separados;
+las rutas públicas se mantienen bajo el prefijo `/api/animales`.
+
 ## Endpoints principales
 
 | Método | Ruta | Descripción |
@@ -66,6 +73,7 @@ pytest --cov=src
 | GET | `/api/animales/{id}/imagen` | Descarga la foto (exige token, como todo el servicio) |
 | GET / POST | `/api/animales/{id}/diagnosticos` | Historial clínico |
 | PUT | `/api/animales/diagnosticos/{id}` | Corregir un diagnóstico |
+| GET | `/api/animales/{id}/signos-vitales` | Historial de signos vitales ordenado por fecha del diagnóstico |
 | GET / POST | `/api/animales/diagnosticos/{id}/tratamientos` | Tratamientos de un diagnóstico |
 | PUT | `/api/animales/tratamientos/{id}` | Editar o finalizar un tratamiento |
 

@@ -58,12 +58,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   z-index: 50;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: 16px;
   background: rgba(35, 40, 31, 0.45);
 }
 
 .modal {
   width: 100%;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
@@ -73,6 +78,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex: 0 0 auto;
   padding: 22px 24px 0;
 }
 
@@ -96,6 +102,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 }
 
 .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 20px 24px;
 }
 
@@ -103,6 +113,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  flex: 0 0 auto;
   padding: 0 24px 22px;
 }
 
@@ -114,5 +125,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 .modal-enter-from,
 .modal-leave-to {
   opacity: 0;
+}
+
+@media (max-width: 520px) {
+  .overlay {
+    padding: 10px;
+  }
+
+  .modal {
+    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
+  }
+
+  .modal-header {
+    padding: 18px 18px 0;
+  }
+
+  .modal-body {
+    padding: 16px 18px;
+  }
 }
 </style>

@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from src.logica_negocio.diagnostico_service import DiagnosticoService
 from src.logica_negocio.utilidades import datos_a_actualizar
-from src.modelos.animal_model import hoy_local
+from src.modelos.fechas import hoy_local
 from src.repositorios.tratamiento_repo import TratamientoRepository
 
 CAMPOS_OBLIGATORIOS = {"medicamento_o_proceso", "fecha_inicio", "estado"}

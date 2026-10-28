@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from src.modelos.animal_model import TratamientoModel
+from src.modelos.tratamiento_model import TratamientoModel
 
 class TratamientoRepository:
     @staticmethod

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from src.logica_negocio.animal_service import AnimalService
-from src.modelos.animal_model import ahora_local
+from src.modelos.fechas import ahora_local
 from src.repositorios.animal_repo import AnimalRepository
 from src.repositorios.imagen_repo import ImagenRepository
 
