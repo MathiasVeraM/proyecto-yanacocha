@@ -55,11 +55,10 @@ def test_listar_actividades_filtrando_por_campo(client, filtro, valor):
 
     assert listado.status_code == 200
     assert listado.json()
-    if filtro in {"tipo_actividad", "completada"}:
-        assert all(
-            str(item[filtro]) == str(valor)
-            for item in listado.json()
-        )
+    if filtro == "tipo_actividad":
+        assert all(item[filtro] == valor for item in listado.json())
+    elif filtro == "completada":
+        assert all(item[filtro] is (valor == "true") for item in listado.json())
 
 
 def test_filtrar_actividades_por_rango_de_fechas(client, dieta_con_alimentos):
