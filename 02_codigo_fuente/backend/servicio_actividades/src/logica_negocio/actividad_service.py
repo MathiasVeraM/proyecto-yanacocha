@@ -1,0 +1,364 @@
+from datetime import date, datetime, time, timedelta
+
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
+from src.config import HORIZONTE_TOMAS_DIAS
+from src.esquemas.actividad_schema import ActividadBaseCreate
+from src.modelos.actividad_alimentacion_model import ActividadAlimentacionModel
+from src.modelos.actividad_enriquecimiento_model import ActividadEnriquecimientoModel
+from src.modelos.actividad_entrenamiento_model import ActividadEntrenamientoModel
+from src.modelos.fechas import ahora_local, hoy_local
+from src.repositorios.actividad_repo import ActividadRepository
+from src.repositorios.dieta_repo import DietaRepository
+from src.repositorios.referencias_repo import ReferenciasRepository
+
+
+class ActividadService:
+    @staticmethod
+    def _validar_datos(tipo: str, datos: dict) -> None:
+        tipos_validos = {
+            "alimentacion",
+            "enriquecimiento",
+            "entrenamiento",
+            "limpieza",
+        }
+        if tipo not in tipos_validos:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Tipo de actividad no válido",
+            )
+
+        horas = datos.get("duracion_horas", 0)
+        minutos = datos.get("duracion_minutos", 0)
+        if horas < 0 or horas > 32767 or minutos < 0 or minutos > 59:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="La duración de la actividad no es válida",
+            )
+        duracion_total = horas * 60 + minutos
+        if tipo == "limpieza":
+            if datos.get("id_recinto") is None or datos.get("id_animal") is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="La limpieza requiere recinto y no puede asociarse a un animal",
+                )
+            if duracion_total <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="La limpieza requiere duración mayor que cero",
+                )
+            return
+
+        if datos.get("id_animal") is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="La actividad requiere id_animal",
+            )
+        if tipo == "entrenamiento":
+            if (
+                duracion_total <= 0
+                or datos.get("hora_programada") is None
+                or not str(datos.get("objetivo_entrenamiento", "")).strip()
+                or not str(datos.get("tipo_refuerzo", "")).strip()
+                or len(str(datos.get("tipo_refuerzo", ""))) > 150
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="El entrenamiento requiere objetivo, refuerzo, hora y duración positiva",
+                )
+        elif tipo == "enriquecimiento":
+            if (
+                datos.get("hora_programada") is None
+                or datos.get("tipo_enriquecimiento")
+                not in {"social", "sensorial", "alimenticio", "cognitivo"}
+                or not str(datos.get("descripcion_estimulo", "")).strip()
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="El enriquecimiento requiere tipo, estímulo y hora válidos",
+                )
+        elif datos.get("id_dieta") is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="La alimentación requiere id_dieta",
+            )
+
+    @staticmethod
+    def _verificar_referencias(db: Session, tipo: str, datos: dict) -> None:
+        if tipo == "limpieza":
+            if not ReferenciasRepository.existe_recinto(db, datos["id_recinto"]):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Recinto no encontrado",
+                )
+            return
+
+        if not ReferenciasRepository.existe_animal(db, datos["id_animal"]):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Animal no encontrado",
+            )
+        if tipo == "alimentacion":
+            dieta = DietaRepository.obtener_por_id(db, datos["id_dieta"])
+            if dieta is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Dieta no encontrada",
+                )
+            if dieta.id_animal != datos["id_animal"]:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="La dieta no pertenece al animal indicado",
+                )
+
+    @staticmethod
+    def crear(
+        db: Session,
+        tipo: str,
+        datos: dict,
+        id_usuario: int,
+    ):
+        ActividadService._validar_datos(tipo, datos)
+        ActividadService._verificar_referencias(db, tipo, datos)
+        detalle = None
+        if tipo == "alimentacion":
+            detalle = {"_modelo": ActividadAlimentacionModel, "id_dieta": datos.pop("id_dieta")}
+        elif tipo == "enriquecimiento":
+            detalle = {
+                "_modelo": ActividadEnriquecimientoModel,
+                "tipo_enriquecimiento": datos.pop("tipo_enriquecimiento"),
+                "descripcion_estimulo": datos.pop("descripcion_estimulo"),
+            }
+        elif tipo == "entrenamiento":
+            detalle = {
+                "_modelo": ActividadEntrenamientoModel,
+                "objetivo_entrenamiento": datos.pop("objetivo_entrenamiento"),
+                "tipo_refuerzo": datos.pop("tipo_refuerzo"),
+            }
+
+        datos["tipo_actividad"] = tipo
+        datos["id_usuario_programo"] = id_usuario
+        datos["completada"] = False
+        datos["id_usuario_completo"] = None
+        datos["fecha_completada"] = None
+        return ActividadRepository.crear(db, datos, detalle)
+
+    @staticmethod
+    def crear_desde_esquema(
+        db: Session,
+        datos: ActividadBaseCreate,
+        id_usuario: int,
+    ):
+        return ActividadService.crear(
+            db,
+            datos.tipo_actividad,
+            datos.model_dump(exclude={"tipo_actividad"}, exclude_none=True),
+            id_usuario,
+        )
+
+    @staticmethod
+    def actividad_o_404(db: Session, id_actividad: int):
+        actividad = ActividadRepository.obtener_por_id(db, id_actividad)
+        if actividad is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Actividad no encontrada",
+            )
+        return actividad
+
+    @staticmethod
+    def listar(
+        db: Session,
+        id_animal: int | None = None,
+        id_recinto: int | None = None,
+        tipo_actividad: str | None = None,
+        completada: bool | None = None,
+        fecha_desde: date | None = None,
+        fecha_hasta: date | None = None,
+    ):
+        if fecha_desde is not None and fecha_hasta is not None and fecha_desde > fecha_hasta:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="fecha_desde no puede ser posterior a fecha_hasta",
+            )
+        if tipo_actividad not in {
+            None,
+            "alimentacion",
+            "enriquecimiento",
+            "entrenamiento",
+            "limpieza",
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Tipo de actividad no válido",
+            )
+        return ActividadRepository.listar(
+            db,
+            id_animal,
+            id_recinto,
+            tipo_actividad,
+            completada,
+            fecha_desde,
+            fecha_hasta,
+        )
+
+    @staticmethod
+    def completar(
+        db: Session,
+        id_actividad: int,
+        id_usuario: int,
+        observaciones: str | None,
+        actualizar_observaciones: bool = True,
+    ):
+        actividad = ActividadService.actividad_o_404(db, id_actividad)
+        if actividad.completada:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="La actividad ya está completada",
+            )
+        return ActividadRepository.completar(
+            db,
+            actividad,
+            id_usuario,
+            observaciones,
+            actualizar_observaciones,
+            ahora_local(),
+        )
+
+    @staticmethod
+    def generar_tomas(
+        db: Session,
+        id_dieta: int,
+        id_usuario: int,
+        fecha_hasta: date | None = None,
+    ) -> list:
+        dieta = DietaRepository.obtener_por_id(db, id_dieta)
+        if dieta is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Dieta no encontrada",
+            )
+
+        hoy = hoy_local()
+        fecha_inicio = dieta.fecha_inicio
+        if fecha_hasta is None or fecha_hasta >= hoy:
+            fecha_inicio = max(fecha_inicio, hoy)
+        horizonte_fin = fecha_inicio + timedelta(days=HORIZONTE_TOMAS_DIAS - 1)
+        fecha_limite = min(fecha_hasta or horizonte_fin, horizonte_fin)
+        if dieta.fecha_fin is not None:
+            fecha_limite = min(fecha_limite, dieta.fecha_fin)
+        if fecha_limite < fecha_inicio:
+            return []
+
+        horarios = ActividadService._horarios_tomas(
+            dieta.fecha_inicio,
+            fecha_inicio,
+            fecha_limite,
+            dieta.frecuencia_valor,
+            dieta.frecuencia_unidad,
+        )
+        resultado = []
+        for fecha, hora in horarios:
+            toma = ActividadRepository.obtener_toma(db, dieta.id_dieta, fecha, hora)
+            if toma is None:
+                toma = ActividadService.crear(
+                    db,
+                    "alimentacion",
+                    {
+                        "id_animal": dieta.id_animal,
+                        "id_dieta": dieta.id_dieta,
+                        "fecha_programada": fecha,
+                        "hora_programada": hora,
+                        "duracion_horas": 0,
+                        "duracion_minutos": 0,
+                        "observaciones": None,
+                    },
+                    id_usuario,
+                )
+            resultado.append(toma)
+        return resultado
+
+    @staticmethod
+    def renovar_horizonte(db: Session, id_usuario: int) -> list:
+        dietas = DietaRepository.listar_vigentes(db)
+        return [
+            toma
+            for dieta in dietas
+            for toma in ActividadService.generar_tomas(
+                db,
+                dieta.id_dieta,
+                id_usuario,
+                hoy_local() + timedelta(days=HORIZONTE_TOMAS_DIAS - 1),
+            )
+        ]
+
+    @staticmethod
+    def _horarios_tomas(
+        inicio: date,
+        fecha_generacion: date,
+        limite: date,
+        frecuencia_valor: int,
+        frecuencia_unidad: str,
+    ) -> list[tuple[date, time]]:
+        if frecuencia_unidad in {"dias", "semanas"}:
+            paso_dias = frecuencia_valor * (7 if frecuencia_unidad == "semanas" else 1)
+            dias_transcurridos = (fecha_generacion - inicio).days
+            saltos = (dias_transcurridos + paso_dias - 1) // paso_dias
+            desplazamiento = saltos * paso_dias
+            if desplazamiento > (limite - inicio).days:
+                return []
+            fecha = inicio + timedelta(days=desplazamiento)
+            horarios = []
+            while fecha <= limite:
+                horarios.append((fecha, time(8, 0)))
+                if paso_dias > (limite - fecha).days:
+                    break
+                fecha += timedelta(days=paso_dias)
+            return horarios
+
+        primer_instante = datetime.combine(inicio, time(8, 0))
+        desde = datetime.combine(fecha_generacion, time.min)
+        hasta = datetime.combine(limite, time(23, 59, 59))
+        paso_segundos = frecuencia_valor * 60 * 60
+        segundos_transcurridos = max(0, (desde - primer_instante).total_seconds())
+        saltos = int((segundos_transcurridos + paso_segundos - 1) // paso_segundos)
+        desplazamiento = saltos * paso_segundos
+        if desplazamiento > (hasta - primer_instante).total_seconds():
+            return []
+        actual = primer_instante + timedelta(seconds=desplazamiento)
+        horarios = []
+        while actual <= hasta:
+            horarios.append((actual.date(), actual.time()))
+            if paso_segundos > (hasta - actual).total_seconds():
+                break
+            actual += timedelta(seconds=paso_segundos)
+        return horarios
+
+    @staticmethod
+    def calendario(actividades: list) -> list[dict]:
+        eventos = []
+        for actividad in actividades:
+            todo_el_dia = actividad.hora_programada is None
+            if todo_el_dia:
+                inicio = actividad.fecha_programada.isoformat()
+                fin = inicio
+            else:
+                comienzo = datetime.combine(actividad.fecha_programada, actividad.hora_programada)
+                fin_datetime = comienzo + timedelta(
+                    hours=actividad.duracion_horas,
+                    minutes=actividad.duracion_minutos,
+                )
+                inicio = comienzo.isoformat()
+                fin = fin_datetime.isoformat()
+            eventos.append(
+                {
+                    "id_actividad": actividad.id_actividad,
+                    "inicio": inicio,
+                    "fin": fin,
+                    "tipo": actividad.tipo_actividad,
+                    "completada": actividad.completada,
+                    "todo_el_dia": todo_el_dia,
+                }
+            )
+        return eventos

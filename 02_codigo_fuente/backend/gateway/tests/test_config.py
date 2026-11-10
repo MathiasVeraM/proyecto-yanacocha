@@ -22,14 +22,27 @@ def recargar_config(monkeypatch):
 
 
 def test_valores_por_defecto(recargar_config, monkeypatch):
-    for variable in ("ACCESSOS_SERVICE_URL", "CORS_ORIGINS", "PROXY_TIMEOUT_SECONDS"):
+    for variable in (
+        "ACCESSOS_SERVICE_URL",
+        "GESTION_ANIMAL_SERVICE_URL",
+        "ACTIVIDADES_SERVICE_URL",
+        "CORS_ORIGINS",
+        "PROXY_TIMEOUT_SECONDS",
+    ):
         monkeypatch.delenv(variable, raising=False)
 
     config = recargar_config()
 
     assert config.ACCESSOS_SERVICE_URL == "http://localhost:8001"
+    assert config.ACTIVIDADES_SERVICE_URL == "http://localhost:8004"
     assert config.CORS_ORIGINS == ["http://localhost:5173"]
     assert config.PROXY_TIMEOUT_SECONDS == 10.0
+
+
+def test_lee_url_de_actividades_desde_el_entorno(recargar_config, monkeypatch):
+    monkeypatch.setenv("ACTIVIDADES_SERVICE_URL", "http://actividades:9000")
+
+    assert recargar_config().ACTIVIDADES_SERVICE_URL == "http://actividades:9000"
 
 
 def test_lee_url_del_servicio_desde_el_entorno(recargar_config, monkeypatch):

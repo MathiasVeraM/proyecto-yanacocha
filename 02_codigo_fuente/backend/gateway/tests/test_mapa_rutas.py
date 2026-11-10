@@ -72,6 +72,27 @@ def test_rutas_de_accesos_exigen_el_modulo_de_accesos(metodo, ruta):
 
 
 @pytest.mark.parametrize(
+    "metodo,ruta",
+    [
+        ("GET", "/api/actividades"),
+        ("POST", "/api/actividades"),
+        ("GET", "/api/actividades/dietas"),
+        ("POST", "/api/actividades/dietas"),
+        ("POST", "/api/actividades/tomas/generar"),
+        ("POST", "/api/actividades/enriquecimientos"),
+        ("POST", "/api/actividades/entrenamientos"),
+        ("POST", "/api/actividades/limpiezas"),
+        ("PATCH", "/api/actividades/1/completar"),
+    ],
+)
+def test_rutas_de_actividades_exigen_el_modulo_de_planificacion(metodo, ruta):
+    regla = resolver_regla(metodo, ruta)
+
+    assert regla.nivel == NIVEL_MODULO
+    assert regla.codigo_servicio == MODULO_PLANIFICACION
+
+
+@pytest.mark.parametrize(
     "ruta",
     ["/api/auth/roles/../usuarios", "/api/auth/login/../usuarios", "/api/auth/roles/2"],
 )
@@ -89,6 +110,7 @@ def test_ruta_sin_mapear_devuelve_none(ruta):
 
 def test_el_prefijo_se_compara_por_segmentos_completos():
     assert resolver_regla("GET", "/api/authentication") is None
+    assert resolver_regla("GET", "/api/actividadesx") is None
 
 
 def test_resolver_lee_el_mapa_al_momento_de_la_llamada(monkeypatch):
