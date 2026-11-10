@@ -1,3 +1,4 @@
+from src.modelos import referencias_model as referencias_model
 from src.modelos.actividad_model import ActividadModel
 from src.modelos.actividad_alimentacion_model import ActividadAlimentacionModel
 from src.modelos.actividad_enriquecimiento_model import ActividadEnriquecimientoModel
@@ -12,4 +13,5 @@ __all__ = [
     "ActividadEntrenamientoModel",
     "DietaModel",
     "DietaAlimentoModel",
+    "referencias_model",
 ]

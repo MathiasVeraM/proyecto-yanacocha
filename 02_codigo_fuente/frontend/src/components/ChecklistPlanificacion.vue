@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { Actividad, TipoActividad, UsuarioResponsable } from '@/types/actividades'
+import type { Actividad, TipoActividad, UsuarioActividad } from '@/types/actividades'
 import type { Animal, Recinto } from '@/types/animales'
 
 const props = defineProps<{
   actividades: Actividad[]
   animales: Animal[]
   recintos: Recinto[]
-  usuarios: UsuarioResponsable[]
+  usuariosAuditoria: UsuarioActividad[]
   cargando: boolean
   error: string
   actualizandoId: number | null
@@ -47,10 +47,10 @@ function nombreObjetivo(actividad: Actividad) {
   return animal?.nombre ?? animal?.taxonomia.nombre_comun ?? `Ejemplar #${actividad.id_animal}`
 }
 
-function nombreResponsable(actividad: Actividad) {
-  const id = actividad.id_usuario_responsable ?? actividad.id_usuario_programo
-  const usuario = props.usuarios.find((item) => item.id_usuario === id)
-  return usuario ? `${usuario.nombre} ${usuario.apellido}` : ''
+function nombreUsuarioCompleto(actividad: Actividad) {
+  if (!actividad.id_usuario_completo) return ''
+  const usuario = props.usuariosAuditoria.find((item) => item.id_usuario === actividad.id_usuario_completo)
+  return usuario ? `${usuario.nombre} ${usuario.apellido}` : `Usuario #${actividad.id_usuario_completo}`
 }
 
 function completar(actividad: Actividad, texto?: string) {
@@ -120,7 +120,9 @@ function abrirObservacion(id: number) {
         <time class="task-time">{{ actividad.hora_programada?.slice(0, 5) ?? 'Todo el día' }}</time>
         <div class="task-subject">
           <strong>{{ nombreObjetivo(actividad) }}</strong>
-          <small v-if="nombreResponsable(actividad)">Responsable: {{ nombreResponsable(actividad) }}</small>
+          <small v-if="actividad.completada && nombreUsuarioCompleto(actividad)">
+            Completada por: {{ nombreUsuarioCompleto(actividad) }}
+          </small>
         </div>
         <span class="type-badge" :class="actividad.tipo_actividad">{{ tipos.find((t) => t.valor === actividad.tipo_actividad)?.etiqueta }}</span>
         <div class="observation-control">

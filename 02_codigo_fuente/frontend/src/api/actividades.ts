@@ -6,7 +6,7 @@ import type {
   EventoCalendario,
   FiltrosActividades,
   TipoEnriquecimiento,
-  UsuarioResponsable,
+  UsuarioActividad,
 } from '@/types/actividades'
 import type { Recinto } from '@/types/animales'
 import { animalesApi, recintosApi } from '@/api/animales'
@@ -50,7 +50,6 @@ export const actividadesApi = {
     hora_programada: string
     descripcion_estimulo: string
     observaciones?: string
-    id_usuario_responsable?: number
   }) => request<Actividad>('POST', `${URL}/enriquecimientos`, datos),
 
   programarEntrenamiento: (datos: {
@@ -62,7 +61,6 @@ export const actividadesApi = {
     objetivo_entrenamiento: string
     tipo_refuerzo: string
     observaciones?: string
-    id_usuario_responsable?: number
   }) => request<Actividad>('POST', `${URL}/entrenamientos`, datos),
 
   programarLimpieza: (datos: {
@@ -72,7 +70,6 @@ export const actividadesApi = {
     duracion_horas: number
     duracion_minutos: number
     observaciones?: string
-    id_usuario_responsable?: number
   }) => request<Actividad>('POST', `${URL}/limpiezas`, datos),
 
   crearDieta: (datos: DietaCreate) =>
@@ -88,5 +85,5 @@ export const actividadesApi = {
 export const planificacionReferenciasApi = {
   animales: (): Promise<Animal[]> => animalesApi.listar(),
   recintos: (): Promise<Recinto[]> => recintosApi.listar(),
-  usuarios: (): Promise<UsuarioResponsable[]> => usuariosApi.listar(),
+  usuariosAuditoria: (): Promise<UsuarioActividad[]> => usuariosApi.listar(),
 }
