@@ -227,6 +227,16 @@ class ActividadService:
         )
 
     @staticmethod
+    def reabrir(db: Session, id_actividad: int):
+        actividad = ActividadService.actividad_o_404(db, id_actividad)
+        if not actividad.completada:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="La actividad no está completada",
+            )
+        return ActividadRepository.reabrir(db, actividad)
+
+    @staticmethod
     def generar_tomas(
         db: Session,
         id_dieta: int,

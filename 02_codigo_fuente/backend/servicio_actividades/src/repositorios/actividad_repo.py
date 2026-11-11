@@ -108,6 +108,20 @@ class ActividadRepository:
             raise
         return actividad
 
+    @staticmethod
+    def reabrir(db: Session, actividad: ActividadModel) -> ActividadModel:
+        # Conserva las observaciones registradas al completar.
+        try:
+            actividad.completada = False
+            actividad.id_usuario_completo = None
+            actividad.fecha_completada = None
+            db.commit()
+            db.refresh(actividad)
+        except SQLAlchemyError:
+            db.rollback()
+            raise
+        return actividad
+
 
 def actividad_a_dict(actividad: ActividadModel) -> dict:
     resultado = {

@@ -32,3 +32,9 @@ def completar_actividad(
     resultado = actividad_a_dict(actividad)
     resultado["id_actividad"] = actividad.id_actividad
     return resultado
+
+
+@router.post("/{id_actividad}/reabrir", response_model=ActividadResponse)
+def reabrir_actividad(id_actividad: int, db: Session = Depends(get_db)):
+    actividad = ActividadService.reabrir(db, id_actividad)
+    return actividad_a_dict(actividad)

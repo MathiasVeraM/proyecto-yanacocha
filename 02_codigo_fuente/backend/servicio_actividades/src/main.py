@@ -7,6 +7,7 @@ from src.api.dietas_routes import router as dietas_router
 from src.api.enriquecimientos_routes import router as enriquecimientos_router
 from src.api.entrenamientos_routes import router as entrenamientos_router
 from src.api.limpiezas_routes import router as limpiezas_router
+from src.api.observaciones_routes import router as observaciones_router
 from src.api.tomas_alimentacion_routes import router as tomas_alimentacion_router
 from src.logica_negocio.auth import verificar_token_access
 
@@ -18,6 +19,8 @@ app.include_router(enriquecimientos_router)
 app.include_router(entrenamientos_router)
 app.include_router(limpiezas_router)
 app.include_router(tomas_alimentacion_router)
+# Antes de actividades_router: /observaciones no debe caer en /{id_actividad}.
+app.include_router(observaciones_router)
 app.include_router(actividades_router)
 app.include_router(completar_actividad_router)
 
