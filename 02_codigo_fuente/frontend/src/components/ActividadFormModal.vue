@@ -2,9 +2,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { actividadesApi } from '@/api/actividades'
 import { ApiError } from '@/api/http'
-import { useAuthStore } from '@/stores/auth'
 import type { Animal, Recinto } from '@/types/animales'
-import type { TipoActividad, TipoEnriquecimiento, UsuarioResponsable } from '@/types/actividades'
+import type { TipoActividad, TipoEnriquecimiento } from '@/types/actividades'
 
 interface DiaSemana {
   fecha: string
@@ -16,10 +15,8 @@ const props = defineProps<{
   dias: DiaSemana[]
   animales: Animal[]
   recintos: Recinto[]
-  usuarios: UsuarioResponsable[]
 }>()
-const emit = defineEmits<{ close: []; saved: [actividad: { id_actividad: number }, responsableId: number | null] }>()
-const auth = useAuthStore()
+const emit = defineEmits<{ close: []; saved: [actividad: { id_actividad: number }] }>()
 const guardando = ref(false)
 const error = ref('')
 const tipo = ref<Exclude<TipoActividad, 'alimentacion'>>('enriquecimiento')
@@ -35,14 +32,9 @@ const formulario = reactive({
   tipo_refuerzo: '',
   duracion_horas: 0,
   duracion_minutos: 30,
-  id_usuario_responsable: auth.payload?.id_usuario ?? 0,
 })
 
 const opcionesDia = computed(() => props.dias)
-const seleccionado = computed(() => props.animales.find((animal) => animal.id_animal === formulario.id_animal))
-const nombreSeleccionado = computed(
-  () => seleccionado.value?.nombre ?? seleccionado.value?.taxonomia.nombre_comun ?? 'el ejemplar',
-)
 
 watch(
   () => props.abierto,
@@ -52,7 +44,6 @@ watch(
     formulario.fecha_programada = props.dias[0]?.fecha ?? ''
     formulario.id_animal = props.animales[0]?.id_animal ?? 0
     formulario.id_recinto = props.recintos[0]?.id_recinto ?? 0
-    formulario.id_usuario_responsable = auth.payload?.id_usuario ?? 0
     tipo.value = 'enriquecimiento'
   },
 )
@@ -92,7 +83,6 @@ async function guardar() {
 
   guardando.value = true
   try {
-    const responsable = formulario.id_usuario_responsable || undefined
     const observaciones = formulario.observaciones.trim() || undefined
     let actividad: { id_actividad: number }
     if (tipo.value === 'enriquecimiento') {
@@ -103,7 +93,6 @@ async function guardar() {
         hora_programada: formulario.hora_programada,
         descripcion_estimulo: formulario.descripcion_estimulo.trim(),
         observaciones,
-        id_usuario_responsable: responsable,
       })
     } else if (tipo.value === 'entrenamiento') {
       actividad = await actividadesApi.programarEntrenamiento({
@@ -115,7 +104,6 @@ async function guardar() {
         objetivo_entrenamiento: formulario.objetivo_entrenamiento.trim(),
         tipo_refuerzo: formulario.tipo_refuerzo.trim(),
         observaciones,
-        id_usuario_responsable: responsable,
       })
     } else {
       actividad = await actividadesApi.programarLimpieza({
@@ -125,10 +113,9 @@ async function guardar() {
         duracion_horas: formulario.duracion_horas,
         duracion_minutos: formulario.duracion_minutos,
         observaciones,
-        id_usuario_responsable: responsable,
       })
     }
-    emit('saved', actividad, formulario.id_usuario_responsable || auth.payload?.id_usuario || null)
+    emit('saved', actividad)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'No se pudo guardar la actividad.'
   } finally {
@@ -255,17 +242,6 @@ async function guardar() {
         <input id="entrenamiento-nota" v-model="formulario.observaciones" class="input" />
       </div>
 
-      <div class="field responsible-field">
-        <label for="responsable">Responsable de la actividad</label>
-        <select id="responsable" v-model.number="formulario.id_usuario_responsable" class="input">
-          <option :value="0">Usar usuario de la sesión</option>
-          <option v-for="usuario in usuarios" :key="usuario.id_usuario" :value="usuario.id_usuario">
-            {{ usuario.nombre }} {{ usuario.apellido }}
-          </option>
-        </select>
-        <small v-if="tipo !== 'limpieza' && seleccionado">Ejemplar: {{ nombreSeleccionado }}</small>
-      </div>
-
       <p v-if="error" class="alert-error" role="alert">{{ error }}</p>
       <div class="form-actions">
         <button class="btn btn-secondary" type="button" @click="emit('close')">Cancelar</button>
@@ -273,9 +249,6 @@ async function guardar() {
           {{ guardando ? 'Guardando…' : 'Agregar al calendario' }}
         </button>
       </div>
-      <p class="backend-note">
-        El backend aún no guarda el responsable seleccionado; por ahora identifica al usuario que programó la actividad.
-      </p>
       </form>
     </section>
   </div>
@@ -371,15 +344,9 @@ textarea.input {
   width: 82px;
 }
 
-.duration-inputs span,
-.responsible-field small,
-.backend-note {
+.duration-inputs span {
   color: var(--color-text-muted);
   font-size: 12px;
-}
-
-.responsible-field {
-  max-width: 520px;
 }
 
 .form-actions {

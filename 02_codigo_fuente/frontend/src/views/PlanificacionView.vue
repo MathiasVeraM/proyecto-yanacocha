@@ -14,7 +14,7 @@ import type {
   Actividad,
   Dieta,
   EventoCalendario,
-  UsuarioResponsable,
+  UsuarioActividad,
 } from '@/types/actividades'
 import type { Animal, Recinto } from '@/types/animales'
 
@@ -24,7 +24,7 @@ const auth = useAuthStore()
 const pestana = ref<Pestana>('checklist')
 const animales = ref<Animal[]>([])
 const recintos = ref<Recinto[]>([])
-const usuarios = ref<UsuarioResponsable[]>([])
+const usuariosAuditoria = ref<UsuarioActividad[]>([])
 const actividades = ref<Actividad[]>([])
 const dietasPorAnimal = ref<Record<number, Dieta[]>>({})
 const extrasPorDieta = ref<Record<number, { unidades: ('g' | 'kg' | 'unidad')[]; restriccion: boolean }>>({})
@@ -103,7 +103,7 @@ async function cargarReferencias() {
   const [resultadoAnimales, resultadoRecintos, resultadoUsuarios] = await Promise.allSettled([
     planificacionReferenciasApi.animales(),
     planificacionReferenciasApi.recintos(),
-    planificacionReferenciasApi.usuarios(),
+    planificacionReferenciasApi.usuariosAuditoria(),
   ])
   const errores: string[] = []
 
@@ -113,8 +113,8 @@ async function cargarReferencias() {
   if (resultadoRecintos.status === 'fulfilled') recintos.value = resultadoRecintos.value
   else errores.push(`recintos: ${mensajeError(resultadoRecintos.reason, 'no se pudieron cargar')}`)
 
-  if (resultadoUsuarios.status === 'fulfilled') usuarios.value = resultadoUsuarios.value
-  else errores.push(`responsables: ${mensajeError(resultadoUsuarios.reason, 'no se pudieron cargar')}`)
+  if (resultadoUsuarios.status === 'fulfilled') usuariosAuditoria.value = resultadoUsuarios.value
+  else errores.push(`usuarios para auditoría: ${mensajeError(resultadoUsuarios.reason, 'no se pudieron cargar')}`)
 
   errorReferencias.value = errores.length
     ? `No se pudieron cargar algunos datos de referencia (${errores.join('; ')}).`
@@ -278,7 +278,7 @@ onMounted(async () => {
 <template>
   <main class="planning-page">
     <p v-if="errorReferencias" class="alert-error" role="alert">{{ errorReferencias }}</p>
-    <p v-if="cargandoReferencias" class="loading-reference" role="status">Cargando ejemplares, recintos y responsables…</p>
+    <p v-if="cargandoReferencias" class="loading-reference" role="status">Cargando ejemplares, recintos y usuarios…</p>
 
     <nav class="planning-tabs" role="tablist" aria-label="Secciones de planificación">
       <button
@@ -300,7 +300,7 @@ onMounted(async () => {
         :actividades="actividades"
         :animales="animales"
         :recintos="recintos"
-        :usuarios="usuarios"
+        :usuarios-auditoria="usuariosAuditoria"
         :cargando="cargandoActividades"
         :error="errorActividades"
         :actualizando-id="actualizandoId"
@@ -314,7 +314,6 @@ onMounted(async () => {
         :dias="diasSemana"
         :animales="animales"
         :recintos="recintos"
-        :usuarios="usuarios"
         @close="formularioActividadAbierto = false"
         @saved="guardarActividad"
       />
@@ -337,7 +336,7 @@ onMounted(async () => {
         :actividades="actividades"
         :animales="animales"
         :dietas="dietasPorId"
-        :usuarios="usuarios"
+        :usuarios-auditoria="usuariosAuditoria"
         :cargando="cargandoActividades"
         :error="errorActividades"
         :actualizando-id="actualizandoId"

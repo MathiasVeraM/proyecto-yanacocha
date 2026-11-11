@@ -48,7 +48,6 @@ export interface Actividad {
   objetivo_entrenamiento: string | null
   tipo_refuerzo: string | null
   cancelada: boolean
-  id_usuario_responsable?: number | null
   animal?: Animal
   recinto?: Recinto
 }
@@ -86,7 +85,7 @@ export interface FiltrosActividades {
   fecha_hasta?: string
 }
 
-export interface UsuarioResponsable {
+export interface UsuarioActividad {
   id_usuario: number
   nombre: string
   apellido: string

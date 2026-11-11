@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Actividad, Dieta, UsuarioResponsable } from '@/types/actividades'
+import type { Actividad, Dieta, UsuarioActividad } from '@/types/actividades'
 import type { Animal } from '@/types/animales'
 
 const props = defineProps<{
   actividades: Actividad[]
   animales: Animal[]
   dietas: Record<number, Dieta>
-  usuarios: UsuarioResponsable[]
+  usuariosAuditoria: UsuarioActividad[]
   cargando: boolean
   error: string
   actualizandoId: number | null
@@ -32,10 +32,10 @@ function plan(actividad: Actividad) {
     ?? 'Plan alimenticio'
 }
 
-function responsable(actividad: Actividad) {
-  const id = actividad.id_usuario_responsable ?? actividad.id_usuario_programo
-  const usuario = props.usuarios.find((item) => item.id_usuario === id)
-  return usuario ? `${usuario.nombre} ${usuario.apellido}` : '—'
+function usuarioCompleto(actividad: Actividad) {
+  if (!actividad.id_usuario_completo) return ''
+  const usuario = props.usuariosAuditoria.find((item) => item.id_usuario === actividad.id_usuario_completo)
+  return usuario ? `${usuario.nombre} ${usuario.apellido}` : `Usuario #${actividad.id_usuario_completo}`
 }
 </script>
 
@@ -62,7 +62,9 @@ function responsable(actividad: Actividad) {
         <div class="animal">
           <strong>{{ nombreAnimal(toma) }}</strong>
           <small>{{ plan(toma) }}</small>
-          <small>Responsable: {{ responsable(toma) }}</small>
+          <small v-if="toma.completada && usuarioCompleto(toma)">
+            Completada por: {{ usuarioCompleto(toma) }}
+          </small>
         </div>
         <span class="status" :class="{ complete: toma.completada }">
           {{ toma.completada ? 'Completada' : 'Pendiente' }}
