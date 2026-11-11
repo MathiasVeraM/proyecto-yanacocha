@@ -1,4 +1,5 @@
 import { request } from './http'
+import type { Actividad } from '@/types/actividades'
 import type {
   Diagnostico,
   DiagnosticoCreate,
@@ -32,4 +33,7 @@ export const veterinariaApi = {
 
   actualizarTratamiento: (id: number, datos: TratamientoUpdate) =>
     request<Tratamiento>('PUT', `${URL}/tratamientos/${id}`, datos),
+
+  generarActividadesTratamiento: (id: number) =>
+    request<Actividad[]>('POST', `${URL}/tratamientos/${id}/generar-actividades`),
 }

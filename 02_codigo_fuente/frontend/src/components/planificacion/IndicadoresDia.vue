@@ -42,6 +42,7 @@ const TEXTOS: Record<TipoActividad, { unidad: string; pendientes: string }> = {
   enriquecimiento: { unidad: 'realizados', pendientes: 'Enriquecimientos pendientes' },
   entrenamiento: { unidad: 'realizados', pendientes: 'Entrenamientos pendientes' },
   limpieza: { unidad: 'recintos limpios', pendientes: 'Recintos por limpiar' },
+  tratamiento: { unidad: 'dosis aplicadas', pendientes: 'Dosis de tratamiento pendientes' },
 }
 
 // Alimentación se cuenta por ejemplar: "alimentado" = al menos una toma del día confirmada

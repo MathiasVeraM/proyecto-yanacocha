@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from src.modelos.actividad_model import ActividadModel
 from src.modelos.actividad_alimentacion_model import ActividadAlimentacionModel
+from src.modelos.actividad_tratamiento_model import ActividadTratamientoModel
 
 
 class ActividadRepository:
@@ -87,6 +88,52 @@ class ActividadRepository:
         )
 
     @staticmethod
+    def obtener_actividad_tratamiento(
+        db: Session,
+        id_tratamiento: int,
+        fecha: date,
+        hora: time,
+    ) -> ActividadModel | None:
+        return (
+            db.query(ActividadModel)
+            .join(
+                ActividadTratamientoModel,
+                ActividadTratamientoModel.id_actividad == ActividadModel.id_actividad,
+            )
+            .filter(
+                ActividadTratamientoModel.id_tratamiento == id_tratamiento,
+                ActividadTratamientoModel.fecha_programada == fecha,
+                ActividadTratamientoModel.hora_programada == hora,
+            )
+            .first()
+        )
+
+    @staticmethod
+    def obtener_actividades_tratamiento(
+        db: Session,
+        id_tratamiento: int,
+    ) -> list[ActividadModel]:
+        return (
+            db.query(ActividadModel)
+            .join(
+                ActividadTratamientoModel,
+                ActividadTratamientoModel.id_actividad == ActividadModel.id_actividad,
+            )
+            .filter(ActividadTratamientoModel.id_tratamiento == id_tratamiento)
+            .all()
+        )
+
+    @staticmethod
+    def eliminar_actividad_tratamiento(db: Session, actividad: ActividadModel) -> None:
+        try:
+            db.delete(actividad.tratamiento)
+            db.delete(actividad)
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise
+
+    @staticmethod
     def completar(
         db: Session,
         actividad: ActividadModel,
@@ -144,6 +191,7 @@ def actividad_a_dict(actividad: ActividadModel) -> dict:
         "descripcion_estimulo": None,
         "objetivo_entrenamiento": None,
         "tipo_refuerzo": None,
+        "id_tratamiento": None,
         "cancelada": False,
     }
     if actividad.alimentacion is not None:
@@ -154,4 +202,6 @@ def actividad_a_dict(actividad: ActividadModel) -> dict:
     if actividad.entrenamiento is not None:
         resultado["objetivo_entrenamiento"] = actividad.entrenamiento.objetivo_entrenamiento
         resultado["tipo_refuerzo"] = actividad.entrenamiento.tipo_refuerzo
+    if actividad.tratamiento is not None:
+        resultado["id_tratamiento"] = actividad.tratamiento.id_tratamiento
     return resultado

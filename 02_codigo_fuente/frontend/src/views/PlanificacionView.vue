@@ -67,7 +67,13 @@ const formularioDietaAbierto = ref(false)
 // Calendario y filtros
 const vista = ref<VistaCalendario>('semana')
 const ancla = ref(hoy.value)
-const tipos = reactive<Record<TipoActividad, boolean>>({ alimentacion: true, enriquecimiento: true, entrenamiento: true, limpieza: true })
+const tipos = reactive<Record<TipoActividad, boolean>>({
+  alimentacion: true,
+  enriquecimiento: true,
+  entrenamiento: true,
+  limpieza: true,
+  tratamiento: false,
+})
 const idAnimal = ref(0)
 const estado = ref<EstadoFiltro>('todas')
 
@@ -140,7 +146,13 @@ const delCalendario = computed(() =>
 )
 const delDia = computed(() => visibles.value.filter((a) => a.fecha_programada === ancla.value))
 const conteo = computed(() => {
-  const c: Record<TipoActividad, number> = { alimentacion: 0, enriquecimiento: 0, entrenamiento: 0, limpieza: 0 }
+  const c: Record<TipoActividad, number> = {
+    alimentacion: 0,
+    enriquecimiento: 0,
+    entrenamiento: 0,
+    limpieza: 0,
+    tratamiento: 0,
+  }
   for (const a of visibles.value) c[a.tipo_actividad]++
   return c
 })
@@ -414,6 +426,16 @@ onMounted(async () => {
     await actividadesApi.renovarTomas()
   } catch (error) {
     errorRenovacion = `No se pudo renovar el horizonte de alimentaciones: ${mensajeError(error, 'error desconocido')}`
+  }
+  try {
+    await actividadesApi.renovarTratamientos()
+  } catch (error) {
+    errorRenovacion = [
+      errorRenovacion,
+      `No se pudo renovar el horizonte de tratamientos: ${mensajeError(error, 'error desconocido')}`,
+    ]
+      .filter(Boolean)
+      .join(' ')
   }
   await cargarActividades()
   if (errorRenovacion) errorActividades.value = [errorActividades.value, errorRenovacion].filter(Boolean).join(' ')

@@ -357,13 +357,14 @@ def test_tratamiento_crear_con_valores_por_defecto(db, crear_animal_db, crear_di
     diagnostico = crear_diagnostico_db(crear_animal_db().id_animal)
     tratamiento = TratamientoRepository.crear_tratamiento(db, {
         "id_diagnostico": diagnostico.id_diagnostico,
-        "medicamento_o_proceso": "Suero oral",
-        "dosis": "50 ml",
-        "frecuencia": "cada 8 h",
-    })
+        "descripcion": "Administrar suero oral",
+    }, [{"nombre_medicamento": "Suero oral", "dosis_ml": 50}])
     assert tratamiento.estado == "en_curso"
     assert tratamiento.fecha_inicio == hoy_local()
     assert tratamiento.fecha_fin is None
+    assert tratamiento.descripcion == "Administrar suero oral"
+    assert tratamiento.medicamentos[0].nombre_medicamento == "Suero oral"
+    assert float(tratamiento.medicamentos[0].dosis_ml) == 50
 
 
 def test_tratamiento_consultar_y_listar(db, crear_animal_db, crear_diagnostico_db):
@@ -371,13 +372,13 @@ def test_tratamiento_consultar_y_listar(db, crear_animal_db, crear_diagnostico_d
     diagnostico = crear_diagnostico_db(animal.id_animal)
     otro = crear_diagnostico_db(animal.id_animal, diagnostico="Otro")
     tratamiento = TratamientoRepository.crear_tratamiento(db, {
-        "id_diagnostico": diagnostico.id_diagnostico, "medicamento_o_proceso": "Antibiótico",
+        "id_diagnostico": diagnostico.id_diagnostico, "descripcion": "Antibiótico",
     })
     TratamientoRepository.crear_tratamiento(db, {
-        "id_diagnostico": otro.id_diagnostico, "medicamento_o_proceso": "Vendaje",
+        "id_diagnostico": otro.id_diagnostico, "descripcion": "Vendaje",
     })
 
-    assert TratamientoRepository.obtener_por_id(db, tratamiento.id_tratamiento).medicamento_o_proceso == "Antibiótico"
+    assert TratamientoRepository.obtener_por_id(db, tratamiento.id_tratamiento).descripcion == "Antibiótico"
     assert TratamientoRepository.obtener_por_id(db, 999) is None
     lista = TratamientoRepository.obtener_por_diagnostico(db, diagnostico.id_diagnostico)
     assert [t.id_tratamiento for t in lista] == [tratamiento.id_tratamiento]
@@ -386,7 +387,7 @@ def test_tratamiento_consultar_y_listar(db, crear_animal_db, crear_diagnostico_d
 def test_tratamiento_actualizar(db, crear_animal_db, crear_diagnostico_db):
     diagnostico = crear_diagnostico_db(crear_animal_db().id_animal)
     tratamiento = TratamientoRepository.crear_tratamiento(db, {
-        "id_diagnostico": diagnostico.id_diagnostico, "medicamento_o_proceso": "Antibiótico",
+        "id_diagnostico": diagnostico.id_diagnostico, "descripcion": "Antibiótico",
     })
     tratamiento = TratamientoRepository.actualizar_tratamiento(
         db, tratamiento, {"estado": "finalizado", "fecha_fin": hoy_local()}
@@ -397,5 +398,5 @@ def test_tratamiento_actualizar(db, crear_animal_db, crear_diagnostico_db):
 def test_tratamiento_de_diagnostico_inexistente_lanza_error(db):
     with pytest.raises(IntegrityError):
         TratamientoRepository.crear_tratamiento(db, {
-            "id_diagnostico": 999, "medicamento_o_proceso": "X",
+            "id_diagnostico": 999, "descripcion": "X",
         })

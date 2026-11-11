@@ -24,7 +24,7 @@ class ActividadModel(Base):
     __tablename__ = "actividad"
     __table_args__ = (
         CheckConstraint(
-            "tipo_actividad IN ('alimentacion', 'enriquecimiento', 'entrenamiento', 'limpieza')",
+            "tipo_actividad IN ('alimentacion', 'enriquecimiento', 'entrenamiento', 'limpieza', 'tratamiento')",
             name="ck_actividad_tipo",
         ),
         CheckConstraint("duracion_horas >= 0", name="ck_actividad_duracion_horas"),
@@ -42,7 +42,12 @@ class ActividadModel(Base):
             )
             OR
             (
-                tipo_actividad IN ('alimentacion', 'enriquecimiento', 'entrenamiento')
+                tipo_actividad IN (
+                    'alimentacion',
+                    'enriquecimiento',
+                    'entrenamiento',
+                    'tratamiento'
+                )
                 AND id_animal IS NOT NULL
             )
             """,
@@ -110,6 +115,12 @@ class ActividadModel(Base):
     )
     entrenamiento = relationship(
         "ActividadEntrenamientoModel",
+        back_populates="actividad",
+        uselist=False,
+        lazy="selectin",
+    )
+    tratamiento = relationship(
+        "ActividadTratamientoModel",
         back_populates="actividad",
         uselist=False,
         lazy="selectin",

@@ -11,6 +11,7 @@ import type {
   SignosVitalesCreate,
   Tratamiento,
   TratamientoCreate,
+  UnidadFrecuenciaTratamiento,
 } from '@/types/veterinaria'
 
 type RegistroExistente =
@@ -18,6 +19,7 @@ type RegistroExistente =
   | { tipo: 'tratamiento'; datos: Tratamiento }
 
 type ValorNumerico = string | number
+type MedicamentoForm = { nombre_medicamento: string; dosis_ml: ValorNumerico }
 type CampoSigno = Exclude<keyof SignosVitales, 'id_signos_vitales' | 'id_diagnostico'>
 
 const props = defineProps<{
@@ -34,6 +36,7 @@ const emit = defineEmits<{ close: []; saved: [] }>()
 const tipo = ref<'diagnostico' | 'tratamiento'>('diagnostico')
 const error = ref('')
 const guardando = ref(false)
+const tratamientoGuardadoSinActividades = ref(false)
 const formDiagnostico = reactive({ diagnostico: '', observaciones: '', es_critico: false })
 const formSignos = reactive({
   peso_kg: '' as ValorNumerico,
@@ -48,12 +51,14 @@ const formSignos = reactive({
 })
 const formTratamiento = reactive({
   id_diagnostico: 0,
-  medicamento_o_proceso: '',
-  dosis: '',
-  frecuencia: '',
+  descripcion: '',
+  frecuencia_valor: '1' as ValorNumerico,
+  frecuencia_unidad: 'dias' as UnidadFrecuenciaTratamiento | '',
+  hora_inicio: '08:00',
   fecha_inicio: hoyIso(),
   fecha_fin: '',
   estado: 'en_curso' as Tratamiento['estado'],
+  medicamentos: [] as MedicamentoForm[],
 })
 
 const TIPOS = [
@@ -78,6 +83,9 @@ const MUCOSAS = {
 const ACTITUD = { alerta: 'Alerta', deprimido: 'Deprimido', estuporoso: 'Estuporoso', agitado: 'Agitado' }
 
 const editando = computed(() => !!props.registro)
+const tratamientoLegado = computed(() =>
+  props.registro?.tipo === 'tratamiento' ? props.registro.datos : null,
+)
 const diagnosticosOrdenados = computed(() =>
   [...props.diagnosticos].sort(
     (a, b) => new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime(),
@@ -162,6 +170,7 @@ watch(
   ([abierto]) => {
     if (!abierto) return
     error.value = ''
+    tratamientoGuardadoSinActividades.value = false
     tipo.value = props.registro?.tipo ?? props.tipoInicial ?? 'diagnostico'
     const signosExistentes =
       props.registro?.tipo === 'diagnostico' ? props.registro.datos.signos_vitales : null
@@ -187,16 +196,41 @@ watch(
         props.registro?.tipo === 'tratamiento'
           ? props.registro.datos.id_diagnostico
           : (diagnosticosOrdenados.value[0]?.id_diagnostico ?? 0),
-      medicamento_o_proceso:
-        props.registro?.tipo === 'tratamiento' ? props.registro.datos.medicamento_o_proceso : '',
-      dosis: props.registro?.tipo === 'tratamiento' ? (props.registro.datos.dosis ?? '') : '',
-      frecuencia: props.registro?.tipo === 'tratamiento' ? (props.registro.datos.frecuencia ?? '') : '',
+      descripcion:
+        props.registro?.tipo === 'tratamiento' ? props.registro.datos.descripcion : '',
+      frecuencia_valor:
+        props.registro?.tipo === 'tratamiento'
+          ? String(props.registro.datos.frecuencia_valor ?? '')
+          : '1',
+      frecuencia_unidad:
+        props.registro?.tipo === 'tratamiento'
+          ? (props.registro.datos.frecuencia_unidad ?? '')
+          : 'dias',
+      hora_inicio:
+        props.registro?.tipo === 'tratamiento'
+          ? (props.registro.datos.hora_inicio?.slice(0, 5) ?? '')
+          : '08:00',
       fecha_inicio: props.registro?.tipo === 'tratamiento' ? props.registro.datos.fecha_inicio : hoyIso(),
       fecha_fin: props.registro?.tipo === 'tratamiento' ? (props.registro.datos.fecha_fin ?? '') : '',
       estado: props.registro?.tipo === 'tratamiento' ? props.registro.datos.estado : 'en_curso',
+      medicamentos:
+        props.registro?.tipo === 'tratamiento'
+          ? props.registro.datos.medicamentos.map((medicamento) => ({
+              nombre_medicamento: medicamento.nombre_medicamento,
+              dosis_ml: String(medicamento.dosis_ml),
+            }))
+          : [],
     })
   },
 )
+
+function agregarMedicamento() {
+  formTratamiento.medicamentos.push({ nombre_medicamento: '', dosis_ml: '' })
+}
+
+function quitarMedicamento(indice: number) {
+  formTratamiento.medicamentos.splice(indice, 1)
+}
 
 async function guardar() {
   error.value = ''
@@ -262,18 +296,76 @@ async function guardar() {
         error.value = 'Selecciona el diagnóstico asociado'
         return
       }
+      if (tratamientoGuardadoSinActividades.value) return
+      const descripcion = formTratamiento.descripcion.trim()
+      if (!descripcion) {
+        error.value = 'Ingresa la descripción del tratamiento.'
+        return
+      }
+      const frecuenciaValor = numeroOpcional(formTratamiento.frecuencia_valor, 'Frecuencia', {
+        minimo: 1,
+        maximo: 2147483647,
+        entero: true,
+      })
+      if (frecuenciaValor === null) {
+        error.value = 'Ingresa una frecuencia válida.'
+        return
+      }
+      if (!formTratamiento.frecuencia_unidad || !formTratamiento.hora_inicio) {
+        error.value = 'Selecciona la unidad y la hora de inicio de la frecuencia.'
+        return
+      }
+      const medicamentos = formTratamiento.medicamentos.map((medicamento, indice) => {
+        const nombre = medicamento.nombre_medicamento.trim()
+        if (!nombre) {
+          throw new Error(`Medicamento ${indice + 1}: ingresa el nombre.`)
+        }
+        const dosis = numeroOpcional(medicamento.dosis_ml, `Dosis del medicamento ${indice + 1}`, {
+          minimo: 0.01,
+          decimales: 2,
+        })
+        if (dosis === null) {
+          throw new Error(`Medicamento ${indice + 1}: ingresa la dosis en ml.`)
+        }
+        return { nombre_medicamento: nombre, dosis_ml: dosis }
+      })
       const datos: TratamientoCreate = {
-        medicamento_o_proceso: formTratamiento.medicamento_o_proceso.trim(),
-        dosis: formTratamiento.dosis.trim() || null,
-        frecuencia: formTratamiento.frecuencia.trim() || null,
+        descripcion,
+        frecuencia_valor: frecuenciaValor,
+        frecuencia_unidad: formTratamiento.frecuencia_unidad,
+        hora_inicio: formTratamiento.hora_inicio,
+        medicamentos,
         fecha_inicio: formTratamiento.fecha_inicio,
         fecha_fin: formTratamiento.fecha_fin || null,
         estado: formTratamiento.estado,
       }
+      let idTratamiento: number
       if (props.registro?.tipo === 'tratamiento') {
-        await veterinariaApi.actualizarTratamiento(props.registro.datos.id_tratamiento, datos)
+        const tratamiento = await veterinariaApi.actualizarTratamiento(
+          props.registro.datos.id_tratamiento,
+          datos,
+        )
+        idTratamiento = tratamiento.id_tratamiento
       } else {
-        await veterinariaApi.crearTratamiento(formTratamiento.id_diagnostico, datos)
+        const tratamiento = await veterinariaApi.crearTratamiento(
+          formTratamiento.id_diagnostico,
+          datos,
+        )
+        idTratamiento = tratamiento.id_tratamiento
+      }
+      try {
+        await veterinariaApi.generarActividadesTratamiento(idTratamiento)
+      } catch (e) {
+        tratamientoGuardadoSinActividades.value = true
+        error.value =
+          `El tratamiento se guardó, pero no se pudieron generar sus actividades: ` +
+          (e instanceof ApiError
+            ? e.message
+            : e instanceof Error
+              ? e.message
+              : 'error desconocido')
+        emit('saved')
+        return
       }
     }
     emit('saved')
@@ -402,6 +494,7 @@ async function guardar() {
                 class="input"
                 type="number"
                 min="1"
+                max="2147483647"
                 step="1"
                 :placeholder="referencia('frecuencia_respiratoria_rpm')"
               />
@@ -486,29 +579,15 @@ async function guardar() {
             </option>
           </select>
         </div>
-        <div class="field doble">
-          <label for="tratamiento">Tratamiento / procedimiento</label>
-          <input
-            id="tratamiento"
-            v-model="formTratamiento.medicamento_o_proceso"
+        <div class="field descripcion-tratamiento">
+          <label for="descripcion-tratamiento">Descripción del tratamiento</label>
+          <textarea
+            id="descripcion-tratamiento"
+            v-model="formTratamiento.descripcion"
             class="input"
+            rows="3"
             required
-            maxlength="200"
-            placeholder="Medicamento o procedimiento"
-          />
-        </div>
-        <div class="field">
-          <label for="dosis">Dosis</label>
-          <input id="dosis" v-model="formTratamiento.dosis" class="input" maxlength="100" placeholder="Ej. 5 ml" />
-        </div>
-        <div class="field">
-          <label for="frecuencia">Frecuencia</label>
-          <input
-            id="frecuencia"
-            v-model="formTratamiento.frecuencia"
-            class="input"
-            maxlength="100"
-            placeholder="Ej. Cada 12 horas"
+            placeholder="Indicación y procedimiento a realizar"
           />
         </div>
         <div class="field">
@@ -517,7 +596,43 @@ async function guardar() {
         </div>
         <div class="field">
           <label for="fecha-fin">Fecha de fin</label>
-          <input id="fecha-fin" v-model="formTratamiento.fecha_fin" class="input" type="date" />
+          <input
+            id="fecha-fin"
+            v-model="formTratamiento.fecha_fin"
+            class="input"
+            type="date"
+            :min="formTratamiento.fecha_inicio"
+          />
+        </div>
+        <div class="field">
+          <label for="frecuencia-valor">Frecuencia</label>
+          <input
+            id="frecuencia-valor"
+            v-model="formTratamiento.frecuencia_valor"
+            class="input"
+            type="number"
+            min="1"
+            step="1"
+            required
+          />
+        </div>
+        <div class="field">
+          <label for="frecuencia-unidad">Unidad de frecuencia</label>
+          <select id="frecuencia-unidad" v-model="formTratamiento.frecuencia_unidad" class="input">
+            <option value="" disabled>Selecciona unidad</option>
+            <option value="horas">Horas</option>
+            <option value="dias">Días</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="hora-inicio">Hora de inicio</label>
+          <input
+            id="hora-inicio"
+            v-model="formTratamiento.hora_inicio"
+            class="input"
+            type="time"
+            required
+          />
         </div>
         <div class="field">
           <label for="estado-tratamiento">Estado</label>
@@ -527,14 +642,86 @@ async function guardar() {
             <option value="suspendido">Suspendido</option>
           </select>
         </div>
+        <section class="medicamentos-seccion">
+          <p
+            v-if="
+              tratamientoLegado &&
+              (!tratamientoLegado.frecuencia_valor ||
+                !tratamientoLegado.frecuencia_unidad ||
+                !tratamientoLegado.hora_inicio)
+            "
+            class="dato-legado"
+          >
+            Este tratamiento previo no tiene frecuencia y hora estructuradas. Datos anteriores:
+            frecuencia {{ tratamientoLegado.frecuencia || 'sin registrar' }},
+            dosis {{ tratamientoLegado.dosis || 'sin registrar' }}. Ingresa la programación y los medicamentos
+            estructurados para generar actividades.
+          </p>
+          <header class="medicamentos-cabecera">
+            <div>
+              <h3>Medicamentos</h3>
+              <p>Opcional. Puedes agregar ninguno, uno o varios medicamentos.</p>
+            </div>
+            <button type="button" class="btn btn-secondary" @click="agregarMedicamento">
+              + Agregar medicamento
+            </button>
+          </header>
+          <div v-if="formTratamiento.medicamentos.length" class="medicamentos-lista">
+            <div
+              v-for="(medicamento, indice) in formTratamiento.medicamentos"
+              :key="indice"
+              class="medicamento-row"
+            >
+              <div class="field">
+                <label :for="`medicamento-nombre-${indice}`">Nombre del medicamento</label>
+                <input
+                  :id="`medicamento-nombre-${indice}`"
+                  v-model="medicamento.nombre_medicamento"
+                  class="input"
+                  maxlength="150"
+                  required
+                />
+              </div>
+              <div class="field">
+                <label :for="`medicamento-dosis-${indice}`">Dosis</label>
+                <div class="dosis-input">
+                  <input
+                    :id="`medicamento-dosis-${indice}`"
+                    v-model="medicamento.dosis_ml"
+                    class="input"
+                    type="number"
+                    min="0.01"
+                    max="999999.99"
+                    step="0.01"
+                    required
+                  />
+                  <span>ml</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="btn btn-secondary quitar-medicamento"
+                :aria-label="`Quitar medicamento ${indice + 1}`"
+                @click="quitarMedicamento(indice)"
+              >
+                Quitar
+              </button>
+            </div>
+          </div>
+          <p v-else class="medicamentos-vacio">No se agregaron medicamentos.</p>
+        </section>
       </div>
 
       <p v-if="error" class="alert-error">{{ error }}</p>
       <footer class="acciones">
         <button type="button" class="btn btn-secondary" :disabled="guardando" @click="emit('close')">
-          Cancelar
+          {{ tratamientoGuardadoSinActividades ? 'Cerrar' : 'Cancelar' }}
         </button>
-        <button type="submit" class="btn btn-primary" :disabled="guardando">
+        <button
+          type="submit"
+          class="btn btn-primary"
+          :disabled="guardando || tratamientoGuardadoSinActividades"
+        >
           {{ guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Guardar registro' }}
         </button>
       </footer>
@@ -658,6 +845,84 @@ async function guardar() {
   grid-column: span 2;
 }
 
+.tratamiento-grid .descripcion-tratamiento,
+.tratamiento-grid .medicamentos-seccion {
+  grid-column: 1 / -1;
+}
+
+.descripcion-tratamiento textarea {
+  resize: vertical;
+}
+
+.medicamentos-seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.medicamentos-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.medicamentos-cabecera h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.medicamentos-cabecera p,
+.medicamentos-vacio {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.medicamentos-seccion .dato-legado {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.medicamentos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.medicamento-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.35fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.dosis-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dosis-input .input {
+  min-width: 0;
+}
+
+.dosis-input span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.quitar-medicamento {
+  min-height: 40px;
+}
+
 .check {
   display: flex;
   align-items: center;
@@ -692,6 +957,10 @@ async function guardar() {
   .tratamiento-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .medicamento-row {
+    grid-template-columns: minmax(0, 1fr) minmax(110px, 0.45fr) auto;
+  }
 }
 
 @media (max-width: 520px) {
@@ -702,6 +971,15 @@ async function guardar() {
 
   .tratamiento-grid .doble {
     grid-column: 1 / -1;
+  }
+
+  .medicamento-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .medicamentos-cabecera {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .acciones {

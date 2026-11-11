@@ -9,13 +9,19 @@ import type {
 import type { Animal, Recinto } from '@/types/animales'
 
 // Orden en que aparecen los tipos en indicadores, leyenda y vista mes
-export const TIPOS_ACTIVIDAD: TipoActividad[] = ['alimentacion', 'enriquecimiento', 'entrenamiento', 'limpieza']
+export const TIPOS_ACTIVIDAD: Exclude<TipoActividad, 'tratamiento'>[] = [
+  'alimentacion',
+  'enriquecimiento',
+  'entrenamiento',
+  'limpieza',
+]
 
 export const TIPO_LABEL: Record<TipoActividad, string> = {
   alimentacion: 'Alimentación',
   enriquecimiento: 'Enriquecimiento',
   entrenamiento: 'Entrenamiento',
   limpieza: 'Limpieza',
+  tratamiento: 'Tratamiento',
 }
 
 export const TIPOS_ENRIQUECIMIENTO = {

@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
-from src.modelos.tratamiento_model import TratamientoModel
+from sqlalchemy.exc import SQLAlchemyError
+from src.modelos.tratamiento_model import TratamientoMedicamentoModel, TratamientoModel
+
 
 class TratamientoRepository:
     @staticmethod
@@ -20,17 +22,37 @@ class TratamientoRepository:
         )
 
     @staticmethod
-    def crear_tratamiento(db: Session, tratamiento_data: dict):
-        tratamiento = TratamientoModel(**tratamiento_data)
-        db.add(tratamiento)
-        db.commit()
-        db.refresh(tratamiento)
+    def crear_tratamiento(db: Session, tratamiento_data: dict, medicamentos: list[dict] | None = None):
+        tratamiento = TratamientoModel(
+            **tratamiento_data,
+            medicamentos=[
+                TratamientoMedicamentoModel(**medicamento)
+                for medicamento in (medicamentos or [])
+            ],
+        )
+        try:
+            db.add(tratamiento)
+            db.commit()
+            db.refresh(tratamiento)
+        except SQLAlchemyError:
+            db.rollback()
+            raise
         return tratamiento
 
     @staticmethod
     def actualizar_tratamiento(db: Session, tratamiento: TratamientoModel, datos: dict):
-        for campo, valor in datos.items():
-            setattr(tratamiento, campo, valor)
-        db.commit()
-        db.refresh(tratamiento)
+        medicamentos = datos.pop("medicamentos", None)
+        try:
+            for campo, valor in datos.items():
+                setattr(tratamiento, campo, valor)
+            if medicamentos is not None:
+                tratamiento.medicamentos = [
+                    TratamientoMedicamentoModel(**medicamento)
+                    for medicamento in medicamentos
+                ]
+            db.commit()
+            db.refresh(tratamiento)
+        except SQLAlchemyError:
+            db.rollback()
+            raise
         return tratamiento

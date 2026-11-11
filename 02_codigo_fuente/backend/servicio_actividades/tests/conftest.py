@@ -11,7 +11,17 @@ from datetime import datetime, timedelta, timezone
 import jwt
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Column, Integer, Table, create_engine, event
+from sqlalchemy import (
+    Column,
+    Date,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Time,
+    create_engine,
+    event,
+)
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -32,6 +42,36 @@ Table(
     "animal",
     Base.metadata,
     Column("id_animal", Integer, primary_key=True),
+    schema="gestion_animal",
+)
+Table(
+    "diagnostico",
+    Base.metadata,
+    Column("id_diagnostico", Integer, primary_key=True),
+    Column(
+        "id_animal",
+        Integer,
+        ForeignKey("gestion_animal.animal.id_animal", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    schema="gestion_animal",
+)
+Table(
+    "tratamiento",
+    Base.metadata,
+    Column("id_tratamiento", Integer, primary_key=True),
+    Column(
+        "id_diagnostico",
+        Integer,
+        ForeignKey("gestion_animal.diagnostico.id_diagnostico", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column("fecha_inicio", Date, nullable=False),
+    Column("fecha_fin", Date),
+    Column("frecuencia_valor", Integer),
+    Column("frecuencia_unidad", String(10)),
+    Column("hora_inicio", Time),
+    Column("estado", String(20), nullable=False),
     schema="gestion_animal",
 )
 Table(

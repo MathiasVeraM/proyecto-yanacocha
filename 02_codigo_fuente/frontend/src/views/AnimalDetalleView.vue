@@ -445,7 +445,7 @@ watch(tab, (valor) => {
               <dt>Tratamiento</dt>
               <dd>
                 <template v-if="tratamientosEnCurso.length">
-                  {{ tratamientosEnCurso.map((t) => t.medicamento_o_proceso).join(', ') }}
+                  {{ tratamientosEnCurso.map((t) => t.descripcion).join(', ') }}
                 </template>
                 <template v-else>Ninguno en curso</template>
               </dd>

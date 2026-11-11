@@ -30,3 +30,4 @@ ZONA_HORARIA = ZoneInfo("America/Guayaquil")
 INATURALIST_URL = os.getenv("INATURALIST_URL", "https://api.inaturalist.org/v1")
 # Si iNaturalist tarda más, se responde solo con el catálogo propio
 INATURALIST_TIMEOUT_SECONDS = float(os.getenv("INATURALIST_TIMEOUT_SECONDS", "3"))
+ACTIVIDADES_SERVICE_URL = os.getenv("ACTIVIDADES_SERVICE_URL", "http://localhost:8004").rstrip("/")

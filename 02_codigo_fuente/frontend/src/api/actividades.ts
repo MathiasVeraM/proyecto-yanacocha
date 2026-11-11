@@ -60,6 +60,9 @@ export const actividadesApi = {
 
   renovarTomas: () => request<Actividad[]>('POST', `${URL}/tomas/renovar`),
 
+  renovarTratamientos: () =>
+    request<Actividad[]>('POST', `${URL}/tratamientos/renovar`),
+
   programarEnriquecimiento: (datos: {
     id_animal: number
     tipo_enriquecimiento: TipoEnriquecimiento

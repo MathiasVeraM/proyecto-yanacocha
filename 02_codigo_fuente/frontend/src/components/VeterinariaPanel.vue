@@ -5,7 +5,13 @@ import VeterinariaRegistroModal from '@/components/VeterinariaRegistroModal.vue'
 import { ApiError } from '@/api/http'
 import { veterinariaApi } from '@/api/veterinaria'
 import { formatearFecha } from '@/config/animales'
-import type { Diagnostico, SignosVitales, SignosVitalesHistorial, Tratamiento } from '@/types/veterinaria'
+import type {
+  Diagnostico,
+  SignosVitales,
+  SignosVitalesHistorial,
+  Tratamiento,
+  UnidadFrecuenciaTratamiento,
+} from '@/types/veterinaria'
 
 const props = defineProps<{ idAnimal: number; nombreEjemplar?: string }>()
 
@@ -183,6 +189,11 @@ function etiquetaTratamiento(estado: Tratamiento['estado']) {
   if (estado === 'en_curso') return 'En curso'
   if (estado === 'finalizado') return 'Finalizado'
   return 'Suspendido'
+}
+
+function etiquetaUnidadFrecuencia(unidad: UnidadFrecuenciaTratamiento | null) {
+  if (!unidad) return ''
+  return unidad === 'dias' ? 'días' : 'horas'
 }
 
 function formatoNumero(valor: number, decimales = 1) {
@@ -452,21 +463,49 @@ watch(paginasHistorial, (total) => {
               <span class="tipo-label">Tratamiento en curso más reciente</span>
               <div class="resumen-tratamiento">
                 <div class="resumen-cabecera">
-                  <strong>{{ tratamientoReciente.tratamiento.medicamento_o_proceso }}</strong>
+                  <strong>{{ tratamientoReciente.tratamiento.descripcion }}</strong>
                   <AppBadge :tone="tonoTratamiento(tratamientoReciente.tratamiento.estado)">
                     {{ etiquetaTratamiento(tratamientoReciente.tratamiento.estado) }}
                   </AppBadge>
                 </div>
-                <p v-if="tratamientoReciente.tratamiento.dosis || tratamientoReciente.tratamiento.frecuencia">
-                  <span v-if="tratamientoReciente.tratamiento.frecuencia">
-                    Frecuencia: {{ tratamientoReciente.tratamiento.frecuencia }}
-                  </span>
-                  <span v-if="tratamientoReciente.tratamiento.dosis">
-                    · Dosis: {{ tratamientoReciente.tratamiento.dosis }}
-                  </span>
+                <p
+                  v-if="
+                    tratamientoReciente.tratamiento.frecuencia_valor &&
+                    tratamientoReciente.tratamiento.frecuencia_unidad
+                  "
+                >
+                  Frecuencia: cada {{ tratamientoReciente.tratamiento.frecuencia_valor }}
+                  {{ etiquetaUnidadFrecuencia(tratamientoReciente.tratamiento.frecuencia_unidad) }}
+                  <template v-if="tratamientoReciente.tratamiento.hora_inicio">
+                    · Inicio {{ tratamientoReciente.tratamiento.hora_inicio.slice(0, 5) }}
+                  </template>
+                </p>
+                <p
+                  v-else-if="tratamientoReciente.tratamiento.frecuencia"
+                  class="dato-legado"
+                >
+                  Frecuencia anterior: {{ tratamientoReciente.tratamiento.frecuencia }}
+                </p>
+                <ul v-if="tratamientoReciente.tratamiento.medicamentos.length" class="medicamentos-resumen">
+                  <li
+                    v-for="medicamento in tratamientoReciente.tratamiento.medicamentos"
+                    :key="medicamento.id_tratamiento_medicamento"
+                  >
+                    {{ medicamento.nombre_medicamento }} · Dosis
+                    {{ formatoNumero(medicamento.dosis_ml, 2) }} ml
+                  </li>
+                </ul>
+                <p
+                  v-else-if="tratamientoReciente.tratamiento.dosis"
+                  class="dato-legado"
+                >
+                  Dosis anterior: {{ tratamientoReciente.tratamiento.dosis }}
                 </p>
                 <time :datetime="tratamientoReciente.tratamiento.fecha_inicio">
                   Desde {{ formatearFecha(tratamientoReciente.tratamiento.fecha_inicio) }}
+                  <template v-if="tratamientoReciente.tratamiento.fecha_fin">
+                    hasta {{ formatearFecha(tratamientoReciente.tratamiento.fecha_fin) }}
+                  </template>
                 </time>
                 <button
                   type="button"
@@ -586,13 +625,33 @@ watch(paginasHistorial, (total) => {
             <ul v-if="tratamientosSeleccionados.length" class="detalle-tratamientos">
               <li v-for="tratamiento in tratamientosSeleccionados" :key="tratamiento.id_tratamiento">
                 <div class="resumen-cabecera">
-                  <strong>{{ tratamiento.medicamento_o_proceso }}</strong>
+                  <strong>{{ tratamiento.descripcion }}</strong>
                   <AppBadge :tone="tonoTratamiento(tratamiento.estado)">
                     {{ etiquetaTratamiento(tratamiento.estado) }}
                   </AppBadge>
                 </div>
-                <p v-if="tratamiento.dosis">Dosis: {{ tratamiento.dosis }}</p>
-                <p v-if="tratamiento.frecuencia">Frecuencia: {{ tratamiento.frecuencia }}</p>
+                <p v-if="tratamiento.frecuencia_valor && tratamiento.frecuencia_unidad">
+                  Frecuencia: cada {{ tratamiento.frecuencia_valor }}
+                  {{ etiquetaUnidadFrecuencia(tratamiento.frecuencia_unidad) }}
+                  <template v-if="tratamiento.hora_inicio">
+                    · Inicio {{ tratamiento.hora_inicio.slice(0, 5) }}
+                  </template>
+                </p>
+                <p v-else-if="tratamiento.frecuencia" class="dato-legado">
+                  Frecuencia anterior: {{ tratamiento.frecuencia }}
+                </p>
+                <ul v-if="tratamiento.medicamentos.length" class="medicamentos-resumen">
+                  <li
+                    v-for="medicamento in tratamiento.medicamentos"
+                    :key="medicamento.id_tratamiento_medicamento"
+                  >
+                    {{ medicamento.nombre_medicamento }} · Dosis
+                    {{ formatoNumero(medicamento.dosis_ml, 2) }} ml
+                  </li>
+                </ul>
+                <p v-else-if="tratamiento.dosis" class="dato-legado">
+                  Dosis anterior: {{ tratamiento.dosis }}
+                </p>
                 <p>
                   {{ formatearFecha(tratamiento.fecha_inicio) }}
                   <template v-if="tratamiento.fecha_fin"> — {{ formatearFecha(tratamiento.fecha_fin) }}</template>
@@ -1107,6 +1166,15 @@ watch(paginasHistorial, (total) => {
 }
 
 .paginacion span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.medicamentos-resumen {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
   color: var(--color-text-muted);
   font-size: 12px;
 }

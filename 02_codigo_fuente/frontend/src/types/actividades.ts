@@ -1,6 +1,11 @@
 import type { Animal, Recinto } from '@/types/animales'
 
-export type TipoActividad = 'alimentacion' | 'limpieza' | 'enriquecimiento' | 'entrenamiento'
+export type TipoActividad =
+  | 'alimentacion'
+  | 'limpieza'
+  | 'enriquecimiento'
+  | 'entrenamiento'
+  | 'tratamiento'
 export type TipoEnriquecimiento = 'social' | 'sensorial' | 'alimenticio' | 'cognitivo'
 export type UnidadFrecuencia = 'horas' | 'dias' | 'semanas'
 export type UnidadCantidad = 'g' | 'kg' | 'unidad'
@@ -47,6 +52,7 @@ export interface Actividad {
   descripcion_estimulo: string | null
   objetivo_entrenamiento: string | null
   tipo_refuerzo: string | null
+  id_tratamiento: number | null
   cancelada: boolean
   animal?: Animal
   recinto?: Recinto

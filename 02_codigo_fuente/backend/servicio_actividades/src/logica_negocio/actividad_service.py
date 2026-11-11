@@ -1,17 +1,25 @@
 from datetime import date, datetime, time, timedelta
+from math import ceil
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.config import HORIZONTE_TOMAS_DIAS
+from src.database import Base
 from src.esquemas.actividad_schema import ActividadBaseCreate
 from src.modelos.actividad_alimentacion_model import ActividadAlimentacionModel
 from src.modelos.actividad_enriquecimiento_model import ActividadEnriquecimientoModel
 from src.modelos.actividad_entrenamiento_model import ActividadEntrenamientoModel
+from src.modelos.actividad_tratamiento_model import ActividadTratamientoModel
 from src.modelos.fechas import ahora_local, hoy_local
 from src.repositorios.actividad_repo import ActividadRepository
 from src.repositorios.dieta_repo import DietaRepository
 from src.repositorios.referencias_repo import ReferenciasRepository
+
+
+HORIZONTE_TRATAMIENTOS_DIAS = 7
 
 
 class ActividadService:
@@ -188,6 +196,7 @@ class ActividadService:
             "enriquecimiento",
             "entrenamiento",
             "limpieza",
+            "tratamiento",
         }:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -302,6 +311,177 @@ class ActividadService:
                 hoy_local() + timedelta(days=HORIZONTE_TOMAS_DIAS - 1),
             )
         ]
+
+    @staticmethod
+    def generar_tratamiento(db: Session, id_tratamiento: int, id_usuario: int) -> list:
+        tabla_tratamiento = Base.metadata.tables["gestion_animal.tratamiento"]
+        tabla_diagnostico = Base.metadata.tables["gestion_animal.diagnostico"]
+        consulta = (
+            select(
+                tabla_tratamiento.c.id_tratamiento,
+                tabla_tratamiento.c.fecha_inicio,
+                tabla_tratamiento.c.fecha_fin,
+                tabla_tratamiento.c.frecuencia_valor,
+                tabla_tratamiento.c.frecuencia_unidad,
+                tabla_tratamiento.c.hora_inicio,
+                tabla_tratamiento.c.estado,
+                tabla_diagnostico.c.id_animal,
+            )
+            .select_from(
+                tabla_tratamiento.join(
+                    tabla_diagnostico,
+                    tabla_diagnostico.c.id_diagnostico
+                    == tabla_tratamiento.c.id_diagnostico,
+                )
+            )
+            .where(tabla_tratamiento.c.id_tratamiento == id_tratamiento)
+        )
+        tratamiento = db.execute(consulta).mappings().first()
+        if tratamiento is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tratamiento no encontrado",
+            )
+        if (
+            tratamiento["frecuencia_valor"] is None
+            or tratamiento["frecuencia_unidad"] is None
+            or tratamiento["hora_inicio"] is None
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="El tratamiento requiere frecuencia y hora de inicio para generar actividades",
+            )
+
+        ahora = ahora_local()
+        horarios = (
+            ActividadService._horarios_tratamiento(
+                tratamiento["fecha_inicio"],
+                tratamiento["fecha_fin"],
+                tratamiento["hora_inicio"],
+                tratamiento["frecuencia_valor"],
+                tratamiento["frecuencia_unidad"],
+                ahora,
+            )
+            if tratamiento["estado"] == "en_curso"
+            else []
+        )
+        horarios_esperados = set(horarios)
+
+        existentes = ActividadRepository.obtener_actividades_tratamiento(
+            db, id_tratamiento
+        )
+        for actividad in existentes:
+            detalle = actividad.tratamiento
+            programacion = (
+                detalle.fecha_programada,
+                detalle.hora_programada,
+            )
+            instante = datetime.combine(*programacion)
+            if (
+                not actividad.completada
+                and instante > ahora
+                and programacion not in horarios_esperados
+            ):
+                ActividadRepository.eliminar_actividad_tratamiento(db, actividad)
+
+        resultado = []
+        for fecha, hora in horarios:
+            actividad = ActividadRepository.obtener_actividad_tratamiento(
+                db, id_tratamiento, fecha, hora
+            )
+            if actividad is None:
+                try:
+                    actividad = ActividadRepository.crear(
+                        db,
+                        {
+                            "tipo_actividad": "tratamiento",
+                            "id_animal": tratamiento["id_animal"],
+                            "fecha_programada": fecha,
+                            "hora_programada": hora,
+                            "duracion_horas": 0,
+                            "duracion_minutos": 0,
+                            "id_usuario_programo": id_usuario,
+                            "completada": False,
+                            "observaciones": "Dosis programada de tratamiento",
+                            "id_usuario_completo": None,
+                            "fecha_completada": None,
+                        },
+                        {
+                            "_modelo": ActividadTratamientoModel,
+                            "id_tratamiento": id_tratamiento,
+                            "fecha_programada": fecha,
+                            "hora_programada": hora,
+                        },
+                    )
+                except IntegrityError:
+                    actividad = ActividadRepository.obtener_actividad_tratamiento(
+                        db, id_tratamiento, fecha, hora
+                    )
+                    if actividad is None:
+                        raise
+            resultado.append(actividad)
+        return resultado
+
+    @staticmethod
+    def renovar_horizonte_tratamientos(db: Session, id_usuario: int) -> list:
+        tabla_tratamiento = Base.metadata.tables["gestion_animal.tratamiento"]
+        ids = db.execute(
+            select(tabla_tratamiento.c.id_tratamiento).where(
+                tabla_tratamiento.c.estado == "en_curso",
+                tabla_tratamiento.c.frecuencia_valor.is_not(None),
+                tabla_tratamiento.c.frecuencia_unidad.is_not(None),
+                tabla_tratamiento.c.hora_inicio.is_not(None),
+            )
+        ).scalars().all()
+        return [
+            actividad
+            for id_tratamiento in ids
+            for actividad in ActividadService.generar_tratamiento(
+                db, id_tratamiento, id_usuario
+            )
+        ]
+
+    @staticmethod
+    def _horarios_tratamiento(
+        fecha_inicio: date,
+        fecha_fin: date | None,
+        hora_inicio: time,
+        frecuencia_valor: int,
+        frecuencia_unidad: str,
+        ahora: datetime,
+    ) -> list[tuple[date, time]]:
+        hoy = ahora.date()
+        fecha_limite = hoy + timedelta(days=HORIZONTE_TRATAMIENTOS_DIAS - 1)
+        if fecha_fin is not None:
+            fecha_limite = min(fecha_limite, fecha_fin)
+        if fecha_limite < max(fecha_inicio, hoy):
+            return []
+
+        primer_instante = datetime.combine(fecha_inicio, hora_inicio)
+        inicio_horizonte = max(ahora, datetime.combine(hoy, time.min))
+        fin_horizonte = datetime.combine(fecha_limite, time.max)
+        paso_segundos = frecuencia_valor * (
+            60 * 60 if frecuencia_unidad == "horas" else 24 * 60 * 60
+        )
+        if primer_instante < inicio_horizonte:
+            segundos_hasta_inicio = (inicio_horizonte - primer_instante).total_seconds()
+            saltos = ceil(segundos_hasta_inicio / paso_segundos)
+            desplazamiento = saltos * paso_segundos
+            if desplazamiento > (fin_horizonte - primer_instante).total_seconds():
+                return []
+            primer_instante += timedelta(seconds=desplazamiento)
+        if primer_instante > fin_horizonte:
+            return []
+
+        horarios = []
+        instante = primer_instante
+        while instante <= fin_horizonte:
+            if instante >= inicio_horizonte:
+                horarios.append((instante.date(), instante.time()))
+            if paso_segundos > (fin_horizonte - instante).total_seconds():
+                break
+            instante += timedelta(seconds=paso_segundos)
+        return horarios
 
     @staticmethod
     def _horarios_tomas(

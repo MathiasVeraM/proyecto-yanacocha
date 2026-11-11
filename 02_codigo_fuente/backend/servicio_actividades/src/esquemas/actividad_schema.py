@@ -92,6 +92,7 @@ class ActividadResponse(BaseModel):
     descripcion_estimulo: str | None = None
     objetivo_entrenamiento: str | None = None
     tipo_refuerzo: str | None = None
+    id_tratamiento: int | None = None
     cancelada: bool = False
 
     model_config = ConfigDict(from_attributes=True)

@@ -8,11 +8,12 @@ Microservicio de fichas de ejemplares (HU-02): registro de animales con código 
 
 ## ⚠️ Avisos para el equipo (leer al traer estos cambios)
 
-1. **El gateway necesita una variable nueva** en su `.env`:
-   `GESTION_ANIMAL_SERVICE_URL="http://localhost:8002"` (si falta, usa ese valor por defecto).
-2. **Base de datos**: los scripts de `sql/` ya se ejecutaron en el servidor. Solo hay que correrlos, en orden,
-   si se monta una base nueva: `01_esquema_gestion_animal.sql`, `02_taxonomia_y_recintos.sql`,
-   `03_imagen_animal.sql`, `04_clase_orden_y_nombre.sql` y `05_signos_vitales.sql`.
+1. **Configuración de servicios**: el gateway usa `GESTION_ANIMAL_SERVICE_URL="http://localhost:8002"`.
+   Gestión Animal usa `ACTIVIDADES_SERVICE_URL="http://localhost:8004"` para generar las dosis por medio
+   de la conexión interna; en despliegues con contenedores debe apuntar al host del servicio de Actividades.
+2. **Base de datos**: ejecutar en orden los scripts de `sql/` que aún no se hayan aplicado. Para los tratamientos,
+   ejecutar `07_tratamientos_y_medicamentos.sql` después del esquema inicial; conserva el texto previo como
+   descripción y deja sin conversión implícita las frecuencias y dosis antiguas.
 3. **El servidor de PostgreSQL está en hora UTC** (5 horas adelante de Ecuador). Este servicio guarda las
    fechas en hora de Ecuador desde Python; otros servicios que usen `NOW()` o `CURRENT_DATE` quedarán adelantados
    (por ejemplo `usuario.fecha_creacion` en accesos).
@@ -76,6 +77,11 @@ las rutas públicas se mantienen bajo el prefijo `/api/animales`.
 | GET | `/api/animales/{id}/signos-vitales` | Historial de signos vitales ordenado por fecha del diagnóstico |
 | GET / POST | `/api/animales/diagnosticos/{id}/tratamientos` | Tratamientos de un diagnóstico |
 | PUT | `/api/animales/tratamientos/{id}` | Editar o finalizar un tratamiento |
+| POST | `/api/animales/tratamientos/{id}/generar-actividades` | Sincronizar las dosis programadas del tratamiento |
+
+Cada tratamiento incluye una descripción, fecha de inicio y fin opcional, frecuencia en horas o días y hora
+de inicio. Puede registrar cero o más medicamentos, cada uno con dosis positiva en ml. Las actividades de las
+dosis se generan en el servicio de Actividades al guardar y se pueden renovar desde Planificación.
 
 ### Código del animal
 Formato `YC-AAAA-NNNN`: prefijo de Yanacocha, año local de Ecuador y correlativo anual con al menos cuatro dígitos

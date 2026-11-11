@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 
 from src.modelos.fechas import hoy_local
+from src.logica_negocio import actividades_client
 
 URL = "/api/animales"
 CODIGO_PRIMER_ANIMAL = f"YC-{hoy_local().year}-0001"
@@ -45,7 +46,14 @@ def _crear_diagnostico(client, h, id_animal, **datos):
 
 
 def _crear_tratamiento(client, h, id_diagnostico, **datos):
-    cuerpo = {"medicamento_o_proceso": "Suero oral", **datos}
+    cuerpo = {
+        "descripcion": "Administrar suero oral",
+        "frecuencia_valor": 8,
+        "frecuencia_unidad": "horas",
+        "hora_inicio": "08:00:00",
+        "medicamentos": [],
+        **datos,
+    }
     resp = client.post(f"{URL}/diagnosticos/{id_diagnostico}/tratamientos", json=cuerpo, headers=h)
     assert resp.status_code == 201, resp.text
     return resp.json()
@@ -64,6 +72,7 @@ ENDPOINTS = [
     ("GET", f"{URL}/diagnosticos/1/tratamientos", None),
     ("POST", f"{URL}/diagnosticos/1/tratamientos", {"medicamento_o_proceso": "X"}),
     ("PUT", f"{URL}/tratamientos/1", {"estado": "finalizado"}),
+    ("POST", f"{URL}/tratamientos/1/generar-actividades", None),
     ("GET", f"{URL}/taxonomia", None),
     ("GET", f"{URL}/taxonomia/sugerencias?buscar=oso", None),
     ("POST", f"{URL}/taxonomia", {"nombre_comun": "X", "especie": "X y"}),
@@ -603,15 +612,69 @@ def diagnostico(client, h, crear_animal):
 
 
 def test_crear_tratamiento_con_valores_por_defecto(client, h, diagnostico):
-    tratamiento = _crear_tratamiento(client, h, diagnostico["id_diagnostico"], dosis="50 ml")
+    tratamiento = _crear_tratamiento(
+        client,
+        h,
+        diagnostico["id_diagnostico"],
+        medicamentos=[{"nombre_medicamento": "Suero oral", "dosis_ml": 50}],
+    )
     assert tratamiento["estado"] == "en_curso"
     assert tratamiento["fecha_inicio"] == hoy_local().isoformat()
     assert tratamiento["fecha_fin"] is None
-    assert tratamiento["dosis"] == "50 ml"
+    assert tratamiento["descripcion"] == "Administrar suero oral"
+    assert tratamiento["frecuencia_valor"] == 8
+    assert tratamiento["frecuencia_unidad"] == "horas"
+    assert tratamiento["medicamentos"][0]["dosis_ml"] == 50
+
+
+def test_crear_tratamiento_sin_medicamentos(client, h, diagnostico):
+    tratamiento = _crear_tratamiento(client, h, diagnostico["id_diagnostico"])
+    assert tratamiento["medicamentos"] == []
+
+
+def test_crear_tratamiento_con_varios_medicamentos_y_dosis_decimales(client, h, diagnostico):
+    tratamiento = _crear_tratamiento(
+        client,
+        h,
+        diagnostico["id_diagnostico"],
+        medicamentos=[
+            {"nombre_medicamento": "Medicamento A", "dosis_ml": 0.5},
+            {"nombre_medicamento": "Medicamento B", "dosis_ml": 1.25},
+        ],
+    )
+    assert [(m["nombre_medicamento"], m["dosis_ml"]) for m in tratamiento["medicamentos"]] == [
+        ("Medicamento A", 0.5),
+        ("Medicamento B", 1.25),
+    ]
+
+
+def test_crear_tratamiento_rechaza_dosis_no_positiva(client, h, diagnostico):
+    respuesta = client.post(
+        f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos",
+        json={
+            "descripcion": "Tratamiento",
+            "frecuencia_valor": 1,
+            "frecuencia_unidad": "dias",
+            "hora_inicio": "08:00:00",
+            "medicamentos": [{"nombre_medicamento": "Medicamento", "dosis_ml": 0}],
+        },
+        headers=h,
+    )
+    assert respuesta.status_code == 422
+
 
 
 def test_crear_tratamiento_diagnostico_inexistente_404(client, h):
-    resp = client.post(f"{URL}/diagnosticos/999/tratamientos", json={"medicamento_o_proceso": "X"}, headers=h)
+    resp = client.post(
+        f"{URL}/diagnosticos/999/tratamientos",
+        json={
+            "descripcion": "Tratamiento",
+            "frecuencia_valor": 1,
+            "frecuencia_unidad": "dias",
+            "hora_inicio": "08:00:00",
+        },
+        headers=h,
+    )
     assert resp.status_code == 404
 
 
@@ -619,7 +682,8 @@ def test_crear_tratamiento_fecha_fin_anterior_400(client, h, diagnostico):
     hoy = hoy_local()
     resp = client.post(
         f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos",
-        json={"medicamento_o_proceso": "X", "fecha_inicio": hoy.isoformat(),
+        json={"descripcion": "X", "frecuencia_valor": 1, "frecuencia_unidad": "dias",
+              "hora_inicio": "08:00:00", "fecha_inicio": hoy.isoformat(),
               "fecha_fin": (hoy - timedelta(days=1)).isoformat()},
         headers=h,
     )
@@ -631,7 +695,8 @@ def test_crear_tratamiento_fecha_fin_antes_de_hoy_sin_inicio_400(client, h, diag
     ayer = (hoy_local() - timedelta(days=1)).isoformat()
     resp = client.post(
         f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos",
-        json={"medicamento_o_proceso": "X", "fecha_fin": ayer},
+        json={"descripcion": "X", "frecuencia_valor": 1, "frecuencia_unidad": "dias",
+              "hora_inicio": "08:00:00", "fecha_fin": ayer},
         headers=h,
     )
     assert resp.status_code == 400
@@ -640,16 +705,17 @@ def test_crear_tratamiento_fecha_fin_antes_de_hoy_sin_inicio_400(client, h, diag
 def test_crear_tratamiento_estado_invalido_422(client, h, diagnostico):
     resp = client.post(
         f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos",
-        json={"medicamento_o_proceso": "X", "estado": "olvidado"},
+        json={"descripcion": "X", "frecuencia_valor": 1, "frecuencia_unidad": "dias",
+              "hora_inicio": "08:00:00", "estado": "olvidado"},
         headers=h,
     )
     assert resp.status_code == 422
 
 
 def test_listar_tratamientos(client, h, diagnostico):
-    _crear_tratamiento(client, h, diagnostico["id_diagnostico"], medicamento_o_proceso="Antibiótico")
+    _crear_tratamiento(client, h, diagnostico["id_diagnostico"], descripcion="Antibiótico")
     resp = client.get(f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos", headers=h)
-    assert [t["medicamento_o_proceso"] for t in resp.json()] == ["Antibiótico"]
+    assert [t["descripcion"] for t in resp.json()] == ["Antibiótico"]
 
 
 def test_listar_tratamientos_diagnostico_inexistente_404(client, h):
@@ -678,3 +744,55 @@ def test_actualizar_tratamiento_fecha_fin_anterior_a_la_guardada_400(client, h, 
 
 def test_actualizar_tratamiento_inexistente_404(client, h):
     assert client.put(f"{URL}/tratamientos/999", json={"estado": "finalizado"}, headers=h).status_code == 404
+
+
+def test_actualizar_tratamiento_reemplaza_medicamentos(client, h, diagnostico):
+    tratamiento = _crear_tratamiento(
+        client,
+        h,
+        diagnostico["id_diagnostico"],
+        medicamentos=[{"nombre_medicamento": "Inicial", "dosis_ml": 1}],
+    )
+    respuesta = client.put(
+        f"{URL}/tratamientos/{tratamiento['id_tratamiento']}",
+        json={"medicamentos": [{"nombre_medicamento": "Nuevo", "dosis_ml": 0.25}]},
+        headers=h,
+    )
+
+    assert respuesta.status_code == 200
+    assert [(m["nombre_medicamento"], m["dosis_ml"]) for m in respuesta.json()["medicamentos"]] == [
+        ("Nuevo", 0.25)
+    ]
+
+
+def test_generar_actividades_de_tratamiento_reenvia_el_token(
+    client, h, diagnostico, monkeypatch
+):
+    tratamiento = _crear_tratamiento(client, h, diagnostico["id_diagnostico"])
+    llamada = {}
+
+    def generar(id_tratamiento, autorizacion):
+        llamada["id_tratamiento"] = id_tratamiento
+        llamada["autorizacion"] = autorizacion
+        return [{"id_actividad": 12}]
+
+    monkeypatch.setattr(actividades_client, "generar_actividades_tratamiento", generar)
+    respuesta = client.post(
+        f"{URL}/tratamientos/{tratamiento['id_tratamiento']}/generar-actividades",
+        headers=h,
+    )
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == [{"id_actividad": 12}]
+    assert llamada == {
+        "id_tratamiento": tratamiento["id_tratamiento"],
+        "autorizacion": h["Authorization"],
+    }
+
+
+def test_generar_actividades_de_tratamiento_inexistente_404(client, h):
+    respuesta = client.post(
+        f"{URL}/tratamientos/999/generar-actividades",
+        headers=h,
+    )
+    assert respuesta.status_code == 404
