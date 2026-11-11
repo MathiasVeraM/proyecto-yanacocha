@@ -14,7 +14,7 @@ import { ESTADOS_ANIMAL, ESTADOS_SALIDA, SEXOS, formatearFecha, hoyIso, nombreCl
 import { MODULO_PLANIFICACION } from '@/config/modulos'
 import { useAuthStore } from '@/stores/auth'
 import type { Animal } from '@/types/animales'
-import type { Actividad, Dieta, TipoActividad, UnidadFrecuencia } from '@/types/actividades'
+import type { Actividad, Dieta } from '@/types/actividades'
 import type { Diagnostico, Tratamiento } from '@/types/veterinaria'
 
 const props = defineProps<{ id: string }>()
@@ -25,7 +25,7 @@ const puedeVerPlanificacion = computed(() => auth.tieneAcceso(MODULO_PLANIFICACI
 const animal = ref<Animal | null>(null)
 const cargando = ref(true)
 const error = ref('')
-const tab = ref<'resumen' | 'veterinaria' | 'actividades'>('resumen')
+const tab = ref<'resumen' | 'veterinaria'>('veterinaria')
 const editarAbierto = ref(false)
 const salidaAbierta = ref(false)
 const menuAbierto = ref(false)
@@ -36,7 +36,7 @@ const tratamientos = ref<Tratamiento[]>([])
 const cargandoDiagnosticos = ref(false)
 const errorDiagnosticos = ref('')
 
-// Planificación: dieta vigente, historial de dietas y actividades de hoy a 7 días
+// Planificación: resumen de dieta vigente y actividades de alimentación de hoy
 const dietaVigente = ref<Dieta | null>(null)
 const dietas = ref<Dieta[]>([])
 const actividades = ref<Actividad[]>([])
@@ -54,18 +54,6 @@ if (route.query.aviso) router.replace({ query: {} })
 
 const yaSalio = computed(() => !!animal.value && ESTADOS_SALIDA.includes(animal.value.estado_actual))
 const estado = computed(() => (animal.value ? ESTADOS_ANIMAL[animal.value.estado_actual] : null))
-
-const TIPOS_ACTIVIDAD: Record<TipoActividad, string> = {
-  alimentacion: 'Alimentación',
-  limpieza: 'Limpieza',
-  enriquecimiento: 'Enriquecimiento',
-  entrenamiento: 'Entrenamiento',
-}
-const UNIDADES_FRECUENCIA: Record<UnidadFrecuencia, [string, string]> = {
-  horas: ['hora', 'horas'],
-  dias: ['día', 'días'],
-  semanas: ['semana', 'semanas'],
-}
 
 // ---- Fechas y horas ----
 
@@ -86,37 +74,10 @@ function horaActual() {
   return `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`
 }
 
-function diaSemana(fecha: string) {
-  const [anio, mes, dia] = fecha.split('-').map(Number)
-  const nombre = new Date(anio!, mes! - 1, dia!).toLocaleDateString('es-EC', { weekday: 'long' })
-  return nombre.charAt(0).toUpperCase() + nombre.slice(1)
-}
-
 // ---- Dieta y actividades ----
 
 function resumenDieta(dieta: Dieta) {
   return dieta.alimentos.map((alimento) => alimento.nombre_alimento).join(' + ') || 'Sin alimentos'
-}
-
-function cantidad(alimento: Dieta['alimentos'][number]) {
-  const unidad = alimento.unidad_cantidad ?? 'g'
-  if (unidad === 'unidad') return `${alimento.cantidad_gramos} ${alimento.cantidad_gramos === 1 ? 'unidad' : 'unidades'}`
-  return `${alimento.cantidad_gramos} ${unidad}`
-}
-
-function frecuencia(dieta: Dieta) {
-  const [singular, plural] = UNIDADES_FRECUENCIA[dieta.frecuencia_unidad]
-  return dieta.frecuencia_valor === 1 ? `Cada ${singular}` : `Cada ${dieta.frecuencia_valor} ${plural}`
-}
-
-function detalleActividad(actividad: Actividad) {
-  if (actividad.tipo_actividad === 'alimentacion') {
-    const dieta = dietas.value.find((item) => item.id_dieta === actividad.id_dieta)
-    return dieta ? resumenDieta(dieta) : 'Toma programada'
-  }
-  if (actividad.tipo_actividad === 'enriquecimiento') return actividad.descripcion_estimulo ?? 'Enriquecimiento'
-  if (actividad.tipo_actividad === 'entrenamiento') return actividad.objetivo_entrenamiento ?? 'Entrenamiento'
-  return actividad.observaciones ?? 'Limpieza del recinto'
 }
 
 const actividadesVigentes = computed(() =>
@@ -129,17 +90,6 @@ const actividadesVigentes = computed(() =>
     ),
 )
 const actividadesHoy = computed(() => actividadesVigentes.value.filter((a) => a.fecha_programada === hoyIso()))
-const pendientesHoy = computed(() => actividadesHoy.value.filter((a) => !a.completada).length)
-const proximosDias = computed(() => {
-  const grupos = new Map<string, Actividad[]>()
-  for (const actividad of actividadesVigentes.value) {
-    if (actividad.fecha_programada <= hoyIso()) continue
-    const grupo = grupos.get(actividad.fecha_programada) ?? []
-    grupo.push(actividad)
-    grupos.set(actividad.fecha_programada, grupo)
-  }
-  return [...grupos.entries()].map(([fecha, items]) => ({ fecha, items }))
-})
 
 const tomasHoy = computed(() => actividadesHoy.value.filter((a) => a.tipo_actividad === 'alimentacion'))
 
@@ -289,17 +239,18 @@ watch(
     dietas.value = []
     actividades.value = []
     paginaLineaVida.value = 1
-    tab.value = 'resumen'
+    tab.value = 'veterinaria'
     void cargar()
-    void cargarDiagnosticos()
-    void cargarPlanificacion()
   },
   { immediate: true },
 )
 
-// Al volver al resumen se refresca lo que pudo cambiar en Veterinaria
+// El resumen consulta sus datos al abrirse; Veterinaria tiene su propio panel.
 watch(tab, (valor) => {
-  if (valor === 'resumen') void cargarDiagnosticos()
+  if (valor === 'resumen') {
+    void cargarDiagnosticos()
+    void cargarPlanificacion()
+  }
 })
 </script>
 
@@ -360,10 +311,6 @@ watch(tab, (valor) => {
     <nav class="tabs" aria-label="Secciones de la ficha">
       <button :class="{ activo: tab === 'resumen' }" @click="tab = 'resumen'">Resumen</button>
       <button :class="{ activo: tab === 'veterinaria' }" @click="tab = 'veterinaria'">Veterinaria</button>
-      <button v-if="puedeVerPlanificacion" :class="{ activo: tab === 'actividades' }" @click="tab = 'actividades'">
-        Actividades y dieta
-        <span v-if="pendientesHoy" class="contador" :title="`${pendientesHoy} pendientes hoy`">{{ pendientesHoy }}</span>
-      </button>
     </nav>
 
     <!-- ---- Resumen ---- -->
@@ -455,7 +402,7 @@ watch(tab, (valor) => {
         <article v-if="puedeVerPlanificacion" class="panel">
           <div class="panel-cabecera">
             <h2>Hoy</h2>
-            <button type="button" class="enlace" @click="tab = 'actividades'">Ver actividades</button>
+            <RouterLink :to="{ name: 'planificacion' }" class="enlace">Ver planificación</RouterLink>
           </div>
 
           <p v-if="cargandoPlanificacion && !actividades.length" class="estado-linea">Cargando…</p>
@@ -503,7 +450,6 @@ watch(tab, (valor) => {
 
         <article class="panel">
           <h2>Línea de vida</h2>
-          <p class="sub">Eventos del ejemplar, del más reciente al más antiguo</p>
           <ol class="linea">
             <li v-for="evento in eventosLineaVidaPaginados" :key="evento.clave">
               <time>{{ evento.fecha ? formatearFecha(evento.fecha.slice(0, 10)) : '—' }}</time>
@@ -550,6 +496,7 @@ watch(tab, (valor) => {
               Siguiente
             </button>
           </nav>
+          <p class="linea-ayuda">Eventos del ejemplar, del más reciente al más antiguo</p>
         </article>
       </div>
     </div>
@@ -561,73 +508,6 @@ watch(tab, (valor) => {
       :nombre-ejemplar="animal.nombre ?? animal.taxonomia.nombre_comun"
     />
 
-    <!-- ---- Actividades y dieta ---- -->
-    <div v-else class="actividades">
-      <p v-if="errorPlanificacion" class="alert-error error-linea">
-        {{ errorPlanificacion }}
-        <button type="button" class="accion-reintentar" @click="cargarPlanificacion">Reintentar</button>
-      </p>
-
-      <article class="panel">
-        <div class="panel-cabecera">
-          <h2>Dieta vigente</h2>
-          <RouterLink :to="{ name: 'planificacion' }" class="enlace">Ir a Planificación</RouterLink>
-        </div>
-        <template v-if="dietaVigente">
-          <p class="sub">
-            {{ dietaVigente.es_restriccion ? 'Restricción alimenticia' : 'Dieta' }} desde
-            {{ formatearFecha(dietaVigente.fecha_inicio) }} · {{ frecuencia(dietaVigente) }}
-          </p>
-          <ul class="alimentos">
-            <li v-for="alimento in dietaVigente.alimentos" :key="alimento.id_dieta_alimento">
-              <span>{{ alimento.nombre_alimento }}</span>
-              <span class="cantidad">{{ cantidad(alimento) }}</span>
-            </li>
-          </ul>
-          <p v-if="dietaVigente.observaciones" class="nota">{{ dietaVigente.observaciones }}</p>
-        </template>
-        <p v-else-if="!cargandoPlanificacion" class="estado-linea">
-          Este ejemplar no tiene una dieta vigente. Puedes registrarla desde Planificación.
-        </p>
-      </article>
-
-      <article class="panel">
-        <h2>Tareas de hoy</h2>
-        <p v-if="cargandoPlanificacion && !actividades.length" class="estado-linea">Cargando…</p>
-        <p v-else-if="!actividadesHoy.length" class="estado-linea">No hay actividades programadas para hoy.</p>
-        <ul v-else class="tareas">
-          <li v-for="actividad in actividadesHoy" :key="actividad.id_actividad" :class="{ hecha: actividad.completada }">
-            <span class="hora">{{ horaCorta(actividad.hora_programada) }}</span>
-            <div class="tarea-texto">
-              <strong>{{ TIPOS_ACTIVIDAD[actividad.tipo_actividad] }}</strong>
-              <small>{{ detalleActividad(actividad) }}</small>
-            </div>
-            <AppBadge :tone="actividad.completada ? 'green' : 'amber'">
-              {{ actividad.completada ? 'Realizada' : 'Pendiente' }}
-            </AppBadge>
-          </li>
-        </ul>
-      </article>
-
-      <article class="panel">
-        <h2>Próximos 7 días</h2>
-        <p v-if="!cargandoPlanificacion && !proximosDias.length" class="estado-linea">
-          No hay actividades programadas para los próximos días.
-        </p>
-        <section v-for="dia in proximosDias" :key="dia.fecha" class="dia">
-          <h3>{{ diaSemana(dia.fecha) }} · {{ formatearFecha(dia.fecha) }}</h3>
-          <ul class="tareas">
-            <li v-for="actividad in dia.items" :key="actividad.id_actividad">
-              <span class="hora">{{ horaCorta(actividad.hora_programada) }}</span>
-              <div class="tarea-texto">
-                <strong>{{ TIPOS_ACTIVIDAD[actividad.tipo_actividad] }}</strong>
-                <small>{{ detalleActividad(actividad) }}</small>
-              </div>
-            </li>
-          </ul>
-        </section>
-      </article>
-    </div>
   </template>
 
   <AnimalFormModal :open="editarAbierto" :animal="animal" @close="editarAbierto = false" @saved="onGuardado" />
@@ -1008,6 +888,14 @@ dd {
   list-style: none;
 }
 
+.linea-ayuda {
+  margin-top: 12px;
+  padding-top: 9px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-subtle);
+  font-size: 11px;
+}
+
 .linea li {
   display: flex;
   align-items: center;
@@ -1070,97 +958,6 @@ dd {
 .paginacion span {
   color: var(--color-text-muted);
   font-size: 12px;
-}
-
-/* ---- Actividades y dieta ---- */
-
-.actividades {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 22px;
-  align-items: start;
-}
-
-.actividades > .alert-error {
-  grid-column: 1 / -1;
-}
-
-.alimentos {
-  margin-top: 14px;
-  padding: 0;
-  list-style: none;
-}
-
-.alimentos li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px dashed var(--color-border);
-  font-size: 14px;
-}
-
-.cantidad {
-  font-weight: 600;
-}
-
-.nota {
-  margin-top: 12px;
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-.tareas {
-  margin-top: 10px;
-  padding: 0;
-  list-style: none;
-}
-
-.tareas li {
-  display: grid;
-  grid-template-columns: 82px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--color-border);
-  font-size: 14px;
-}
-
-.tareas li:last-child {
-  border-bottom: none;
-}
-
-.tareas li.hecha .tarea-texto {
-  opacity: 0.6;
-}
-
-.hora {
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-.tarea-texto {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.tarea-texto small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-
-.dia {
-  margin-top: 16px;
-}
-
-.dia h3 {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-muted);
 }
 
 .vacio {
