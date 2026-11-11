@@ -27,7 +27,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ completar: [a: Actividad]; observar: [a: Actividad]; abrir: [a: Actividad] }>()
 
-const seleccion = ref<TipoActividad | null>('alimentacion')
+const seleccion = ref<TipoActividad | null>(null)
 const modo = ref<'pend' | 'todos'>('pend')
 
 const d = computed(() => describirActividades(props.ctx))

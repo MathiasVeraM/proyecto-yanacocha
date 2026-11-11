@@ -1,28 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
-import UserAvatar from '@/components/UserAvatar.vue'
+import { computed } from 'vue'
+import { RouterLink } from 'vue-router'
 import { ITEMS_NAVEGACION } from '@/config/modulos'
 import { useMenuLateral } from '@/composables/useMenuLateral'
 import { useAuthStore } from '@/stores/auth'
-import { useRolesStore } from '@/stores/roles'
 
-const router = useRouter()
 const auth = useAuthStore()
-const rolesStore = useRolesStore()
 
 // Solo se muestran los módulos a los que el rol del usuario tiene acceso
 const items = computed(() => ITEMS_NAVEGACION.filter((item) => auth.tieneAcceso(item.codigoServicio)))
 
 const { contraido } = useMenuLateral()
-const menuAbierto = ref(false)
-const correo = computed(() => auth.payload?.sub ?? '')
-const nombreRol = computed(() => rolesStore.nombreDe(auth.payload?.id_rol))
-
-function cerrarSesion() {
-  auth.logout()
-  router.push({ name: 'login' })
-}
 </script>
 
 <template>
@@ -64,20 +52,6 @@ function cerrarSesion() {
         </span>
       </RouterLink>
     </nav>
-
-    <div class="user">
-      <button class="user-card" :title="contraido ? `${correo} · ${nombreRol}` : undefined" @click="menuAbierto = !menuAbierto">
-        <UserAvatar :nombre="correo" />
-        <span class="user-info">
-          <strong>{{ correo.split('@')[0] }}</strong>
-          <small>{{ nombreRol }}</small>
-        </span>
-        <span class="chevron" :class="{ open: menuAbierto }">⌄</span>
-      </button>
-      <div v-if="menuAbierto" class="user-menu">
-        <button @click="cerrarSesion">Cerrar sesión</button>
-      </div>
-    </div>
   </aside>
 </template>
 
@@ -176,8 +150,7 @@ function cerrarSesion() {
   overflow: hidden;
 }
 
-.brand > div,
-.user-info {
+.brand > div {
   white-space: nowrap;
 }
 
@@ -187,9 +160,7 @@ function cerrarSesion() {
 }
 
 .contraido .brand > div,
-.contraido .nav-label,
-.contraido .user-info,
-.contraido .chevron {
+.contraido .nav-label {
   display: none;
 }
 
@@ -218,21 +189,6 @@ function cerrarSesion() {
   line-height: 14px;
 }
 
-.contraido .user {
-  padding: 12px 0;
-}
-
-.contraido .user-card {
-  justify-content: center;
-  padding: 8px 0;
-}
-
-.contraido .user-menu {
-  left: 8px;
-  right: auto;
-  width: 160px;
-}
-
 .nav-badge {
   min-width: 18px;
   padding: 1px 6px;
@@ -248,78 +204,4 @@ function cerrarSesion() {
   color: #fff;
 }
 
-.user {
-  position: relative;
-  padding: 12px;
-  border-top: 1px solid var(--color-border);
-}
-
-.user-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: none;
-  text-align: left;
-}
-
-.user-card:hover {
-  background: var(--color-surface-alt);
-}
-
-.user-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.user-info strong {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-}
-
-.user-info small {
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
-.chevron {
-  color: var(--color-text-muted);
-  transition: transform 0.15s;
-}
-
-.chevron.open {
-  transform: rotate(180deg);
-}
-
-.user-menu {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: calc(100% - 4px);
-  padding: 4px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-card);
-}
-
-.user-menu button {
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 4px;
-  background: none;
-  color: var(--color-danger);
-  text-align: left;
-}
-
-.user-menu button:hover {
-  background: var(--color-danger-soft);
-}
 </style>

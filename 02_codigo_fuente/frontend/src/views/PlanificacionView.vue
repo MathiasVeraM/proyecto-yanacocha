@@ -424,38 +424,40 @@ onMounted(async () => {
   <main class="planning-page">
     <p v-if="errorReferencias" class="alert-error" role="alert">{{ errorReferencias }}</p>
 
-    <nav class="planning-tabs" role="tablist" aria-label="Secciones de planificación">
-      <button
-        v-for="tab in pestañas"
-        :key="tab.id"
-        class="planning-tab"
-        :class="{ active: pestana === tab.id }"
-        type="button"
-        role="tab"
-        :aria-selected="pestana === tab.id"
-        @click="cambiarPestana(tab.id)"
-      >
-        {{ tab.texto }}
-      </button>
-    </nav>
-
     <section v-if="pestana === 'actividades'" role="tabpanel" class="actividades">
       <p v-if="errorActividades" class="alert-error" role="alert">{{ errorActividades }}</p>
 
-      <IndicadoresDia
-        :fecha="ancla"
-        :actividades="delDia"
-        :ctx="ctx"
-        :hoy="hoy"
-        :ahora="ahora"
-        :obs-por-actividad="obsPorActividad"
-        :actualizando-id="actualizandoId"
-        @completar="completar"
-        @observar="observar"
-        @abrir="(a) => abrirDetalle(a)"
-      />
+      <nav class="planning-tabs" role="tablist" aria-label="Secciones de planificación">
+        <button
+          v-for="tab in pestañas"
+          :key="tab.id"
+          class="planning-tab"
+          :class="{ active: pestana === tab.id }"
+          type="button"
+          role="tab"
+          :aria-selected="pestana === tab.id"
+          @click="cambiarPestana(tab.id)"
+        >
+          {{ tab.texto }}
+        </button>
+      </nav>
 
-      <section class="cal" aria-label="Calendario de actividades">
+      <div class="actividades-layout">
+        <IndicadoresDia
+          class="indicadores-compactos"
+          :fecha="ancla"
+          :actividades="delDia"
+          :ctx="ctx"
+          :hoy="hoy"
+          :ahora="ahora"
+          :obs-por-actividad="obsPorActividad"
+          :actualizando-id="actualizandoId"
+          @completar="completar"
+          @observar="observar"
+          @abrir="(a) => abrirDetalle(a)"
+        />
+
+        <section class="cal" aria-label="Calendario de actividades">
         <header class="cal-top">
           <div class="cal-tit">
             <h2>{{ tituloMes }}</h2>
@@ -475,29 +477,32 @@ onMounted(async () => {
         </header>
 
         <div class="leyenda">
-          <button
-            v-for="t in TIPOS_ACTIVIDAD"
-            :key="t"
-            type="button"
-            class="ley"
-            :class="[`t-${t}`, { off: !tipos[t] }]"
-            :aria-pressed="tipos[t]"
-            @click="tipos[t] = !tipos[t]"
-          >
-            <span class="dot" />{{ TIPO_LABEL[t] }} <span class="cnt">{{ conteo[t] }}</span>
-          </button>
-          <span class="sep" aria-hidden="true" />
-          <select v-model.number="idAnimal" aria-label="Filtrar por ejemplar">
-            <option :value="0">Todos los ejemplares</option>
-            <option v-for="a in animales" :key="a.id_animal" :value="a.id_animal">
-              {{ a.nombre ? `${a.nombre} · ${a.taxonomia.nombre_comun}` : a.taxonomia.nombre_comun }}
-            </option>
-          </select>
-          <select v-model="estado" aria-label="Filtrar por estado">
-            <option value="todas">Todos los estados</option>
-            <option value="pend">Pendientes</option>
-            <option value="hechas">Hechas</option>
-          </select>
+          <div class="leyenda-tipos" aria-label="Filtrar por tipo de actividad">
+            <button
+              v-for="t in TIPOS_ACTIVIDAD"
+              :key="t"
+              type="button"
+              class="ley"
+              :class="[`t-${t}`, { off: !tipos[t] }]"
+              :aria-pressed="tipos[t]"
+              @click="tipos[t] = !tipos[t]"
+            >
+              <span class="dot" />{{ TIPO_LABEL[t] }} <span class="cnt">{{ conteo[t] }}</span>
+            </button>
+          </div>
+          <div class="filtros-calendario">
+            <select v-model.number="idAnimal" aria-label="Filtrar por ejemplar">
+              <option :value="0">Todos los ejemplares</option>
+              <option v-for="a in animales" :key="a.id_animal" :value="a.id_animal">
+                {{ a.nombre ? `${a.nombre} · ${a.taxonomia.nombre_comun}` : a.taxonomia.nombre_comun }}
+              </option>
+            </select>
+            <select v-model="estado" aria-label="Filtrar por estado">
+              <option value="todas">Todos los estados</option>
+              <option value="pend">Pendientes</option>
+              <option value="hechas">Hechas</option>
+            </select>
+          </div>
         </div>
 
         <div class="cal-cuerpo" :class="{ 'con-panel': panel }">
@@ -553,10 +558,25 @@ onMounted(async () => {
             @observar="observar"
           />
         </div>
-      </section>
+        </section>
+      </div>
     </section>
 
     <section v-else role="tabpanel">
+      <nav class="planning-tabs dietas-tabs" role="tablist" aria-label="Secciones de planificación">
+        <button
+          v-for="tab in pestañas"
+          :key="tab.id"
+          class="planning-tab"
+          :class="{ active: pestana === tab.id }"
+          type="button"
+          role="tab"
+          :aria-selected="pestana === tab.id"
+          @click="cambiarPestana(tab.id)"
+        >
+          {{ tab.texto }}
+        </button>
+      </nav>
       <DietaFormPanel
         :abierto="formularioDietaAbierto"
         :animales="animales"
@@ -641,11 +661,112 @@ onMounted(async () => {
   gap: 4px;
   overflow-x: auto;
   padding: 4px;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   scrollbar-width: thin;
+}
+
+.actividades-layout {
+  display: grid;
+  grid-template-columns: minmax(210px, 250px) minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.indicadores-compactos {
+  min-width: 0;
+}
+
+.indicadores-compactos :deep(.indicadores) {
+  gap: 9px;
+  margin: 0;
+}
+
+.indicadores-compactos :deep(.ind-h) {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 1px;
+}
+
+.indicadores-compactos :deep(.ind-h h2) {
+  font-size: 15px;
+}
+
+.indicadores-compactos :deep(.ind-h span) {
+  font-size: 11px;
+}
+
+.indicadores-compactos :deep(.grid) {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+
+.indicadores-compactos :deep(.ind) {
+  grid-template-columns: 32px minmax(0, 1fr) 36px;
+  gap: 9px;
+  min-height: 58px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+}
+
+.indicadores-compactos :deep(.ico) {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.indicadores-compactos :deep(.ico svg) {
+  width: 18px;
+  height: 18px;
+}
+
+.indicadores-compactos :deep(.tit) {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.indicadores-compactos :deep(.big) {
+  font-size: 19px;
+}
+
+.indicadores-compactos :deep(.big small) {
+  font-size: 12px;
+}
+
+.indicadores-compactos :deep(.big em) {
+  font-size: 11px;
+}
+
+.indicadores-compactos :deep(.pie) {
+  font-size: 10px;
+}
+
+.indicadores-compactos :deep(.ring) {
+  width: 36px;
+  height: 36px;
+}
+
+.indicadores-compactos :deep(.ring span) {
+  width: 29px;
+  height: 29px;
+  font-size: 10px;
+}
+
+.indicadores-compactos :deep(.caret) {
+  top: 3px;
+  right: 5px;
+}
+
+.dietas-tabs {
+  margin-bottom: 20px;
+}
+
+.cal {
+  min-width: 0;
 }
 
 .planning-tab {
@@ -772,26 +893,39 @@ onMounted(async () => {
 }
 
 .leyenda {
+  display: grid;
+  margin: 0 20px 14px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.leyenda-tipos {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  margin: 0 20px 14px;
-  padding: 5px;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-surface);
+  gap: 3px;
+}
+
+.filtros-calendario {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border);
 }
 
 .ley {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 6px;
+  padding: 5px 9px;
   border: none;
   border-radius: 999px;
   background: none;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -822,18 +956,12 @@ onMounted(async () => {
   box-shadow: inset 0 0 0 1.5px var(--c);
 }
 
-.sep {
-  width: 1px;
-  height: 20px;
-  margin: 0 6px;
-  background: var(--color-border);
-}
-
 .leyenda select {
   height: 30px;
+  min-width: 180px;
   padding: 0 10px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--color-surface-alt);
   font-size: 13px;
 }
@@ -884,13 +1012,33 @@ onMounted(async () => {
   }
 }
 
+@media (max-width: 1050px) {
+  .actividades-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .indicadores-compactos :deep(.grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 600px) {
   .planning-tabs {
     display: flex;
   }
 
   .leyenda {
-    border-radius: var(--radius-lg);
+    margin-right: 10px;
+    margin-left: 10px;
+  }
+
+  .filtros-calendario {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .leyenda select {
+    width: 100%;
   }
 }
 </style>
