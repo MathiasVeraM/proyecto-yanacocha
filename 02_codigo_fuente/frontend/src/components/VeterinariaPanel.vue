@@ -5,9 +5,9 @@ import VeterinariaRegistroModal from '@/components/VeterinariaRegistroModal.vue'
 import { ApiError } from '@/api/http'
 import { veterinariaApi } from '@/api/veterinaria'
 import { formatearFecha } from '@/config/animales'
-import type { Diagnostico, Tratamiento } from '@/types/veterinaria'
+import type { Diagnostico, SignosVitalesHistorial, Tratamiento } from '@/types/veterinaria'
 
-const props = defineProps<{ idAnimal: number }>()
+const props = defineProps<{ idAnimal: number; nombreEjemplar?: string }>()
 
 type RegistroExistente =
   | { tipo: 'diagnostico'; datos: Diagnostico }
@@ -26,13 +26,113 @@ const registrosPorPagina = 5
 const cantidadTratamientos = computed(
   () => Object.values(tratamientos.value).reduce((total, items) => total + items.length, 0),
 )
-const ultimaRevision = computed(
-  () =>
-    [...diagnosticos.value].sort(
-      (a, b) => new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime(),
-    )[0] ?? null,
+// Historial de signos vitales en orden cronológico (el más antiguo primero)
+const historialSignos = ref<SignosVitalesHistorial[]>([])
+const historialOrdenado = computed(() =>
+  [...historialSignos.value].sort(
+    (a, b) => new Date(a.fecha_diagnostico).getTime() - new Date(b.fecha_diagnostico).getTime(),
+  ),
 )
-const signosUltimaRevision = computed(() => ultimaRevision.value?.signos_vitales ?? null)
+// La última revisión es el registro más reciente que trae signos vitales
+const signosUltimaRevision = computed(() => historialOrdenado.value.at(-1) ?? null)
+
+type ClaveNumerica =
+  | 'peso_kg'
+  | 'temperatura_c'
+  | 'frecuencia_cardiaca_lpm'
+  | 'frecuencia_respiratoria_rpm'
+  | 'tiempo_llenado_capilar_s'
+
+const SIGNOS_NUMERICOS: { clave: ClaveNumerica; etiqueta: string; unidad: string; decimales: number }[] = [
+  { clave: 'peso_kg', etiqueta: 'Peso', unidad: 'kg', decimales: 3 },
+  { clave: 'temperatura_c', etiqueta: 'Temperatura', unidad: '°C', decimales: 1 },
+  { clave: 'frecuencia_cardiaca_lpm', etiqueta: 'Frec. cardíaca', unidad: 'lpm', decimales: 0 },
+  { clave: 'frecuencia_respiratoria_rpm', etiqueta: 'Frec. respiratoria', unidad: 'rpm', decimales: 0 },
+  { clave: 'tiempo_llenado_capilar_s', etiqueta: 'Llenado capilar', unidad: 's', decimales: 1 },
+]
+
+// Medidas del sparkline (en unidades del viewBox)
+const SPARK_ANCHO = 72
+const SPARK_ALTO = 22
+const SPARK_PUNTOS = 10
+
+const tarjetasNumericas = computed(() =>
+  SIGNOS_NUMERICOS.map(({ clave, etiqueta, unidad, decimales }) => {
+    const actual = signosUltimaRevision.value?.[clave] ?? null
+    const serie = historialOrdenado.value
+      .map((s) => s[clave])
+      .filter((v): v is number => v !== null)
+      .slice(-SPARK_PUNTOS)
+
+    // Variación respecto al registro anterior que tenga este signo
+    let variacion: string | null = null
+    if (actual !== null && serie.length >= 2) {
+      const anterior = serie[serie.length - 2]!
+      const diferencia = Number((actual - anterior).toFixed(decimales))
+      variacion =
+        diferencia === 0
+          ? '='
+          : `${diferencia > 0 ? '▲' : '▼'} ${formatoNumero(Math.abs(diferencia), decimales)}`
+    }
+
+    let puntos = ''
+    if (serie.length >= 2) {
+      const minimo = Math.min(...serie)
+      const rango = Math.max(...serie) - minimo || 1
+      puntos = serie
+        .map((v, i) => {
+          const x = (i / (serie.length - 1)) * SPARK_ANCHO
+          // Con todos los valores iguales la línea queda centrada
+          const y = Math.max(...serie) === minimo ? SPARK_ALTO / 2 : SPARK_ALTO - 2 - ((v - minimo) / rango) * (SPARK_ALTO - 4)
+          return `${x.toFixed(1)},${y.toFixed(1)}`
+        })
+        .join(' ')
+    }
+
+    return {
+      clave,
+      etiqueta,
+      valor: actual !== null ? `${formatoNumero(actual, decimales)} ${unidad}` : '—',
+      variacion,
+      puntos,
+    }
+  }),
+)
+
+// Signos categóricos: se resaltan los valores fuera de lo normal
+const tarjetasCategoricas = computed(() => {
+  const s = signosUltimaRevision.value
+  return [
+    {
+      clave: 'hidratacion',
+      etiqueta: 'Hidratación',
+      valor: s?.hidratacion ? etiquetaCategoria(s.hidratacion) : '—',
+      anomalo: !!s?.hidratacion && s.hidratacion !== 'normal',
+    },
+    {
+      clave: 'mucosas',
+      etiqueta: 'Mucosas',
+      valor: s?.mucosas ? etiquetaCategoria(s.mucosas) : '—',
+      anomalo: !!s?.mucosas && s.mucosas !== 'rosadas',
+    },
+    {
+      clave: 'actitud',
+      etiqueta: 'Actitud',
+      valor: s?.actitud ? etiquetaCategoria(s.actitud) : '—',
+      anomalo: !!s?.actitud && s.actitud !== 'alerta',
+    },
+  ]
+})
+
+function fechaCorta(fecha: string) {
+  const valor = new Date(fecha)
+  const mismoAnio = valor.getFullYear() === new Date().getFullYear()
+  return new Intl.DateTimeFormat('es-EC', {
+    day: 'numeric',
+    month: 'short',
+    ...(mismoAnio ? {} : { year: 'numeric' }),
+  }).format(valor)
+}
 const diagnosticosOrdenados = computed(() =>
   [...diagnosticos.value].sort(
     (a, b) => new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime(),
@@ -87,15 +187,24 @@ async function cargar() {
   error.value = ''
   try {
     const registros = await veterinariaApi.listarDiagnosticos(idAnimal)
-    const pares = await Promise.all(
-      registros.map(async (diagnostico) => [
-        diagnostico.id_diagnostico,
-        await veterinariaApi.listarTratamientos(diagnostico.id_diagnostico),
-      ] as const),
-    )
+    const [pares, signos] = await Promise.all([
+      Promise.all(
+        registros.map(async (diagnostico) => [
+          diagnostico.id_diagnostico,
+          await veterinariaApi.listarTratamientos(diagnostico.id_diagnostico),
+        ] as const),
+      ),
+      // Si el historial de signos falla, se arma con los signos que ya traen los diagnósticos
+      veterinariaApi.listarSignosVitales(idAnimal).catch(() =>
+        registros.flatMap((d) =>
+          d.signos_vitales ? [{ ...d.signos_vitales, fecha_diagnostico: d.fecha_registro }] : [],
+        ),
+      ),
+    ])
     if (idAnimal !== props.idAnimal) return
     diagnosticos.value = registros
     tratamientos.value = Object.fromEntries(pares)
+    historialSignos.value = signos
   } catch (e) {
     if (idAnimal === props.idAnimal) {
       error.value = e instanceof ApiError ? e.message : 'No se pudo cargar el historial veterinario'
@@ -145,72 +254,54 @@ watch(paginasHistorial, (total) => {
   <section class="veterinaria">
     <section class="ultima-revision" aria-label="Signos vitales de la última revisión">
       <header class="ultima-revision-header">
-        <h2>Signos vitales · última revisión</h2>
-        <time v-if="ultimaRevision" :datetime="ultimaRevision.fecha_registro">
-          {{ fechaHora(ultimaRevision.fecha_registro) }}
-        </time>
-        <span v-else>Sin revisiones registradas</span>
+        <h2>
+          Signos vitales · última revisión
+          <template v-if="signosUltimaRevision">
+            ·
+            <time :datetime="signosUltimaRevision.fecha_diagnostico" :title="fechaHora(signosUltimaRevision.fecha_diagnostico)">
+              {{ fechaCorta(signosUltimaRevision.fecha_diagnostico) }}
+            </time>
+          </template>
+        </h2>
+        <span v-if="signosUltimaRevision?.condicion_corporal" class="condicion">
+          Condición corporal: <strong>{{ condicionCorporal(signosUltimaRevision.condicion_corporal) }}</strong>
+        </span>
+        <span v-else-if="!signosUltimaRevision">Sin signos vitales registrados</span>
       </header>
       <div class="signos-resumen">
-        <article class="signo-resumen">
-          <span>Temperatura</span>
-          <strong>
-            {{ signosUltimaRevision?.temperatura_c !== null && signosUltimaRevision?.temperatura_c !== undefined
-              ? `${formatoNumero(signosUltimaRevision.temperatura_c)} °C`
-              : '—' }}
-          </strong>
+        <article v-for="t in tarjetasNumericas" :key="t.clave" class="signo-resumen">
+          <span>{{ t.etiqueta }}</span>
+          <strong>{{ t.valor }}</strong>
+          <div v-if="t.puntos || t.variacion" class="tendencia">
+            <svg
+              v-if="t.puntos"
+              :viewBox="`-1 0 ${SPARK_ANCHO + 2} ${SPARK_ALTO}`"
+              :width="SPARK_ANCHO"
+              :height="SPARK_ALTO"
+              aria-hidden="true"
+            >
+              <polyline
+                :points="t.puntos"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <small v-if="t.variacion" :aria-label="`Variación respecto al registro anterior: ${t.variacion}`">
+              {{ t.variacion }}
+            </small>
+          </div>
         </article>
-        <article class="signo-resumen">
-          <span>Hidratación</span>
-          <strong>{{ signosUltimaRevision?.hidratacion ? etiquetaCategoria(signosUltimaRevision.hidratacion) : '—' }}</strong>
-        </article>
-        <article class="signo-resumen">
-          <span>Condición corporal</span>
-          <strong>
-            {{ signosUltimaRevision?.condicion_corporal
-              ? condicionCorporal(signosUltimaRevision.condicion_corporal)
-              : '—' }}
-          </strong>
-        </article>
-        <article class="signo-resumen">
-          <span>Frec. cardíaca</span>
-          <strong>
-            {{ signosUltimaRevision?.frecuencia_cardiaca_lpm != null
-              ? `${signosUltimaRevision.frecuencia_cardiaca_lpm} lpm`
-              : '—' }}
-          </strong>
-        </article>
-        <article class="signo-resumen">
-          <span>Frec. respiratoria</span>
-          <strong>
-            {{ signosUltimaRevision?.frecuencia_respiratoria_rpm != null
-              ? `${signosUltimaRevision.frecuencia_respiratoria_rpm} rpm`
-              : '—' }}
-          </strong>
-        </article>
-        <article class="signo-resumen">
-          <span>Peso actual</span>
-          <strong>
-            {{ signosUltimaRevision?.peso_kg != null
-              ? `${formatoNumero(signosUltimaRevision.peso_kg, 3)} kg`
-              : '—' }}
-          </strong>
-        </article>
-        <article class="signo-resumen">
-          <span>Llenado capilar</span>
-          <strong>
-            {{ signosUltimaRevision?.tiempo_llenado_capilar_s != null
-              ? `${formatoNumero(signosUltimaRevision.tiempo_llenado_capilar_s)} s`
-              : '—' }}
-          </strong>
-        </article>
-        <article class="signo-resumen">
-          <span>Mucosas</span>
-          <strong>{{ signosUltimaRevision?.mucosas ? etiquetaCategoria(signosUltimaRevision.mucosas) : '—' }}</strong>
-        </article>
-        <article class="signo-resumen">
-          <span>Actitud</span>
-          <strong>{{ signosUltimaRevision?.actitud ? etiquetaCategoria(signosUltimaRevision.actitud) : '—' }}</strong>
+        <article
+          v-for="t in tarjetasCategoricas"
+          :key="t.clave"
+          class="signo-resumen"
+          :class="{ anomalo: t.anomalo }"
+        >
+          <span>{{ t.etiqueta }}</span>
+          <strong>{{ t.valor }}</strong>
         </article>
       </div>
     </section>
@@ -362,6 +453,7 @@ watch(paginasHistorial, (total) => {
   <VeterinariaRegistroModal
     :open="modalAbierto"
     :id-animal="idAnimal"
+    :nombre-ejemplar="nombreEjemplar"
     :diagnosticos="diagnosticos"
     :registro="registroEditando"
     :tipo-inicial="tipoNuevo"
@@ -379,57 +471,96 @@ watch(paginasHistorial, (total) => {
   margin-bottom: 20px;
   padding: 16px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
 }
 
 .ultima-revision-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 6px 12px;
   margin-bottom: 12px;
 }
 
 .ultima-revision-header h2 {
   color: var(--color-text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
-.ultima-revision-header time,
+.ultima-revision-header time {
+  text-transform: none;
+}
+
 .ultima-revision-header > span {
   color: var(--color-text-subtle);
-  font-size: 10px;
+  font-size: 12px;
+}
+
+.ultima-revision-header .condicion strong {
+  color: var(--color-text);
+  font-weight: 600;
 }
 
 .signos-resumen {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .signo-resumen {
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: 4px;
-  min-height: 68px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
+  min-width: 0;
+  min-height: 84px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
   background: var(--color-input);
 }
 
 .signo-resumen span {
   color: var(--color-text-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .signo-resumen strong {
-  font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+/* Valores categóricos fuera de lo normal */
+.signo-resumen.anomalo {
+  background: var(--color-danger-soft);
+}
+
+.signo-resumen.anomalo strong {
+  color: var(--color-danger);
+}
+
+.tendencia {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+  color: var(--color-primary);
+}
+
+.tendencia svg {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.tendencia small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .historial-cabecera {
@@ -696,10 +827,13 @@ watch(paginasHistorial, (total) => {
   font-size: 12px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   .signos-resumen {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+@media (max-width: 720px) {
 
   .historial-cabecera {
     align-items: flex-start;

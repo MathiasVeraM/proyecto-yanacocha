@@ -91,3 +91,25 @@ export interface UsuarioActividad {
   apellido: string
   correo: string
 }
+
+// Observaciones de bienestar sobre una actividad (HU RF-10)
+export type CategoriaObservacion = 'recinto' | 'comportamiento' | 'estado_fisico'
+export type SeveridadObservacion = 'bajo' | 'medio' | 'alto'
+
+export interface Observacion {
+  id_observacion: number
+  id_actividad: number
+  categoria: CategoriaObservacion
+  severidad: SeveridadObservacion
+  detalle: string
+  // Lo calcula el servicio: estado físico o comportamiento con severidad media o alta
+  genera_alerta: boolean
+  id_usuario: number
+  fecha_registro: string
+}
+
+export interface ObservacionCreate {
+  categoria: CategoriaObservacion
+  severidad: SeveridadObservacion
+  detalle: string
+}

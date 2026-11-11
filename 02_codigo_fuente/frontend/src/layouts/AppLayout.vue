@@ -2,10 +2,12 @@
 import { computed, onMounted } from 'vue'
 import { RouterView } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
+import { useMenuLateral } from '@/composables/useMenuLateral'
 import { useAuthStore } from '@/stores/auth'
 import { useRolesStore } from '@/stores/roles'
 
 const auth = useAuthStore()
+const { contraido, alternar } = useMenuLateral()
 const rolesStore = useRolesStore()
 
 const nombreRol = computed(() => rolesStore.nombreDe(auth.payload?.id_rol))
@@ -18,18 +20,27 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="shell">
+  <div class="shell" :class="{ contraido }">
     <AppSidebar />
 
     <div class="main">
       <header class="topbar">
-        <label class="search">
-          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
-            <path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        <button
+          class="toggle-menu"
+          type="button"
+          :aria-label="contraido ? 'Mostrar menú' : 'Ocultar menú'"
+          :title="contraido ? 'Mostrar menú' : 'Ocultar menú'"
+          aria-controls="menu-lateral"
+          :aria-expanded="!contraido"
+          @click="alternar"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+            <path d="M9.5 4.5v15" />
+            <path v-if="contraido" d="m13.5 10 2 2-2 2" />
+            <path v-else d="m15.5 10-2 2 2 2" />
           </svg>
-          <input type="search" placeholder="Buscar ejemplar, especie…" />
-        </label>
+        </button>
 
         <button class="bell" aria-label="Notificaciones">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -62,6 +73,42 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 240px 1fr;
   height: 100%;
+  transition: grid-template-columns 0.2s ease;
+}
+
+.shell.contraido {
+  grid-template-columns: 72px 1fr;
+}
+
+.toggle-menu {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-right: auto;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.toggle-menu:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.toggle-menu svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell {
+    transition: none;
+  }
 }
 
 .main {
@@ -78,27 +125,6 @@ onMounted(() => {
   padding: 14px 24px;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
-}
-
-.search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 260px;
-  padding: 8px 12px;
-  background: var(--color-input);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-subtle);
-}
-
-.search input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: none;
-  outline: none;
-  font-size: 12px;
 }
 
 .bell {

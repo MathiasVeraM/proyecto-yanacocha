@@ -7,6 +7,7 @@ import { hoyIso } from '@/config/animales'
 import type {
   Diagnostico,
   DiagnosticoCreate,
+  SignosVitales,
   SignosVitalesCreate,
   Tratamiento,
   TratamientoCreate,
@@ -17,10 +18,13 @@ type RegistroExistente =
   | { tipo: 'tratamiento'; datos: Tratamiento }
 
 type ValorNumerico = string | number
+type CampoSigno = Exclude<keyof SignosVitales, 'id_signos_vitales' | 'id_diagnostico'>
 
 const props = defineProps<{
   open: boolean
   idAnimal: number
+  // Nombre que se muestra en el subtítulo ("Ejemplar: Ayni")
+  nombreEjemplar?: string
   diagnosticos: Diagnostico[]
   registro?: RegistroExistente | null
   tipoInicial?: 'diagnostico' | 'tratamiento'
@@ -28,10 +32,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: []; saved: [] }>()
 const tipo = ref<'diagnostico' | 'tratamiento'>('diagnostico')
-const pestanaActiva = ref<'diagnostico' | 'signos'>('diagnostico')
 const error = ref('')
 const guardando = ref(false)
-const signosHabilitados = ref(false)
 const formDiagnostico = reactive({ diagnostico: '', observaciones: '', es_critico: false })
 const formSignos = reactive({
   peso_kg: '' as ValorNumerico,
@@ -54,6 +56,27 @@ const formTratamiento = reactive({
   estado: 'en_curso' as Tratamiento['estado'],
 })
 
+const TIPOS = [
+  { valor: 'diagnostico', label: 'Diagnóstico' },
+  { valor: 'tratamiento', label: 'Tratamiento' },
+] as const
+
+const HIDRATACION = {
+  normal: 'Normal',
+  deshidratacion_leve: 'Deshidratación leve',
+  deshidratacion_moderada: 'Deshidratación moderada',
+  deshidratacion_severa: 'Deshidratación severa',
+}
+const CONDICION = { 1: 'Caquéctico', 2: 'Delgado', 3: 'Óptimo', 4: 'Sobrepeso', 5: 'Obeso' } as Record<number, string>
+const MUCOSAS = {
+  rosadas: 'Rosadas',
+  palidas: 'Pálidas',
+  cianoticas: 'Cianóticas',
+  ictericas: 'Ictéricas',
+  congestionadas: 'Congestionadas',
+}
+const ACTITUD = { alerta: 'Alerta', deprimido: 'Deprimido', estuporoso: 'Estuporoso', agitado: 'Agitado' }
+
 const editando = computed(() => !!props.registro)
 const diagnosticosOrdenados = computed(() =>
   [...props.diagnosticos].sort(
@@ -61,14 +84,44 @@ const diagnosticosOrdenados = computed(() =>
   ),
 )
 
-function navegarPestanas(event: KeyboardEvent) {
-  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
-  event.preventDefault()
-  pestanaActiva.value = pestanaActiva.value === 'diagnostico' ? 'signos' : 'diagnostico'
-  document
-    .getElementById(pestanaActiva.value === 'diagnostico' ? 'pestana-diagnostico' : 'pestana-signos')
-    ?.focus()
+// Último valor registrado de cada signo (el más reciente que no esté vacío), para usarlo de referencia
+const ultimos = computed(() => {
+  const resultado: Partial<Record<CampoSigno, string>> = {}
+  const numero = (valor: number, decimales: number) =>
+    new Intl.NumberFormat('es-EC', { maximumFractionDigits: decimales }).format(valor)
+  for (const d of diagnosticosOrdenados.value) {
+    const s = d.signos_vitales
+    if (!s) continue
+    if (s.peso_kg !== null) resultado.peso_kg ??= `${numero(s.peso_kg, 3)} kg`
+    if (s.temperatura_c !== null) resultado.temperatura_c ??= `${numero(s.temperatura_c, 1)} °C`
+    if (s.frecuencia_cardiaca_lpm !== null) resultado.frecuencia_cardiaca_lpm ??= `${s.frecuencia_cardiaca_lpm} lpm`
+    if (s.frecuencia_respiratoria_rpm !== null) {
+      resultado.frecuencia_respiratoria_rpm ??= `${s.frecuencia_respiratoria_rpm} rpm`
+    }
+    if (s.tiempo_llenado_capilar_s !== null) {
+      resultado.tiempo_llenado_capilar_s ??= `${numero(s.tiempo_llenado_capilar_s, 1)} s`
+    }
+    if (s.hidratacion) resultado.hidratacion ??= HIDRATACION[s.hidratacion]
+    if (s.condicion_corporal !== null) {
+      resultado.condicion_corporal ??= `${s.condicion_corporal} · ${CONDICION[s.condicion_corporal] ?? ''}`
+    }
+    if (s.mucosas) resultado.mucosas ??= MUCOSAS[s.mucosas]
+    if (s.actitud) resultado.actitud ??= ACTITUD[s.actitud]
+  }
+  return resultado
+})
+
+const hayUltimos = computed(() => Object.keys(ultimos.value).length > 0)
+
+function referencia(campo: CampoSigno, vacio = '—') {
+  const valor = ultimos.value[campo]
+  return valor ? `Último: ${valor}` : vacio
 }
+
+// Los signos se guardan si se llenó al menos uno; si no, el diagnóstico va sin signos
+const haySignos = computed(() =>
+  Object.values(formSignos).some((valor) => valor !== '' && valor !== null),
+)
 
 function numeroOpcional(
   valor: ValorNumerico,
@@ -110,10 +163,8 @@ watch(
     if (!abierto) return
     error.value = ''
     tipo.value = props.registro?.tipo ?? props.tipoInicial ?? 'diagnostico'
-    pestanaActiva.value = 'diagnostico'
     const signosExistentes =
       props.registro?.tipo === 'diagnostico' ? props.registro.datos.signos_vitales : null
-    signosHabilitados.value = !!signosExistentes
     Object.assign(formDiagnostico, {
       diagnostico: props.registro?.tipo === 'diagnostico' ? props.registro.datos.diagnostico : '',
       observaciones:
@@ -153,14 +204,13 @@ async function guardar() {
   try {
     if (tipo.value === 'diagnostico') {
       if (!formDiagnostico.diagnostico.trim()) {
-        pestanaActiva.value = 'diagnostico'
         error.value = 'Ingresa el motivo o título del diagnóstico.'
         return
       }
 
       let signosVitales: SignosVitalesCreate | null | undefined
-      if (signosHabilitados.value) {
-        const signos: SignosVitalesCreate = {
+      if (haySignos.value) {
+        signosVitales = {
           peso_kg: numeroOpcional(formSignos.peso_kg, 'Peso', { minimo: 0.001, decimales: 3 }),
           temperatura_c: numeroOpcional(formSignos.temperatura_c, 'Temperatura', {
             minimo: 0,
@@ -191,12 +241,8 @@ async function guardar() {
           mucosas: formSignos.mucosas || null,
           actitud: formSignos.actitud || null,
         }
-        if (Object.values(signos).every((valor) => valor === null)) {
-          error.value = 'Ingresa al menos un signo vital o desactiva la opción.'
-          return
-        }
-        signosVitales = signos
       } else if (props.registro?.tipo === 'diagnostico' && props.registro.datos.signos_vitales) {
+        // Se vaciaron todos los signos de un registro que sí los tenía: se eliminan
         signosVitales = null
       }
 
@@ -249,99 +295,68 @@ async function guardar() {
   <BaseModal
     :open="open"
     :title="editando ? 'Editar registro clínico' : 'Nuevo registro clínico'"
-    subtitle="Historial veterinario del ejemplar"
-    :width="tipo === 'diagnostico' ? '720px' : '560px'"
+    :subtitle="nombreEjemplar ? `Ejemplar: ${nombreEjemplar}` : 'Historial veterinario del ejemplar'"
+    width="1000px"
     @close="emit('close')"
   >
     <form class="registro-form" @submit.prevent="guardar">
-      <template v-if="tipo === 'diagnostico'">
-        <div class="pestanas" role="tablist" aria-label="Secciones del diagnóstico">
+      <!-- Tipo: solo se elige al crear; al editar se mantiene el del registro -->
+      <div class="field">
+        <span class="etiqueta" id="tipo-registro">Tipo</span>
+        <div class="pastillas" role="radiogroup" aria-labelledby="tipo-registro">
           <button
-            id="pestana-diagnostico"
+            v-for="t in TIPOS"
+            :key="t.valor"
             type="button"
-            class="pestana"
-            :class="{ activa: pestanaActiva === 'diagnostico' }"
-            role="tab"
-            :aria-selected="pestanaActiva === 'diagnostico'"
-            :tabindex="pestanaActiva === 'diagnostico' ? 0 : -1"
-            aria-controls="panel-diagnostico"
-            @click="pestanaActiva = 'diagnostico'"
-            @keydown="navegarPestanas"
+            class="pastilla"
+            :class="{ activa: tipo === t.valor }"
+            role="radio"
+            :aria-checked="tipo === t.valor"
+            :disabled="editando ? tipo !== t.valor : t.valor === 'tratamiento' && diagnosticos.length === 0"
+            :title="
+              !editando && t.valor === 'tratamiento' && diagnosticos.length === 0
+                ? 'Registra primero un diagnóstico'
+                : undefined
+            "
+            @click="tipo = t.valor"
           >
-            Diagnóstico
-          </button>
-          <button
-            id="pestana-signos"
-            type="button"
-            class="pestana"
-            :class="{ activa: pestanaActiva === 'signos' }"
-            role="tab"
-            :aria-selected="pestanaActiva === 'signos'"
-            :tabindex="pestanaActiva === 'signos' ? 0 : -1"
-            aria-controls="panel-signos"
-            @click="pestanaActiva = 'signos'"
-            @keydown="navegarPestanas"
-          >
-            Signos vitales
-            <span v-if="signosHabilitados" class="pestana-indicador" aria-label="Activados">•</span>
+            {{ t.label }}
           </button>
         </div>
+      </div>
 
-        <section
-          v-if="pestanaActiva === 'diagnostico'"
-          id="panel-diagnostico"
-          class="panel-pestana"
-          role="tabpanel"
-          tabindex="0"
-          aria-labelledby="pestana-diagnostico"
-        >
-          <div class="diagnostico-campos">
-            <div class="field">
-              <label for="diagnostico">Motivo / título</label>
-              <input
-                id="diagnostico"
-                v-model="formDiagnostico.diagnostico"
-                class="input"
-                required
-                maxlength="5000"
-                placeholder="Ej. Control de rutina, infección respiratoria…"
-              />
-            </div>
-            <div class="field">
-              <label for="observaciones">Descripción clínica</label>
-              <textarea
-                id="observaciones"
-                v-model="formDiagnostico.observaciones"
-                class="input"
-                rows="4"
-                placeholder="Hallazgos, síntomas o plan de seguimiento…"
-              />
-            </div>
-            <label class="check critico-check">
-              <input v-model="formDiagnostico.es_critico" type="checkbox" />
-              Marcar como diagnóstico crítico
-            </label>
+      <div v-if="tipo === 'diagnostico'" class="diagnostico-layout">
+        <div class="diagnostico-campos">
+          <div class="field">
+            <label for="diagnostico">Título</label>
+            <input
+              id="diagnostico"
+              v-model="formDiagnostico.diagnostico"
+              class="input"
+              required
+              maxlength="5000"
+              placeholder="Ej. Control de rutina, infección respiratoria…"
+            />
           </div>
-        </section>
-
-        <section
-          v-else
-          id="panel-signos"
-          class="panel-pestana"
-          role="tabpanel"
-          tabindex="0"
-          aria-labelledby="pestana-signos"
-        >
-          <label class="check activar-signos">
-            <input v-model="signosHabilitados" type="checkbox" />
-            <span>
-              <strong>Registrar signos vitales</strong>
-              <small>Opcional · de esta revisión</small>
-            </span>
+          <div class="field descripcion">
+            <label for="observaciones">Descripción / observaciones</label>
+            <textarea
+              id="observaciones"
+              v-model="formDiagnostico.observaciones"
+              class="input"
+              rows="6"
+              placeholder="Hallazgos, síntomas o plan de seguimiento…"
+            />
+          </div>
+          <label class="check">
+            <input v-model="formDiagnostico.es_critico" type="checkbox" />
+            Marcar como crítico
           </label>
-          <fieldset v-if="signosHabilitados" class="signos-fieldset">
-            <legend>Mediciones clínicas</legend>
-            <div class="signos-grid">
+        </div>
+
+        <details class="signos" open>
+          <summary>Signos vitales</summary>
+          <div class="signos-grid">
             <div class="field">
               <label for="peso">Peso (kg)</label>
               <input
@@ -351,7 +366,7 @@ async function guardar() {
                 type="number"
                 min="0.001"
                 step="0.001"
-                placeholder="—"
+                :placeholder="referencia('peso_kg')"
               />
             </div>
             <div class="field">
@@ -364,11 +379,11 @@ async function guardar() {
                 min="0"
                 max="60"
                 step="0.1"
-                placeholder="—"
+                :placeholder="referencia('temperatura_c')"
               />
             </div>
             <div class="field">
-              <label for="frecuencia-cardiaca">Frecuencia cardíaca (lpm)</label>
+              <label for="frecuencia-cardiaca">Frec. cardíaca (lpm)</label>
               <input
                 id="frecuencia-cardiaca"
                 v-model="formSignos.frecuencia_cardiaca_lpm"
@@ -376,11 +391,11 @@ async function guardar() {
                 type="number"
                 min="1"
                 step="1"
-                placeholder="—"
+                :placeholder="referencia('frecuencia_cardiaca_lpm')"
               />
             </div>
             <div class="field">
-              <label for="frecuencia-respiratoria">Frecuencia respiratoria (rpm)</label>
+              <label for="frecuencia-respiratoria">Frec. respiratoria (rpm)</label>
               <input
                 id="frecuencia-respiratoria"
                 v-model="formSignos.frecuencia_respiratoria_rpm"
@@ -388,7 +403,7 @@ async function guardar() {
                 type="number"
                 min="1"
                 step="1"
-                placeholder="—"
+                :placeholder="referencia('frecuencia_respiratoria_rpm')"
               />
             </div>
             <div class="field">
@@ -400,62 +415,69 @@ async function guardar() {
                 type="number"
                 min="0.1"
                 step="0.1"
-                placeholder="—"
+                :placeholder="referencia('tiempo_llenado_capilar_s')"
               />
             </div>
             <div class="field">
               <label for="hidratacion">Hidratación</label>
-              <select id="hidratacion" v-model="formSignos.hidratacion" class="input">
-                <option value="">Sin registrar</option>
-                <option value="normal">Normal</option>
-                <option value="deshidratacion_leve">Deshidratación leve</option>
-                <option value="deshidratacion_moderada">Deshidratación moderada</option>
-                <option value="deshidratacion_severa">Deshidratación severa</option>
+              <select
+                id="hidratacion"
+                v-model="formSignos.hidratacion"
+                class="input"
+                :class="{ vacio: !formSignos.hidratacion }"
+              >
+                <option value="">{{ referencia('hidratacion', 'Sin registrar') }}</option>
+                <option v-for="(label, valor) in HIDRATACION" :key="valor" :value="valor">{{ label }}</option>
               </select>
             </div>
             <div class="field">
               <label for="condicion-corporal">Condición corporal (1–5)</label>
-              <select id="condicion-corporal" v-model="formSignos.condicion_corporal" class="input">
-                <option value="">Sin registrar</option>
-                <option value="1">1 · Caquéctico</option>
-                <option value="2">2 · Delgado</option>
-                <option value="3">3 · Óptimo</option>
-                <option value="4">4 · Sobrepeso</option>
-                <option value="5">5 · Obeso</option>
+              <select
+                id="condicion-corporal"
+                v-model="formSignos.condicion_corporal"
+                class="input"
+                :class="{ vacio: formSignos.condicion_corporal === '' }"
+              >
+                <option value="">{{ referencia('condicion_corporal', 'Sin registrar') }}</option>
+                <option v-for="(label, valor) in CONDICION" :key="valor" :value="valor">
+                  {{ valor }} · {{ label }}
+                </option>
               </select>
             </div>
             <div class="field">
               <label for="mucosas">Mucosas</label>
-              <select id="mucosas" v-model="formSignos.mucosas" class="input">
-                <option value="">Sin registrar</option>
-                <option value="rosadas">Rosadas</option>
-                <option value="palidas">Pálidas</option>
-                <option value="cianoticas">Cianóticas</option>
-                <option value="ictericas">Ictéricas</option>
-                <option value="congestionadas">Congestionadas</option>
+              <select
+                id="mucosas"
+                v-model="formSignos.mucosas"
+                class="input"
+                :class="{ vacio: !formSignos.mucosas }"
+              >
+                <option value="">{{ referencia('mucosas', 'Sin registrar') }}</option>
+                <option v-for="(label, valor) in MUCOSAS" :key="valor" :value="valor">{{ label }}</option>
               </select>
             </div>
             <div class="field">
               <label for="actitud">Actitud</label>
-              <select id="actitud" v-model="formSignos.actitud" class="input">
-                <option value="">Sin registrar</option>
-                <option value="alerta">Alerta</option>
-                <option value="deprimido">Deprimido</option>
-                <option value="estuporoso">Estuporoso</option>
-                <option value="agitado">Agitado</option>
+              <select
+                id="actitud"
+                v-model="formSignos.actitud"
+                class="input"
+                :class="{ vacio: !formSignos.actitud }"
+              >
+                <option value="">{{ referencia('actitud', 'Sin registrar') }}</option>
+                <option v-for="(label, valor) in ACTITUD" :key="valor" :value="valor">{{ label }}</option>
               </select>
             </div>
-            </div>
-            <p class="ayuda-signos">Completa solo las mediciones disponibles. Los rangos dependen de la especie.</p>
-          </fieldset>
-          <p v-else class="ayuda-signos signos-desactivados">
-            Los signos vitales son opcionales. Activa esta opción para registrar las mediciones de esta revisión.
+          </div>
+          <p class="ayuda-signos">
+            {{ hayUltimos ? 'Se muestra el último valor como referencia. ' : '' }}Completa solo las mediciones
+            disponibles; los rangos dependen de la especie.
           </p>
-        </section>
-      </template>
+        </details>
+      </div>
 
-      <template v-else>
-        <div v-if="!editando" class="field">
+      <div v-else class="tratamiento-grid">
+        <div v-if="!editando" class="field doble">
           <label for="diagnostico-asociado">Diagnóstico asociado</label>
           <select id="diagnostico-asociado" v-model.number="formTratamiento.id_diagnostico" class="input" required>
             <option :value="0" disabled>Selecciona un diagnóstico</option>
@@ -464,7 +486,7 @@ async function guardar() {
             </option>
           </select>
         </div>
-        <div class="field">
+        <div class="field doble">
           <label for="tratamiento">Tratamiento / procedimiento</label>
           <input
             id="tratamiento"
@@ -475,29 +497,27 @@ async function guardar() {
             placeholder="Medicamento o procedimiento"
           />
         </div>
-        <div class="form-grid">
-          <div class="field">
-            <label for="dosis">Dosis</label>
-            <input id="dosis" v-model="formTratamiento.dosis" class="input" maxlength="100" placeholder="Ej. 5 ml" />
-          </div>
-          <div class="field">
-            <label for="frecuencia">Frecuencia</label>
-            <input
-              id="frecuencia"
-              v-model="formTratamiento.frecuencia"
-              class="input"
-              maxlength="100"
-              placeholder="Ej. Cada 12 horas"
-            />
-          </div>
-          <div class="field">
-            <label for="fecha-inicio">Fecha de inicio</label>
-            <input id="fecha-inicio" v-model="formTratamiento.fecha_inicio" class="input" type="date" required />
-          </div>
-          <div class="field">
-            <label for="fecha-fin">Fecha de fin</label>
-            <input id="fecha-fin" v-model="formTratamiento.fecha_fin" class="input" type="date" />
-          </div>
+        <div class="field">
+          <label for="dosis">Dosis</label>
+          <input id="dosis" v-model="formTratamiento.dosis" class="input" maxlength="100" placeholder="Ej. 5 ml" />
+        </div>
+        <div class="field">
+          <label for="frecuencia">Frecuencia</label>
+          <input
+            id="frecuencia"
+            v-model="formTratamiento.frecuencia"
+            class="input"
+            maxlength="100"
+            placeholder="Ej. Cada 12 horas"
+          />
+        </div>
+        <div class="field">
+          <label for="fecha-inicio">Fecha de inicio</label>
+          <input id="fecha-inicio" v-model="formTratamiento.fecha_inicio" class="input" type="date" required />
+        </div>
+        <div class="field">
+          <label for="fecha-fin">Fecha de fin</label>
+          <input id="fecha-fin" v-model="formTratamiento.fecha_fin" class="input" type="date" />
         </div>
         <div class="field">
           <label for="estado-tratamiento">Estado</label>
@@ -507,7 +527,7 @@ async function guardar() {
             <option value="suspendido">Suspendido</option>
           </select>
         </div>
-      </template>
+      </div>
 
       <p v-if="error" class="alert-error">{{ error }}</p>
       <footer class="acciones">
@@ -529,141 +549,113 @@ async function guardar() {
   gap: 16px;
 }
 
-.pestanas {
-  display: flex;
-  gap: 6px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.pestana {
-  position: relative;
-  padding: 9px 14px;
-  border: 0;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  background: transparent;
+.etiqueta {
+  font-size: 12px;
   color: var(--color-text-muted);
-  font-size: 13px;
 }
 
-.pestana.activa {
+/* Tipo de registro como pastillas */
+.pastillas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pastilla {
+  padding: 8px 18px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 14px;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.pastilla:hover:not(:disabled):not(.activa) {
   background: var(--color-surface-alt);
-  color: var(--color-primary);
-  font-weight: 600;
 }
 
-.pestana-indicador {
-  margin-left: 4px;
-  color: var(--color-primary);
+.pastilla.activa {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 500;
 }
 
-.panel-pestana {
+.pastilla.activa:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+/* Diagnóstico a la izquierda, signos vitales a la derecha */
+.diagnostico-layout {
   display: grid;
-  gap: 16px;
-  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: 24px;
 }
 
 .diagnostico-campos {
-  display: grid;
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   min-width: 0;
 }
 
-.critico-check {
-  margin-top: -3px;
+.descripcion {
+  flex: 1;
 }
 
-.activar-signos {
-  min-height: 48px;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-alt);
-}
-
-.activar-signos span,
-.activar-signos strong,
-.activar-signos small {
-  display: block;
-}
-
-.activar-signos strong {
-  color: var(--color-text);
-  font-size: 12px;
-}
-
-.activar-signos small {
-  margin-top: 2px;
-  font-size: 10px;
-}
-
-.signos-desactivados {
-  padding: 12px;
-  border-radius: var(--radius-md);
-  background: var(--color-surface-alt);
-}
-
-fieldset {
-  padding: 0;
-  border: 0;
-}
-
-legend,
-.field label {
-  margin-bottom: 7px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
-.field textarea {
+.descripcion textarea {
+  flex: 1;
+  min-height: 120px;
   resize: vertical;
-  min-height: 92px;
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+.signos {
+  min-width: 0;
 }
 
-.signos-fieldset {
-  display: grid;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-alt);
-}
-
-.signos-fieldset legend {
-  padding: 0 5px;
-}
-
-.signos-fieldset legend span {
-  margin-left: 4px;
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
+.signos summary {
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .signos-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .signos-grid .input {
-  padding: 9px 10px;
-  background: var(--color-surface);
-  font-size: 12px;
+  padding: 9px 11px;
+  font-size: 13px;
+}
+
+.signos-grid .input::placeholder,
+.signos-grid select.vacio {
+  color: var(--color-text-muted);
+}
+
+.signos-grid select option {
+  color: var(--color-text);
 }
 
 .ayuda-signos {
+  margin-top: 10px;
   color: var(--color-text-muted);
-  font-size: 10px;
+  font-size: 11px;
+}
+
+.tratamiento-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.tratamiento-grid .doble {
+  grid-column: span 2;
 }
 
 .check {
@@ -686,21 +678,39 @@ legend,
   justify-content: flex-end;
   gap: 10px;
   margin: 4px -24px -20px;
-  padding: 12px 24px 20px;
+  padding: 14px 24px 20px;
+  border-top: 1px solid var(--color-border);
   background: var(--color-surface);
 }
 
-@media (max-width: 520px) {
-  .form-grid,
-  .signos-grid {
+/* En pantallas angostas se apila y el modal hace scroll */
+@media (max-width: 820px) {
+  .diagnostico-layout {
     grid-template-columns: 1fr;
+  }
+
+  .tratamiento-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .signos-grid,
+  .tratamiento-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tratamiento-grid .doble {
+    grid-column: 1 / -1;
   }
 
   .acciones {
     margin-right: -18px;
+    margin-bottom: -16px;
     margin-left: -18px;
     padding-right: 18px;
     padding-left: 18px;
+    bottom: -16px;
   }
 }
 </style>

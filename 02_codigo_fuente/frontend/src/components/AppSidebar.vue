@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { ITEMS_NAVEGACION } from '@/config/modulos'
+import { useMenuLateral } from '@/composables/useMenuLateral'
 import { useAuthStore } from '@/stores/auth'
 import { useRolesStore } from '@/stores/roles'
 
@@ -13,6 +14,7 @@ const rolesStore = useRolesStore()
 // Solo se muestran los módulos a los que el rol del usuario tiene acceso
 const items = computed(() => ITEMS_NAVEGACION.filter((item) => auth.tieneAcceso(item.codigoServicio)))
 
+const { contraido } = useMenuLateral()
 const menuAbierto = ref(false)
 const correo = computed(() => auth.payload?.sub ?? '')
 const nombreRol = computed(() => rolesStore.nombreDe(auth.payload?.id_rol))
@@ -24,7 +26,7 @@ function cerrarSesion() {
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside id="menu-lateral" class="sidebar" :class="{ contraido }">
     <div class="brand">
       <span class="brand-logo">Y</span>
       <div>
@@ -39,8 +41,23 @@ function cerrarSesion() {
         :key="item.codigoServicio"
         :to="{ name: item.ruta }"
         class="nav-item"
+        :title="contraido ? item.label : undefined"
+        :aria-label="item.label"
       >
-        <span class="dot" />
+        <span class="nav-ico" aria-hidden="true">
+          <svg v-if="item.ruta === 'fichas'" viewBox="0 0 24 24">
+            <path d="M12 13c-3 0-5 3-5 5 0 1.5 1.3 2 2.5 2 1 0 1.6-.5 2.5-.5s1.5.5 2.5.5c1.2 0 2.5-.5 2.5-2 0-2-2-5-5-5Z" />
+            <circle cx="6" cy="10.5" r="1.6" /><circle cx="9.5" cy="6.5" r="1.6" />
+            <circle cx="14.5" cy="6.5" r="1.6" /><circle cx="18" cy="10.5" r="1.6" />
+          </svg>
+          <svg v-else-if="item.ruta === 'planificacion'" viewBox="0 0 24 24">
+            <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" />
+          </svg>
+          <svg v-else-if="item.ruta === 'bienestar'" viewBox="0 0 24 24">
+            <path d="M12 20s-7.5-4.4-7.5-10A4.2 4.2 0 0 1 12 7.4 4.2 4.2 0 0 1 19.5 10c0 5.6-7.5 10-7.5 10Z" />
+          </svg>
+          <svg v-else viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3.2 8.4-7 10-3.8-1.6-7-5-7-10V6Z" /><path d="m9 12 2 2 4-4" /></svg>
+        </span>
         <span class="nav-label">{{ item.label }}</span>
         <span v-if="item.badge" class="nav-badge" :class="{ alert: item.alert }">
           {{ item.badge }}
@@ -49,7 +66,7 @@ function cerrarSesion() {
     </nav>
 
     <div class="user">
-      <button class="user-card" @click="menuAbierto = !menuAbierto">
+      <button class="user-card" :title="contraido ? `${correo} · ${nombreRol}` : undefined" @click="menuAbierto = !menuAbierto">
         <UserAvatar :nombre="correo" />
         <span class="user-info">
           <strong>{{ correo.split('@')[0] }}</strong>
@@ -130,16 +147,90 @@ function cerrarSesion() {
   font-weight: 600;
 }
 
-.dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.6;
+.nav-ico {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.nav-ico svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .nav-label {
   flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ---- Menú contraído: solo íconos ---- */
+.sidebar {
+  overflow: hidden;
+}
+
+.brand > div,
+.user-info {
+  white-space: nowrap;
+}
+
+.contraido .brand {
+  justify-content: center;
+  padding: 20px 0;
+}
+
+.contraido .brand > div,
+.contraido .nav-label,
+.contraido .user-info,
+.contraido .chevron {
+  display: none;
+}
+
+.contraido .nav {
+  padding: 16px 10px;
+}
+
+.contraido .nav-item {
+  position: relative;
+  justify-content: center;
+  padding: 11px 0;
+}
+
+.contraido .nav-ico svg {
+  width: 21px;
+  height: 21px;
+}
+
+.contraido .nav-badge {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  min-width: 16px;
+  padding: 0 4px;
+  font-size: 9px;
+  line-height: 14px;
+}
+
+.contraido .user {
+  padding: 12px 0;
+}
+
+.contraido .user-card {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.contraido .user-menu {
+  left: 8px;
+  right: auto;
+  width: 160px;
 }
 
 .nav-badge {

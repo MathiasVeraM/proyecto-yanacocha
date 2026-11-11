@@ -5,6 +5,8 @@ import type {
   DietaCreate,
   EventoCalendario,
   FiltrosActividades,
+  Observacion,
+  ObservacionCreate,
   TipoEnriquecimiento,
   UsuarioActividad,
 } from '@/types/actividades'
@@ -34,6 +36,21 @@ export const actividadesApi = {
 
   completar: (id: number, observaciones?: string) =>
     request<Actividad>('POST', `${URL}/${id}/completar`, { observaciones }),
+
+  // Vuelve a dejar pendiente una actividad completada
+  reabrir: (id: number) => request<Actividad>('POST', `${URL}/${id}/reabrir`),
+
+  observaciones: (idActividad: number) =>
+    request<Observacion[]>('GET', `${URL}/${idActividad}/observaciones`),
+
+  observacionesEnRango: (fechaDesde: string, fechaHasta: string) =>
+    request<Observacion[]>(
+      'GET',
+      `${URL}/observaciones${query({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta })}`,
+    ),
+
+  agregarObservacion: (idActividad: number, datos: ObservacionCreate) =>
+    request<Observacion>('POST', `${URL}/${idActividad}/observaciones`, datos),
 
   generarTomas: (idDieta: number, fechaHasta?: string) =>
     request<{ tomas: Actividad[] }>('POST', `${URL}/tomas/generar`, {
