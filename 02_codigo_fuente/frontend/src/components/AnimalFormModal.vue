@@ -22,7 +22,8 @@ const TAMANO_MAXIMO_MB = 5
 const MAX_NOMBRE = 100
 const MAX_ESPECIE = 150
 const MAX_TAXONOMIA = 100
-const MAX_EDAD = 50
+const MAX_EDAD_ANIOS = 200
+const MAX_EDAD_MESES = 11
 const MAX_NOMBRE_RECINTO = 100
 const MAX_TIPO_RECINTO = 50
 
@@ -42,7 +43,8 @@ const form = reactive({
   nombre: '',
   id_recinto: 0,
   sexo: '' as Sexo | '',
-  edad_aproximada: '',
+  edad_anios: '',
+  edad_meses: '',
   estado_actual: 'en_centro' as EstadoAnimal,
   fecha_ingreso: '',
 })
@@ -54,6 +56,31 @@ const arrastrando = ref(false)
 
 const error = ref('')
 const guardando = ref(false)
+const edadIntentada = ref(false)
+
+const errorEdadAnios = computed(() => {
+  const valor = form.edad_anios.trim()
+  if (!valor) return ''
+  const anios = Number(valor)
+  if (!Number.isInteger(anios)) return 'Ingresa una cantidad entera de años'
+  if (anios < 0 || anios > MAX_EDAD_ANIOS) return `Los años deben estar entre 0 y ${MAX_EDAD_ANIOS}`
+  return ''
+})
+
+const errorEdadMeses = computed(() => {
+  const valor = form.edad_meses.trim()
+  if (!valor) return ''
+  const meses = Number(valor)
+  if (!Number.isInteger(meses)) return 'Ingresa una cantidad entera de meses'
+  if (meses < 0 || meses > MAX_EDAD_MESES) return `Los meses deben estar entre 0 y ${MAX_EDAD_MESES}`
+  return ''
+})
+
+const errorEdadRequerida = computed(() =>
+  edadIntentada.value && !form.edad_anios.trim() && !form.edad_meses.trim()
+    ? 'Ingresa la edad en años o meses'
+    : '',
+)
 
 function quitarFoto() {
   if (vistaPrevia.value) URL.revokeObjectURL(vistaPrevia.value)
@@ -101,6 +128,7 @@ watch(
   async (abierto) => {
     if (!abierto) return
     error.value = ''
+    edadIntentada.value = false
     const a = props.animal
     especie.value = a?.taxonomia ?? null
     especieManual.value = false
@@ -111,7 +139,8 @@ watch(
       nombre: a?.nombre ?? '',
       id_recinto: a?.id_recinto ?? 0,
       sexo: a?.sexo ?? '',
-      edad_aproximada: a?.edad_aproximada ?? '',
+      edad_anios: a?.edad_anios === null || a?.edad_anios === undefined ? '' : String(a.edad_anios),
+      edad_meses: a?.edad_meses === null || a?.edad_meses === undefined ? '' : String(a.edad_meses),
       estado_actual: a?.estado_actual ?? 'en_centro',
       fecha_ingreso: a?.fecha_ingreso ?? hoyIso(),
     })
@@ -194,8 +223,21 @@ async function obtenerIdRecinto(): Promise<number> {
   return creado.id_recinto
 }
 
+function validarEdad(): { edad_anios: number; edad_meses: number } | null {
+  const aniosIngresados = form.edad_anios.trim()
+  const mesesIngresados = form.edad_meses.trim()
+  if (errorEdadAnios.value || errorEdadMeses.value || errorEdadRequerida.value) return null
+  const edadAnios = aniosIngresados ? Number(aniosIngresados) : 0
+  const edadMeses = mesesIngresados ? Number(mesesIngresados) : 0
+  return { edad_anios: edadAnios, edad_meses: edadMeses }
+}
+
 async function guardar() {
   error.value = ''
+  edadIntentada.value = true
+  const edad = validarEdad()
+  if (!edad) return
+
   if (!especie.value && !especieManual.value) {
     error.value = 'Elige la especie del animal'
     return
@@ -235,7 +277,7 @@ async function guardar() {
       id_recinto: await obtenerIdRecinto(),
       nombre: form.nombre || null,
       sexo: form.sexo || null,
-      edad_aproximada: form.edad_aproximada || null,
+      ...edad,
       fecha_ingreso: form.fecha_ingreso,
       ...(yaSalio.value ? {} : { estado_actual: form.estado_actual }),
     }
@@ -427,7 +469,7 @@ async function guardar() {
 
           <!-- Recinto nuevo: sus tres campos ocupan una fila propia -->
           <div v-if="recintoNuevo" class="nuevo-recinto">
-            <div class="row tres">
+            <div class="row fila-identificacion" :class="{ 'sin-selector-recinto': recintoNuevo }">
               <div class="field">
                 <label for="recinto-nombre">Nuevo recinto</label>
                 <input
@@ -467,8 +509,8 @@ async function guardar() {
             </button>
           </div>
 
-          <div class="row tres">
-            <div v-if="!recintoNuevo" class="field">
+          <div v-if="!recintoNuevo" class="row recinto-asignado">
+            <div class="field">
               <label for="recinto">Recinto asignado</label>
               <div class="con-accion">
                 <select id="recinto" v-model.number="form.id_recinto" class="input" required>
@@ -486,6 +528,9 @@ async function guardar() {
                 </button>
               </div>
             </div>
+          </div>
+
+          <div class="row fila-edad">
             <div class="field">
               <label for="sexo">Sexo</label>
               <select id="sexo" v-model="form.sexo" class="input">
@@ -494,16 +539,49 @@ async function guardar() {
               </select>
             </div>
             <div class="field">
-              <label for="edad">Edad aproximada</label>
+              <label for="edad-anios">Años</label>
               <input
-                id="edad"
-                v-model.trim="form.edad_aproximada"
+                id="edad-anios"
+                v-model="form.edad_anios"
+                type="number"
+                min="0"
+                :max="MAX_EDAD_ANIOS"
+                step="1"
                 class="input"
-                placeholder="Ej. Adulto (~10 años)"
-                :maxlength="MAX_EDAD"
+                inputmode="numeric"
+                aria-describedby="ayuda-edad error-edad-requerida"
+                :aria-invalid="!!(errorEdadAnios || errorEdadRequerida)"
               />
+              <small v-if="errorEdadAnios" class="error-edad" role="alert">
+                {{ errorEdadAnios }}
+              </small>
+            </div>
+            <div class="field">
+              <label for="edad-meses">Meses</label>
+              <input
+                id="edad-meses"
+                v-model="form.edad_meses"
+                type="number"
+                min="0"
+                :max="MAX_EDAD_MESES"
+                step="1"
+                class="input"
+                inputmode="numeric"
+                aria-describedby="ayuda-edad error-edad-requerida"
+                :aria-invalid="!!(errorEdadMeses || errorEdadRequerida)"
+              />
+              <small v-if="errorEdadMeses" class="error-edad" role="alert">
+                {{ errorEdadMeses }}
+              </small>
             </div>
           </div>
+          <small v-if="errorEdadRequerida" id="error-edad-requerida" class="error-edad" role="alert">
+            {{ errorEdadRequerida }}
+          </small>
+          <p id="ayuda-edad" class="ayuda-edad">
+            Ingresa años o meses; si dejas una unidad vacía, se guardará como 0. Al menos una debe tener un valor.
+            Años: 0–{{ MAX_EDAD_ANIOS }}; meses: 0–{{ MAX_EDAD_MESES }}.
+          </p>
         </section>
 
         <section class="bloque">
@@ -592,6 +670,40 @@ async function guardar() {
 
 .row.tres {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.row.recinto-asignado {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.row.fila-edad {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fila-edad .field {
+  min-width: 0;
+}
+
+.fila-edad label {
+  font-size: 11px;
+}
+
+.fila-edad .input {
+  min-width: 0;
+  padding: 7px 8px;
+  font-size: 12px;
+}
+
+.ayuda-edad {
+  margin-top: -4px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.error-edad {
+  color: var(--color-danger);
+  font-size: 11px;
 }
 
 /* Con la especie ya elegida, el nombre del ejemplar queda solo en su fila */
@@ -769,7 +881,7 @@ async function guardar() {
 }
 
 @media (max-width: 600px) {
-  .row,
+  .row:not(.fila-edad),
   .row.tres {
     grid-template-columns: 1fr;
   }

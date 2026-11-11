@@ -31,7 +31,7 @@ def nuevo_animal(oso, recinto):
 @pytest.fixture
 def crear_animal(client, h, nuevo_animal):
     def _crear(**datos):
-        resp = client.post(URL, json={**nuevo_animal, **datos}, headers=h)
+        resp = client.post(URL, json={**nuevo_animal, "edad_anios": 0, **datos}, headers=h)
         assert resp.status_code == 201, resp.text
         return resp.json()
     return _crear
@@ -90,6 +90,7 @@ def test_todas_las_rutas_sin_permiso_403(client, headers_sin_permiso, metodo, ur
 def test_crear_animal_genera_codigo_y_valores_por_defecto(crear_animal):
     animal = crear_animal()
     assert animal["codigo_animal"] == CODIGO_PRIMER_ANIMAL
+    assert (animal["edad_anios"], animal["edad_meses"]) == (0, 0)
     assert animal["estado_actual"] == "en_centro"
     assert animal["fecha_ingreso"] == hoy_local().isoformat()
     # La ficha incluye la taxonomía y el recinto completos
@@ -129,17 +130,25 @@ def test_si_no_logra_un_codigo_libre_responde_409(client, h, nuevo_animal, crear
     from src.repositorios.animal_repo import AnimalRepository
     crear_animal()
     monkeypatch.setattr(AnimalRepository, "obtener_codigos_con_prefijo", staticmethod(lambda db, prefijo: []))
-    assert client.post(URL, json=nuevo_animal, headers=h).status_code == 409
+    assert client.post(URL, json={**nuevo_animal, "edad_anios": 0}, headers=h).status_code == 409
 
 
 def test_crear_animal_especie_inexistente_400(client, h, recinto):
-    resp = client.post(URL, json={"id_taxonomia": 999, "id_recinto": recinto.id_recinto}, headers=h)
+    resp = client.post(
+        URL,
+        json={"id_taxonomia": 999, "id_recinto": recinto.id_recinto, "edad_anios": 0},
+        headers=h,
+    )
     assert resp.status_code == 400
     assert resp.json()["detail"] == "La especie indicada no existe en el catálogo"
 
 
 def test_crear_animal_recinto_inexistente_400(client, h, oso):
-    resp = client.post(URL, json={"id_taxonomia": oso.id_taxonomia, "id_recinto": 999}, headers=h)
+    resp = client.post(
+        URL,
+        json={"id_taxonomia": oso.id_taxonomia, "id_recinto": 999, "edad_anios": 0},
+        headers=h,
+    )
     assert resp.status_code == 400
     assert resp.json()["detail"] == "El recinto indicado no existe"
 
@@ -150,13 +159,47 @@ def test_crear_animal_sin_especie_o_recinto_422(client, h, nuevo_animal, faltant
     assert client.post(URL, json=cuerpo, headers=h).status_code == 422
 
 
+def test_crear_animal_requiere_edad_en_anios_o_meses(client, h, nuevo_animal):
+    resp = client.post(URL, json=nuevo_animal, headers=h)
+    assert resp.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "edad,esperada",
+    [
+        ({"edad_anios": 4}, (4, 0)),
+        ({"edad_anios": 200}, (200, 0)),
+        ({"edad_meses": 7}, (0, 7)),
+    ],
+)
+def test_crear_animal_completa_con_cero_la_unidad_omitida(client, h, nuevo_animal, edad, esperada):
+    resp = client.post(URL, json={**nuevo_animal, **edad}, headers=h)
+    assert resp.status_code == 201, resp.text
+    assert (resp.json()["edad_anios"], resp.json()["edad_meses"]) == esperada
+
+
+@pytest.mark.parametrize(
+    "edad",
+    [
+        {"edad_anios": -1},
+        {"edad_anios": 201},
+        {"edad_meses": -1},
+        {"edad_meses": 12},
+        {"edad_anios": 1, "edad_meses": 1.5},
+    ],
+)
+def test_crear_animal_edad_fuera_de_rango_422(client, h, nuevo_animal, edad):
+    resp = client.post(URL, json={**nuevo_animal, **edad}, headers=h)
+    assert resp.status_code == 422
+
+
 @pytest.mark.parametrize("cambio", [
     {"sexo": "otro"},
     {"estado_actual": "perdido"},
     {"fecha_ingreso": "no-es-fecha"},
 ])
 def test_crear_animal_datos_invalidos_422(client, h, nuevo_animal, cambio):
-    assert client.post(URL, json={**nuevo_animal, **cambio}, headers=h).status_code == 422
+    assert client.post(URL, json={**nuevo_animal, "edad_anios": 0, **cambio}, headers=h).status_code == 422
 
 
 # ---------- Animales: consulta, filtros y edición ----------
@@ -215,7 +258,7 @@ def test_listar_estado_invalido_422(client, h):
 
 
 def test_actualizar_animal(client, h, crear_animal):
-    animal = crear_animal(sexo="hembra", edad_aproximada="2 años")
+    animal = crear_animal(sexo="hembra", edad_anios=2, edad_meses=0)
     resp = client.put(
         f"{URL}/{animal['id_animal']}",
         json={"estado_actual": "liberado", "sexo": None},
@@ -224,7 +267,38 @@ def test_actualizar_animal(client, h, crear_animal):
     assert resp.status_code == 200
     datos = resp.json()
     # Los opcionales se pueden vaciar; lo no enviado se conserva
-    assert (datos["estado_actual"], datos["sexo"], datos["edad_aproximada"]) == ("liberado", None, "2 años")
+    assert (datos["estado_actual"], datos["sexo"], datos["edad_anios"], datos["edad_meses"]) == (
+        "liberado", None, 2, 0
+    )
+
+
+@pytest.mark.parametrize(
+    "edad,esperada",
+    [
+        ({"edad_anios": 5}, (5, 0)),
+        ({"edad_meses": 8}, (0, 8)),
+    ],
+)
+def test_actualizar_edad_completa_con_cero_el_valor_omitido(client, h, crear_animal, edad, esperada):
+    animal = crear_animal(edad_anios=3, edad_meses=4)
+    resp = client.put(f"{URL}/{animal['id_animal']}", json=edad, headers=h)
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["edad_anios"], resp.json()["edad_meses"]) == esperada
+
+
+@pytest.mark.parametrize(
+    "edad",
+    [
+        {"edad_anios": -1},
+        {"edad_anios": 201},
+        {"edad_meses": 12},
+        {"edad_anios": None, "edad_meses": None},
+    ],
+)
+def test_actualizar_edad_invalida_422(client, h, crear_animal, edad):
+    animal = crear_animal()
+    resp = client.put(f"{URL}/{animal['id_animal']}", json=edad, headers=h)
+    assert resp.status_code == 422
 
 
 def test_mover_animal_de_recinto(client, h, crear_animal, crear_recinto_db):

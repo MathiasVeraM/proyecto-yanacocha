@@ -1,6 +1,6 @@
 from datetime import date
-from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, Literal, Optional
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from src.esquemas.recinto_schema import RecintoResponse
 from src.esquemas.taxonomia_schema import TaxonomiaResponse
 
@@ -16,11 +16,30 @@ class AnimalCreate(BaseModel):
     id_recinto: int
     # Nombre propio del ejemplar (ej. "Yaku"); el nombre común es de la especie
     nombre: Optional[str] = Field(None, max_length=100)
-    edad_aproximada: Optional[str] = Field(None, max_length=50)
+    edad_anios: int = Field(ge=0, le=200)
+    edad_meses: int = Field(ge=0, le=11)
     sexo: Optional[Sexo] = None
     estado_actual: EstadoAnimal = "en_centro"
     # Si no se envía, se usa la fecha de hoy
     fecha_ingreso: Optional[date] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def validar_y_completar_edad(cls, valores: Any) -> Any:
+        if not isinstance(valores, dict):
+            return valores
+        datos = valores.copy()
+        anios = datos.get("edad_anios")
+        meses = datos.get("edad_meses")
+        if anios is None and meses is None:
+            raise ValueError("Ingresa la edad en años o meses.")
+        datos.setdefault("edad_anios", 0)
+        datos.setdefault("edad_meses", 0)
+        if datos["edad_anios"] is None:
+            datos["edad_anios"] = 0
+        if datos["edad_meses"] is None:
+            datos["edad_meses"] = 0
+        return datos
 
 # El código se conserva al editar; la taxonomía puede corregirse seleccionando otra del catálogo
 class AnimalUpdate(BaseModel):
@@ -29,10 +48,30 @@ class AnimalUpdate(BaseModel):
     id_taxonomia: Optional[int] = None
     id_recinto: Optional[int] = None
     nombre: Optional[str] = Field(None, max_length=100)
-    edad_aproximada: Optional[str] = Field(None, max_length=50)
+    edad_anios: Optional[int] = Field(None, ge=0, le=200)
+    edad_meses: Optional[int] = Field(None, ge=0, le=11)
     sexo: Optional[Sexo] = None
     estado_actual: Optional[EstadoAnimal] = None
     fecha_ingreso: Optional[date] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def completar_edad_parcial(cls, valores: Any) -> Any:
+        if not isinstance(valores, dict):
+            return valores
+        datos = valores.copy()
+        campos_edad = {"edad_anios", "edad_meses"}
+        if not campos_edad.intersection(datos):
+            return datos
+        anios = datos.get("edad_anios")
+        meses = datos.get("edad_meses")
+        if anios is None and meses is None:
+            raise ValueError("Ingresa la edad en años o meses.")
+        if anios is None:
+            datos["edad_anios"] = 0
+        if meses is None:
+            datos["edad_meses"] = 0
+        return datos
 
 class AnimalResponse(BaseModel):
     id_animal: int
@@ -40,6 +79,8 @@ class AnimalResponse(BaseModel):
     nombre: Optional[str]
     id_taxonomia: int
     id_recinto: int
+    edad_anios: Optional[int]
+    edad_meses: Optional[int]
     edad_aproximada: Optional[str]
     sexo: Optional[str]
     estado_actual: str

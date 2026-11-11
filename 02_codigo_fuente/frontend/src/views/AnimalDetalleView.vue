@@ -80,6 +80,11 @@ function resumenDieta(dieta: Dieta) {
   return dieta.alimentos.map((alimento) => alimento.nombre_alimento).join(' + ') || 'Sin alimentos'
 }
 
+function formatearEdad(anios: number | null, meses: number | null, legado: string | null | undefined) {
+  if (anios === null || meses === null) return legado ?? 'No registrada'
+  return `${anios} ${anios === 1 ? 'año' : 'años'} y ${meses} ${meses === 1 ? 'mes' : 'meses'}`
+}
+
 const actividadesVigentes = computed(() =>
   actividades.value
     .filter((actividad) => !actividad.cancelada)
@@ -339,8 +344,8 @@ watch(tab, (valor) => {
                 <dd>{{ animal.sexo ? SEXOS[animal.sexo] : '—' }}</dd>
               </div>
               <div>
-                <dt>Edad aproximada</dt>
-                <dd>{{ animal.edad_aproximada ?? '—' }}</dd>
+                <dt>Edad</dt>
+                <dd>{{ formatearEdad(animal.edad_anios, animal.edad_meses, animal.edad_aproximada) }}</dd>
               </div>
             </dl>
           </section>

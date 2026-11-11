@@ -55,7 +55,9 @@ export interface Animal {
   nombre: string | null
   id_taxonomia: number
   id_recinto: number
-  edad_aproximada: string | null
+  edad_anios: number | null
+  edad_meses: number | null
+  edad_aproximada?: string | null
   sexo: Sexo | null
   estado_actual: EstadoAnimal
   fecha_ingreso: string
@@ -70,7 +72,8 @@ export interface AnimalCreate {
   id_taxonomia: number
   id_recinto: number
   nombre?: string | null
-  edad_aproximada?: string | null
+  edad_anios: number
+  edad_meses: number
   sexo?: Sexo | null
   estado_actual?: EstadoAnimal
   fecha_ingreso?: string

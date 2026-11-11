@@ -1,5 +1,15 @@
 from sqlalchemy import (
-    Column, Date, ForeignKey, Index, Integer, LargeBinary, String, TIMESTAMP, text
+    CheckConstraint,
+    Column,
+    Date,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    SmallInteger,
+    String,
+    TIMESTAMP,
+    text,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -34,13 +44,27 @@ class RecintoModel(Base):
 
 class AnimalModel(Base):
     __tablename__ = "animal"
-    __table_args__ = {"schema": DB_SCHEMA}
+    __table_args__ = (
+        CheckConstraint(
+            "edad_anios IS NULL OR edad_anios BETWEEN 0 AND 200",
+            name="ck_animal_edad_anios",
+        ),
+        CheckConstraint("edad_meses IS NULL OR edad_meses BETWEEN 0 AND 11", name="ck_animal_edad_meses"),
+        CheckConstraint(
+            "(edad_anios IS NULL AND edad_meses IS NULL) OR "
+            "(edad_anios IS NOT NULL AND edad_meses IS NOT NULL)",
+            name="ck_animal_edad_completa",
+        ),
+        {"schema": DB_SCHEMA},
+    )
     id_animal = Column(Integer, primary_key=True, index=True, autoincrement=True)
     codigo_animal = Column(String(30), unique=True, nullable=False)
     nombre = Column(String(100))  # nombre propio del ejemplar, ej. "Yaku"
     id_taxonomia = Column(Integer, ForeignKey(f"{DB_SCHEMA}.taxonomia.id_taxonomia"), nullable=False, index=True)
     id_recinto = Column(Integer, ForeignKey(f"{DB_SCHEMA}.recinto.id_recinto"), nullable=False, index=True)
     edad_aproximada = Column(String(50))
+    edad_anios = Column(SmallInteger)
+    edad_meses = Column(SmallInteger)
     sexo = Column(String(15))
     estado_actual = Column(String(30), nullable=False, server_default="en_centro")
     fecha_ingreso = Column(Date, nullable=False, default=hoy_local, server_default=func.current_date())
