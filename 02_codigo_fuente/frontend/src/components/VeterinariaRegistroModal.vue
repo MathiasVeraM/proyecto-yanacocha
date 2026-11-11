@@ -34,6 +34,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: []; saved: [] }>()
 const tipo = ref<'diagnostico' | 'tratamiento'>('diagnostico')
+const pestanaTratamiento = ref<'datos' | 'medicamentos'>('datos')
 const error = ref('')
 const guardando = ref(false)
 const tratamientoGuardadoSinActividades = ref(false)
@@ -171,6 +172,7 @@ watch(
     if (!abierto) return
     error.value = ''
     tratamientoGuardadoSinActividades.value = false
+    pestanaTratamiento.value = 'datos'
     tipo.value = props.registro?.tipo ?? props.tipoInicial ?? 'diagnostico'
     const signosExistentes =
       props.registro?.tipo === 'diagnostico' ? props.registro.datos.signos_vitales : null
@@ -292,32 +294,48 @@ async function guardar() {
         await veterinariaApi.crearDiagnostico(props.idAnimal, datos)
       }
     } else {
-      if (!formTratamiento.id_diagnostico && props.registro?.tipo !== 'tratamiento') {
+      if (!formTratamiento.id_diagnostico) {
+        pestanaTratamiento.value = 'datos'
         error.value = 'Selecciona el diagnóstico asociado'
         return
       }
       if (tratamientoGuardadoSinActividades.value) return
       const descripcion = formTratamiento.descripcion.trim()
       if (!descripcion) {
+        pestanaTratamiento.value = 'datos'
         error.value = 'Ingresa la descripción del tratamiento.'
         return
       }
+      if (!formTratamiento.fecha_inicio) {
+        pestanaTratamiento.value = 'datos'
+        error.value = 'Ingresa la fecha de inicio del tratamiento.'
+        return
+      }
+      if (formTratamiento.fecha_fin && formTratamiento.fecha_fin < formTratamiento.fecha_inicio) {
+        pestanaTratamiento.value = 'datos'
+        error.value = 'La fecha de fin no puede ser anterior a la fecha de inicio.'
+        return
+      }
+      pestanaTratamiento.value = 'datos'
       const frecuenciaValor = numeroOpcional(formTratamiento.frecuencia_valor, 'Frecuencia', {
         minimo: 1,
         maximo: 2147483647,
         entero: true,
       })
       if (frecuenciaValor === null) {
+        pestanaTratamiento.value = 'datos'
         error.value = 'Ingresa una frecuencia válida.'
         return
       }
       if (!formTratamiento.frecuencia_unidad || !formTratamiento.hora_inicio) {
+        pestanaTratamiento.value = 'datos'
         error.value = 'Selecciona la unidad y la hora de inicio de la frecuencia.'
         return
       }
       const medicamentos = formTratamiento.medicamentos.map((medicamento, indice) => {
         const nombre = medicamento.nombre_medicamento.trim()
         if (!nombre) {
+          pestanaTratamiento.value = 'medicamentos'
           throw new Error(`Medicamento ${indice + 1}: ingresa el nombre.`)
         }
         const dosis = numeroOpcional(medicamento.dosis_ml, `Dosis del medicamento ${indice + 1}`, {
@@ -325,6 +343,7 @@ async function guardar() {
           decimales: 2,
         })
         if (dosis === null) {
+          pestanaTratamiento.value = 'medicamentos'
           throw new Error(`Medicamento ${indice + 1}: ingresa la dosis en ml.`)
         }
         return { nombre_medicamento: nombre, dosis_ml: dosis }
@@ -570,79 +589,119 @@ async function guardar() {
       </div>
 
       <div v-else class="tratamiento-grid">
-        <div v-if="!editando" class="field doble">
-          <label for="diagnostico-asociado">Diagnóstico asociado</label>
-          <select id="diagnostico-asociado" v-model.number="formTratamiento.id_diagnostico" class="input" required>
-            <option :value="0" disabled>Selecciona un diagnóstico</option>
-            <option v-for="d in diagnosticosOrdenados" :key="d.id_diagnostico" :value="d.id_diagnostico">
-              {{ d.diagnostico }}
-            </option>
-          </select>
-        </div>
-        <div class="field descripcion-tratamiento">
-          <label for="descripcion-tratamiento">Descripción del tratamiento</label>
-          <textarea
-            id="descripcion-tratamiento"
-            v-model="formTratamiento.descripcion"
-            class="input"
-            rows="3"
-            required
-            placeholder="Indicación y procedimiento a realizar"
-          />
-        </div>
-        <div class="field">
-          <label for="fecha-inicio">Fecha de inicio</label>
-          <input id="fecha-inicio" v-model="formTratamiento.fecha_inicio" class="input" type="date" required />
-        </div>
-        <div class="field">
-          <label for="fecha-fin">Fecha de fin</label>
-          <input
-            id="fecha-fin"
-            v-model="formTratamiento.fecha_fin"
-            class="input"
-            type="date"
-            :min="formTratamiento.fecha_inicio"
-          />
-        </div>
-        <div class="field">
-          <label for="frecuencia-valor">Frecuencia</label>
-          <input
-            id="frecuencia-valor"
-            v-model="formTratamiento.frecuencia_valor"
-            class="input"
-            type="number"
-            min="1"
-            step="1"
-            required
-          />
-        </div>
-        <div class="field">
-          <label for="frecuencia-unidad">Unidad de frecuencia</label>
-          <select id="frecuencia-unidad" v-model="formTratamiento.frecuencia_unidad" class="input">
-            <option value="" disabled>Selecciona unidad</option>
-            <option value="horas">Horas</option>
-            <option value="dias">Días</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="hora-inicio">Hora de inicio</label>
-          <input
-            id="hora-inicio"
-            v-model="formTratamiento.hora_inicio"
-            class="input"
-            type="time"
-            required
-          />
-        </div>
-        <div class="field">
-          <label for="estado-tratamiento">Estado</label>
-          <select id="estado-tratamiento" v-model="formTratamiento.estado" class="input">
-            <option value="en_curso">En curso</option>
-            <option value="finalizado">Finalizado</option>
-            <option value="suspendido">Suspendido</option>
-          </select>
-        </div>
-        <section class="medicamentos-seccion">
+        <nav class="pestanas-tratamiento" role="tablist" aria-label="Secciones del tratamiento">
+          <button
+            type="button"
+            role="tab"
+            id="tab-datos-tratamiento"
+            aria-controls="panel-datos-tratamiento"
+            :aria-selected="pestanaTratamiento === 'datos'"
+            :class="{ activa: pestanaTratamiento === 'datos' }"
+            @click="pestanaTratamiento = 'datos'"
+          >
+            Tratamiento
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-medicamentos-tratamiento"
+            aria-controls="panel-medicamentos-tratamiento"
+            :aria-selected="pestanaTratamiento === 'medicamentos'"
+            :class="{ activa: pestanaTratamiento === 'medicamentos' }"
+            @click="pestanaTratamiento = 'medicamentos'"
+          >
+            Medicamentos ({{ formTratamiento.medicamentos.length }})
+          </button>
+        </nav>
+        <section
+          v-if="pestanaTratamiento === 'datos'"
+          id="panel-datos-tratamiento"
+          class="tratamiento-tabpanel"
+          role="tabpanel"
+          aria-labelledby="tab-datos-tratamiento"
+        >
+          <div class="tratamiento-contexto">
+            <div class="field">
+              <label for="diagnostico-asociado">Diagnóstico asociado</label>
+              <select
+                id="diagnostico-asociado"
+                v-model.number="formTratamiento.id_diagnostico"
+                class="input"
+                :required="!editando"
+                :disabled="editando"
+              >
+                <option :value="0" disabled>Selecciona un diagnóstico</option>
+                <option v-for="d in diagnosticosOrdenados" :key="d.id_diagnostico" :value="d.id_diagnostico">
+                  {{ d.diagnostico }}
+                </option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fecha-inicio">Fecha de inicio</label>
+              <input id="fecha-inicio" v-model="formTratamiento.fecha_inicio" class="input" type="date" required />
+            </div>
+            <div class="field">
+              <label for="fecha-fin">Fecha de fin</label>
+              <input
+                id="fecha-fin"
+                v-model="formTratamiento.fecha_fin"
+                class="input"
+                type="date"
+                :min="formTratamiento.fecha_inicio"
+              />
+            </div>
+          </div>
+          <div class="field descripcion-tratamiento">
+            <label for="descripcion-tratamiento">Descripción del tratamiento</label>
+            <textarea
+              id="descripcion-tratamiento"
+              v-model="formTratamiento.descripcion"
+              class="input"
+              rows="3"
+              required
+              placeholder="Indicación y procedimiento a realizar"
+            />
+          </div>
+          <div class="tratamiento-programacion">
+            <div class="field">
+              <label for="estado-tratamiento">Estado</label>
+              <select id="estado-tratamiento" v-model="formTratamiento.estado" class="input">
+                <option value="en_curso">En curso</option>
+                <option value="finalizado">Finalizado</option>
+                <option value="suspendido">Suspendido</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="hora-inicio">Hora de inicio</label>
+              <input
+                id="hora-inicio"
+                v-model="formTratamiento.hora_inicio"
+                class="input"
+                type="time"
+                required
+              />
+            </div>
+            <div class="field">
+              <label for="frecuencia-valor">Frecuencia</label>
+              <input
+                id="frecuencia-valor"
+                v-model="formTratamiento.frecuencia_valor"
+                class="input"
+                type="number"
+                min="1"
+                step="1"
+                required
+              />
+            </div>
+            <div class="field">
+              <label for="frecuencia-unidad">Unidad de frecuencia</label>
+              <select id="frecuencia-unidad" v-model="formTratamiento.frecuencia_unidad" class="input">
+                <option value="" disabled>Selecciona unidad</option>
+                <option value="horas">Horas</option>
+                <option value="dias">Días</option>
+              </select>
+            </div>
+          </div>
           <p
             v-if="
               tratamientoLegado &&
@@ -657,6 +716,14 @@ async function guardar() {
             dosis {{ tratamientoLegado.dosis || 'sin registrar' }}. Ingresa la programación y los medicamentos
             estructurados para generar actividades.
           </p>
+        </section>
+        <section
+          v-else
+          id="panel-medicamentos-tratamiento"
+          class="medicamentos-seccion tratamiento-tabpanel"
+          role="tabpanel"
+          aria-labelledby="tab-medicamentos-tratamiento"
+        >
           <header class="medicamentos-cabecera">
             <div>
               <h3>Medicamentos</h3>
@@ -836,22 +903,68 @@ async function guardar() {
 }
 
 .tratamiento-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tratamiento-tabpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tratamiento-contexto {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.tratamiento-programacion {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 
-.tratamiento-grid .doble {
-  grid-column: span 2;
-}
-
-.tratamiento-grid .descripcion-tratamiento,
-.tratamiento-grid .medicamentos-seccion {
-  grid-column: 1 / -1;
-}
-
 .descripcion-tratamiento textarea {
   resize: vertical;
+}
+
+.tratamiento-contenido {
+  min-width: 0;
+}
+
+.pestanas-tratamiento {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pestanas-tratamiento button {
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pestanas-tratamiento button:hover,
+.pestanas-tratamiento button.activa {
+  color: var(--color-primary);
+}
+
+.pestanas-tratamiento button.activa {
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.tratamiento-tabpanel .dato-legado {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
 }
 
 .medicamentos-seccion {
@@ -859,8 +972,6 @@ async function guardar() {
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-border);
 }
 
 .medicamentos-cabecera {
@@ -878,12 +989,6 @@ async function guardar() {
 .medicamentos-cabecera p,
 .medicamentos-vacio {
   margin: 4px 0 0;
-  color: var(--color-text-muted);
-  font-size: 12px;
-}
-
-.medicamentos-seccion .dato-legado {
-  margin: 0;
   color: var(--color-text-muted);
   font-size: 12px;
 }
@@ -955,6 +1060,11 @@ async function guardar() {
   }
 
   .tratamiento-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tratamiento-contexto,
+  .tratamiento-programacion {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -965,12 +1075,13 @@ async function guardar() {
 
 @media (max-width: 520px) {
   .signos-grid,
-  .tratamiento-grid {
+  .tratamiento-contexto,
+  .tratamiento-programacion {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .tratamiento-grid .doble {
-    grid-column: 1 / -1;
+  .tratamiento-contexto {
+    grid-template-columns: 1fr;
   }
 
   .medicamento-row {
