@@ -16,6 +16,11 @@ router = APIRouter(
 )
 
 
+@router.get("/metricas/animales-con-tratamiento-en-curso", response_model=int)
+def contar_animales_con_tratamiento_en_curso(db: Session = Depends(get_db)):
+    return TratamientoService.contar_animales_con_tratamiento_en_curso(db)
+
+
 @router.get("/diagnosticos/{id_diagnostico}/tratamientos", response_model=List[TratamientoResponse])
 def listar_tratamientos(id_diagnostico: int, db: Session = Depends(get_db)):
     return TratamientoService.listar_por_diagnostico(db, id_diagnostico)

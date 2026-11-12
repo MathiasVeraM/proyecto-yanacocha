@@ -69,6 +69,7 @@ ENDPOINTS = [
     ("POST", f"{URL}/1/diagnosticos", {"diagnostico": "X"}),
     ("PUT", f"{URL}/diagnosticos/1", {"diagnostico": "X"}),
     ("GET", f"{URL}/1/signos-vitales", None),
+    ("GET", f"{URL}/metricas/animales-con-tratamiento-en-curso", None),
     ("GET", f"{URL}/diagnosticos/1/tratamientos", None),
     ("POST", f"{URL}/diagnosticos/1/tratamientos", {"medicamento_o_proceso": "X"}),
     ("PUT", f"{URL}/tratamientos/1", {"estado": "finalizado"}),
@@ -716,6 +717,29 @@ def test_listar_tratamientos(client, h, diagnostico):
     _crear_tratamiento(client, h, diagnostico["id_diagnostico"], descripcion="Antibiótico")
     resp = client.get(f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos", headers=h)
     assert [t["descripcion"] for t in resp.json()] == ["Antibiótico"]
+
+
+def test_metrica_cuenta_animales_distintos_con_tratamiento_en_curso(client, h, crear_animal):
+    animal_con_dos_tratamientos = crear_animal()
+    animal_con_un_tratamiento = crear_animal()
+    animal_sin_tratamiento_activo = crear_animal()
+
+    diagnostico_1 = _crear_diagnostico(client, h, animal_con_dos_tratamientos["id_animal"])
+    diagnostico_2 = _crear_diagnostico(client, h, animal_con_un_tratamiento["id_animal"])
+    diagnostico_3 = _crear_diagnostico(client, h, animal_sin_tratamiento_activo["id_animal"])
+
+    _crear_tratamiento(client, h, diagnostico_1["id_diagnostico"])
+    _crear_tratamiento(client, h, diagnostico_1["id_diagnostico"], descripcion="Segundo tratamiento")
+    _crear_tratamiento(client, h, diagnostico_2["id_diagnostico"])
+    _crear_tratamiento(client, h, diagnostico_3["id_diagnostico"], estado="finalizado")
+
+    respuesta = client.get(
+        f"{URL}/metricas/animales-con-tratamiento-en-curso",
+        headers=h,
+    )
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == 2
 
 
 def test_listar_tratamientos_diagnostico_inexistente_404(client, h):

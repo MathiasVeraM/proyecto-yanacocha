@@ -286,8 +286,9 @@ const capitalizar = (texto: string) => texto.charAt(0).toUpperCase() + texto.sli
 }
 
 .datos > div {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(78px, 0.4fr) minmax(0, 0.6fr);
+  align-items: start;
   gap: 10px;
   padding: 8px 0;
   border-bottom: 1px solid var(--color-border);
@@ -299,9 +300,11 @@ const capitalizar = (texto: string) => texto.charAt(0).toUpperCase() + texto.sli
 }
 
 .datos dd {
+  min-width: 0;
   margin: 0;
   font-weight: 500;
-  text-align: right;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
 
 .alimento {

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import AnimalCard from '@/components/AnimalCard.vue'
 import AnimalFormModal from '@/components/AnimalFormModal.vue'
 import { animalesApi, recintosApi, taxonomiaApi } from '@/api/animales'
+import { veterinariaApi } from '@/api/veterinaria'
 import { ApiError } from '@/api/http'
 import { CLASES, ESTADOS_ANIMAL, ESTADOS_EN_CENTRO, nombreClase } from '@/config/animales'
 import type { Animal, EstadoAnimal, Recinto, Taxonomia } from '@/types/animales'
@@ -15,9 +16,11 @@ const especies = ref<Taxonomia[]>([])
 const recintos = ref<Recinto[]>([])
 const cargando = ref(true)
 const error = ref('')
+const errorMetricas = ref('')
 const formAbierto = ref(false)
 // Todos los ejemplares sin filtros, solo para las métricas de arriba
 const todos = ref<Animal[] | null>(null)
+const animalesConTratamientoEnCurso = ref<number | null>(null)
 const opcionesCargadas = ref(false)
 
 const filtros = reactive({
@@ -73,10 +76,22 @@ async function cargarOpcionesDeFiltro() {
 }
 
 async function cargarMetricas() {
-  try {
-    todos.value = await animalesApi.listar()
-  } catch {
-    // Sin esta lista las métricas de ejemplares quedan en "—"
+  errorMetricas.value = ''
+  const [lista, conteoTratamientos] = await Promise.allSettled([
+    animalesApi.listar(),
+    veterinariaApi.contarAnimalesConTratamientoEnCurso(),
+  ])
+  if (lista.status === 'fulfilled') todos.value = lista.value
+  else errorMetricas.value = 'No se pudo cargar el total de ejemplares.'
+  if (conteoTratamientos.status === 'fulfilled') {
+    animalesConTratamientoEnCurso.value = conteoTratamientos.value
+  } else {
+    errorMetricas.value = [
+      errorMetricas.value,
+      'No se pudo cargar el conteo de tratamientos en curso.',
+    ]
+      .filter(Boolean)
+      .join(' ')
   }
 }
 
@@ -90,8 +105,8 @@ const metricas = computed(() => {
     },
     { etiqueta: 'recintos', valor: formato(opcionesCargadas.value ? recintos.value.length : null) },
     {
-      etiqueta: 'en tratamiento',
-      valor: formato(lista ? lista.filter((a) => a.estado_actual === 'en_tratamiento').length : null),
+      etiqueta: 'animales con tratamientos en curso',
+      valor: formato(animalesConTratamientoEnCurso.value),
     },
   ]
 })
@@ -129,6 +144,7 @@ onMounted(() => {
       <span>{{ m.etiqueta }}</span>
     </article>
   </div>
+  <p v-if="errorMetricas" class="alert-error" role="alert">{{ errorMetricas }}</p>
 
   <!-- Una sola fila: filtros a la izquierda; buscador y registrar ingreso a la derecha -->
   <div class="toolbar">

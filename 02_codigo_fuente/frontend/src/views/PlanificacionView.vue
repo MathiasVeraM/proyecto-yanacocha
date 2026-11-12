@@ -79,6 +79,7 @@ const estado = ref<EstadoFiltro>('todas')
 
 // Panel derecho, observaciones y avisos
 const panel = ref<Panel | null>(null)
+const actividadEnfoque = ref<number | null>(null)
 const borrador = ref<{ fecha: string; hora: string; minutos: number } | null>(null)
 const observacionesPanel = ref<Observacion[]>([])
 const cargandoObsPanel = ref(false)
@@ -340,6 +341,8 @@ function cerrarPanel() {
 async function actividadCreada(actividad: Actividad) {
   borrador.value = null
   ancla.value = actividad.fecha_programada
+  estado.value = 'todas'
+  actividadEnfoque.value = actividad.id_actividad
   tipos[actividad.tipo_actividad] = true
   await cargarActividades()
   abrirDetalle(porId(actividad.id_actividad) ?? actividad)
@@ -537,6 +540,7 @@ onMounted(async () => {
             :ahora="ahora"
             :obs-por-actividad="obsPorActividad"
             :seleccion="seleccion"
+            :enfoque="actividadEnfoque"
             :actualizando-id="actualizandoId"
             :fantasma="panel?.modo === 'crear' ? borrador : null"
             @abrir="(a) => abrirDetalle(a)"
@@ -545,6 +549,7 @@ onMounted(async () => {
             @completar="completar"
             @observar="observar"
             @ver-dia="verDia"
+            @enfocado="actividadEnfoque = null"
           />
 
           <PanelCrearActividad
@@ -699,6 +704,7 @@ onMounted(async () => {
 
 .indicadores-compactos {
   min-width: 0;
+  width: 100%;
 }
 
 .indicadores-compactos :deep(.indicadores) {
@@ -723,14 +729,71 @@ onMounted(async () => {
 .indicadores-compactos :deep(.grid) {
   grid-template-columns: minmax(0, 1fr);
   gap: 7px;
+  min-width: 0;
+  width: 100%;
 }
 
 .indicadores-compactos :deep(.ind) {
+  box-sizing: border-box;
   grid-template-columns: 32px minmax(0, 1fr) 36px;
   gap: 9px;
   min-height: 58px;
+  min-width: 0;
+  width: 100%;
   padding: 8px 10px;
   border-radius: var(--radius-md);
+}
+
+.indicadores-compactos :deep(.detalle) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  padding: 12px;
+}
+
+.indicadores-compactos :deep(.det-h),
+.indicadores-compactos :deep(.det-h h3),
+.indicadores-compactos :deep(.det-acc),
+.indicadores-compactos :deep(.filas) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.indicadores-compactos :deep(.det-h) {
+  align-items: flex-start;
+}
+
+.indicadores-compactos :deep(.det-acc) {
+  flex-wrap: wrap;
+}
+
+.indicadores-compactos :deep(.filas li) {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.indicadores-compactos :deep(.filas li > *) {
+  grid-column: 1;
+  justify-self: start;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.indicadores-compactos :deep(.filas li .avatar) {
+  display: none;
+}
+
+.indicadores-compactos :deep(.quien) {
+  width: 100%;
+}
+
+.indicadores-compactos :deep(.quien small) {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
 }
 
 .indicadores-compactos :deep(.ico) {
@@ -1023,14 +1086,12 @@ onMounted(async () => {
   }
 
   .cal-cuerpo > :deep(.panel) {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 45;
-    width: min(360px, 100%);
-    max-height: none;
-    box-shadow: 0 14px 40px rgba(35, 40, 31, 0.18);
+    position: static;
+    width: auto;
+    max-height: min(70vh, 680px);
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
+    box-shadow: none;
   }
 }
 

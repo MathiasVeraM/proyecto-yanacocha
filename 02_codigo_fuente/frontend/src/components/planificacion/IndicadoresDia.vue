@@ -399,6 +399,8 @@ const iniciales = (texto: string) => texto.trim().slice(0, 2).toUpperCase()
 .detalle {
   display: grid;
   gap: 4px;
+  min-width: 0;
+  max-width: 100%;
   padding: 14px 18px;
   border: 1px solid var(--c);
   border-radius: var(--radius-lg);
@@ -407,6 +409,8 @@ const iniciales = (texto: string) => texto.trim().slice(0, 2).toUpperCase()
 
 .det-h {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
@@ -417,7 +421,9 @@ const iniciales = (texto: string) => texto.trim().slice(0, 2).toUpperCase()
 
 .det-h h3 {
   display: flex;
+  min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 15px;
   font-weight: 700;
@@ -435,7 +441,10 @@ const iniciales = (texto: string) => texto.trim().slice(0, 2).toUpperCase()
 
 .det-acc {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -479,12 +488,15 @@ const iniciales = (texto: string) => texto.trim().slice(0, 2).toUpperCase()
 
 .filas {
   display: grid;
+  min-width: 0;
+  max-width: 100%;
   padding: 0;
   list-style: none;
 }
 
 .filas li {
   display: grid;
+  min-width: 0;
   grid-template-columns: 34px minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 12px;
@@ -516,6 +528,7 @@ const iniciales = (texto: string) => texto.trim().slice(0, 2).toUpperCase()
 .quien {
   display: grid;
   min-width: 0;
+  max-width: 100%;
   padding: 0;
   border: none;
   background: none;
@@ -531,11 +544,12 @@ const iniciales = (texto: string) => texto.trim().slice(0, 2).toUpperCase()
 }
 
 .quien small {
-  overflow: hidden;
+  min-width: 0;
+  overflow: visible;
   font-size: 12px;
   color: var(--color-text-muted);
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 li.hecha .quien strong {
@@ -602,12 +616,21 @@ li.hecha .quien strong {
 
 @media (max-width: 760px) {
   .filas li {
-    grid-template-columns: 34px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .filas li > :nth-child(n + 3) {
-    grid-column: 2;
+  .filas li > * {
+    grid-column: 1;
     justify-self: start;
+    max-width: 100%;
+  }
+
+  .filas li .avatar {
+    display: none;
+  }
+
+  .filas li .tomas {
+    justify-content: flex-start;
   }
 }
 </style>

@@ -31,6 +31,7 @@ const props = defineProps<{
   ahora: string
   obsPorActividad: Record<number, number>
   seleccion: string | null
+  enfoque: number | null
   actualizandoId: number | null
   // Bloque punteado mientras se crea una actividad
   fantasma: { fecha: string; hora: string; minutos: number } | null
@@ -42,6 +43,7 @@ const emit = defineEmits<{
   completar: [a: Actividad]
   observar: [a: Actividad]
   verDia: [fecha: string]
+  enfocado: []
 }>()
 
 const ALTO_HORA = 60
@@ -170,11 +172,37 @@ const chipsMes = (fecha: string) =>
 // Al abrir la semana o el día, la rejilla arranca en el horario de trabajo (06:00)
 function desplazar() {
   void nextTick(() => {
-    if (scroll.value) scroll.value.scrollTop = 6 * ALTO_HORA + 10
+    if (!scroll.value) return
+    const maximo = scroll.value.scrollHeight - scroll.value.clientHeight
+    scroll.value.scrollTop = Math.min(6 * ALTO_HORA + 10, maximo)
+  })
+}
+function enfocarActividad(actividad: Actividad) {
+  void nextTick(() => {
+    if (props.vista === 'mes') {
+      emit('enfocado')
+      return
+    }
+    if (!scroll.value) return
+    const margen = 2 * ALTO_HORA
+    const posicion = actividad.hora_programada
+      ? Math.max(0, y(actividad.hora_programada) - margen)
+      : 6 * ALTO_HORA + 10
+    const maximo = scroll.value.scrollHeight - scroll.value.clientHeight
+    scroll.value.scrollTop = Math.min(posicion, maximo)
+    emit('enfocado')
   })
 }
 onMounted(desplazar)
-watch(() => props.vista, desplazar)
+watch(() => [props.vista, props.ancla], desplazar)
+watch(
+  () => props.enfoque
+    ? props.actividades.find((actividad) => actividad.id_actividad === props.enfoque) ?? null
+    : null,
+  (actividad) => {
+    if (actividad) enfocarActividad(actividad)
+  },
+)
 </script>
 
 <template>
@@ -182,7 +210,7 @@ watch(() => props.vista, desplazar)
   <div v-if="vista !== 'mes'" class="rejilla">
     <div class="cols cabeza" :style="{ '--n': dias.length }">
       <div class="gutter">Hora</div>
-      <div v-for="f in dias" :key="f">
+      <div v-for="f in dias" :key="f" :class="{ 'hoy-columna': f === hoy }">
         <button type="button" class="dia" :class="{ hoy: f === hoy }" :title="`Ver ${diaLargo(f)}`" @click="emit('verDia', f)">
           <span class="n">{{ deIso(f).getDate() }}</span>
           <span class="w">{{ vista === 'dia' ? diaLargo(f).split(' ')[0] : diaCorto(f) }}</span>
@@ -211,7 +239,13 @@ watch(() => props.vista, desplazar)
         <div class="horas">
           <div v-for="h in 24" :key="h"><span v-if="h > 1">{{ String(h - 1).padStart(2, '0') }}:00</span></div>
         </div>
-        <div v-for="f in dias" :key="f" class="col" @click.self="clicHueco($event, f)">
+        <div
+          v-for="f in dias"
+          :key="f"
+          class="col"
+          :class="{ 'hoy-columna': f === hoy }"
+          @click.self="clicHueco($event, f)"
+        >
           <div
             v-if="fantasma && fantasma.fecha === f && fantasma.hora"
             class="fantasma"
@@ -357,14 +391,25 @@ watch(() => props.vista, desplazar)
 }
 
 .dia.hoy .n {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-surface);
   font-weight: 700;
 }
 
 .dia.hoy .w {
   font-weight: 600;
   color: var(--color-primary);
+}
+
+.cabeza > div.hoy-columna {
+  background: rgba(46, 107, 52, 0.1);
+}
+
+.dia.hoy {
+  padding: 3px 8px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 700;
 }
 
 .sin-hora {
@@ -446,6 +491,11 @@ watch(() => props.vista, desplazar)
 
 .col:hover {
   background: rgba(46, 107, 52, 0.02);
+}
+
+.col.hoy-columna {
+  background-color: rgba(46, 107, 52, 0.055);
+  box-shadow: inset 1px 0 rgba(46, 107, 52, 0.16), inset -1px 0 rgba(46, 107, 52, 0.16);
 }
 
 /* Tarjeta: fondo pastel con franja del color del tipo */
@@ -678,6 +728,16 @@ watch(() => props.vista, desplazar)
 .celda.hoy .num {
   background: var(--color-primary);
   color: #fff;
+}
+
+.celda.hoy {
+  border: 2px solid var(--color-primary);
+  background: rgba(46, 107, 52, 0.09);
+  box-shadow: 0 2px 8px rgba(46, 107, 52, 0.12);
+}
+
+.celda.hoy .num {
+  box-shadow: 0 0 0 3px rgba(46, 107, 52, 0.14);
 }
 
 .chip {

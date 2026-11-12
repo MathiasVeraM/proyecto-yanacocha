@@ -1,9 +1,24 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from src.modelos.diagnostico_model import DiagnosticoModel
 from src.modelos.tratamiento_model import TratamientoMedicamentoModel, TratamientoModel
 
 
 class TratamientoRepository:
+    @staticmethod
+    def contar_animales_con_tratamiento_en_curso(db: Session) -> int:
+        return (
+            db.query(func.count(func.distinct(DiagnosticoModel.id_animal)))
+            .join(
+                TratamientoModel,
+                TratamientoModel.id_diagnostico == DiagnosticoModel.id_diagnostico,
+            )
+            .filter(TratamientoModel.estado == "en_curso")
+            .scalar()
+            or 0
+        )
+
     @staticmethod
     def obtener_por_diagnostico(db: Session, id_diagnostico: int):
         return (

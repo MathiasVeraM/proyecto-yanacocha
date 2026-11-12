@@ -37,6 +37,10 @@ def _validar_frecuencia(frecuencia_valor, frecuencia_unidad, hora_inicio):
 
 class TratamientoService:
     @staticmethod
+    def contar_animales_con_tratamiento_en_curso(db: Session) -> int:
+        return TratamientoRepository.contar_animales_con_tratamiento_en_curso(db)
+
+    @staticmethod
     def _tratamiento_o_404(db: Session, id_tratamiento: int):
         tratamiento = TratamientoRepository.obtener_por_id(db, id_tratamiento)
         if not tratamiento:

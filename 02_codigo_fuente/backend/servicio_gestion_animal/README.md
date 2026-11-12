@@ -75,6 +75,7 @@ las rutas públicas se mantienen bajo el prefijo `/api/animales`.
 | GET / POST | `/api/animales/{id}/diagnosticos` | Historial clínico |
 | PUT | `/api/animales/diagnosticos/{id}` | Corregir un diagnóstico |
 | GET | `/api/animales/{id}/signos-vitales` | Historial de signos vitales ordenado por fecha del diagnóstico |
+| GET | `/api/animales/metricas/animales-con-tratamiento-en-curso` | Cantidad de animales distintos con al menos un tratamiento en curso |
 | GET / POST | `/api/animales/diagnosticos/{id}/tratamientos` | Tratamientos de un diagnóstico |
 | PUT | `/api/animales/tratamientos/{id}` | Editar o finalizar un tratamiento |
 | POST | `/api/animales/tratamientos/{id}/generar-actividades` | Sincronizar las dosis programadas del tratamiento |

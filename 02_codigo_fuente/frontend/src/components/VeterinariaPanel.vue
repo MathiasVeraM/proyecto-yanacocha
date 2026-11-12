@@ -27,8 +27,8 @@ const modalAbierto = ref(false)
 const registroEditando = ref<RegistroExistente | null>(null)
 const tipoNuevo = ref<'diagnostico' | 'tratamiento'>('diagnostico')
 const paginaHistorial = ref(1)
-const registrosPorPagina = 5
-const pestanaHistorial = ref<'recientes' | 'historial'>('recientes')
+const registrosPorPagina = 4
+const pestanaHistorial = ref<'recientes' | 'historial'>('historial')
 const diagnosticoSeleccionado = ref<Diagnostico | null>(null)
 
 const cantidadTratamientos = computed(
@@ -445,14 +445,13 @@ watch(paginasHistorial, (total) => {
                 <span class="resumen-cabecera">
                   <strong>{{ diagnosticoReciente.diagnostico }}</strong>
                   <AppBadge v-if="diagnosticoReciente.es_critico" tone="amber">Crítico</AppBadge>
+                  <time :datetime="diagnosticoReciente.fecha_registro">
+                    {{ fechaHora(diagnosticoReciente.fecha_registro) }}
+                  </time>
                 </span>
                 <span class="resumen-descripcion">
                   {{ diagnosticoReciente.observaciones || 'Sin descripción registrada.' }}
                 </span>
-                <time :datetime="diagnosticoReciente.fecha_registro">
-                  {{ fechaHora(diagnosticoReciente.fecha_registro) }}
-                </time>
-                <span class="ver-detalle">Ver información completa ›</span>
               </button>
             </article>
             <p v-else class="estado-vacio">
@@ -464,9 +463,17 @@ watch(paginasHistorial, (total) => {
               <div class="resumen-tratamiento">
                 <div class="resumen-cabecera">
                   <strong>{{ tratamientoReciente.tratamiento.descripcion }}</strong>
-                  <AppBadge :tone="tonoTratamiento(tratamientoReciente.tratamiento.estado)">
-                    {{ etiquetaTratamiento(tratamientoReciente.tratamiento.estado) }}
-                  </AppBadge>
+                  <span class="tratamiento-meta">
+                    <AppBadge :tone="tonoTratamiento(tratamientoReciente.tratamiento.estado)">
+                      {{ etiquetaTratamiento(tratamientoReciente.tratamiento.estado) }}
+                    </AppBadge>
+                    <time :datetime="tratamientoReciente.tratamiento.fecha_inicio">
+                      Desde {{ formatearFecha(tratamientoReciente.tratamiento.fecha_inicio) }}
+                      <template v-if="tratamientoReciente.tratamiento.fecha_fin">
+                        · hasta {{ formatearFecha(tratamientoReciente.tratamiento.fecha_fin) }}
+                      </template>
+                    </time>
+                  </span>
                 </div>
                 <p
                   v-if="
@@ -501,12 +508,6 @@ watch(paginasHistorial, (total) => {
                 >
                   Dosis anterior: {{ tratamientoReciente.tratamiento.dosis }}
                 </p>
-                <time :datetime="tratamientoReciente.tratamiento.fecha_inicio">
-                  Desde {{ formatearFecha(tratamientoReciente.tratamiento.fecha_inicio) }}
-                  <template v-if="tratamientoReciente.tratamiento.fecha_fin">
-                    hasta {{ formatearFecha(tratamientoReciente.tratamiento.fecha_fin) }}
-                  </template>
-                </time>
                 <button
                   type="button"
                   class="enlace-diagnostico"
@@ -541,17 +542,15 @@ watch(paginasHistorial, (total) => {
                   <span class="resumen-cabecera">
                     <strong>{{ diagnostico.diagnostico }}</strong>
                     <AppBadge v-if="diagnostico.es_critico" tone="amber">Crítico</AppBadge>
+                    <time :datetime="diagnostico.fecha_registro">{{ fechaHora(diagnostico.fecha_registro) }}</time>
                   </span>
                   <span class="resumen-descripcion">
                     {{ diagnostico.observaciones || 'Sin descripción registrada.' }}
                   </span>
-                  <time :datetime="diagnostico.fecha_registro">{{ fechaHora(diagnostico.fecha_registro) }}</time>
-                  <span class="ver-detalle">Ver información completa ›</span>
                 </button>
               </li>
             </ol>
             <nav
-              v-if="diagnosticosOrdenados.length > registrosPorPagina"
               class="paginacion"
               aria-label="Paginación del historial de diagnósticos"
             >
@@ -697,13 +696,20 @@ watch(paginasHistorial, (total) => {
 .veterinaria-grid {
   display: grid;
   grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.7fr);
-  align-items: start;
+  align-items: stretch;
   gap: 18px;
 }
 
-.columna-signos,
-.columna-historial {
+.columna-signos {
   min-width: 0;
+}
+
+.columna-historial {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding-left: 18px;
+  border-left: 1px dashed var(--color-border-strong);
 }
 
 .ultima-revision {
@@ -747,6 +753,12 @@ watch(paginasHistorial, (total) => {
   gap: 12px;
 }
 
+.historial-diagnosticos {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
 .registro-reciente {
   display: grid;
   gap: 8px;
@@ -783,6 +795,30 @@ watch(paginasHistorial, (total) => {
   gap: 8px;
 }
 
+.resumen-cabecera time {
+  margin-left: auto;
+  color: var(--color-text-subtle);
+  font-size: 11px;
+  font-weight: 400;
+  text-align: right;
+}
+
+.tratamiento-meta {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 10px;
+  margin-left: auto;
+}
+
+.tratamiento-meta time {
+  color: var(--color-text-subtle);
+  font-size: 11px;
+  text-align: right;
+}
+
 .resumen-descripcion {
   display: -webkit-box;
   overflow: hidden;
@@ -800,14 +836,10 @@ watch(paginasHistorial, (total) => {
   font-size: 11px;
 }
 
-.ver-detalle {
-  color: var(--color-primary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .lista-diagnosticos {
   display: grid;
+  flex: 1;
+  align-content: start;
   gap: 10px;
   margin: 0;
   padding: 0;
@@ -1165,6 +1197,11 @@ watch(paginasHistorial, (total) => {
   margin-top: 20px;
 }
 
+.historial-diagnosticos .paginacion {
+  margin-top: auto;
+  padding-top: 18px;
+}
+
 .paginacion span {
   color: var(--color-text-muted);
   font-size: 12px;
@@ -1182,6 +1219,13 @@ watch(paginasHistorial, (total) => {
 @media (max-width: 900px) {
   .veterinaria-grid {
     grid-template-columns: 1fr;
+  }
+
+  .columna-historial {
+    padding-top: 18px;
+    padding-left: 0;
+    border-top: 1px dashed var(--color-border-strong);
+    border-left: 0;
   }
 
   .signos-resumen {

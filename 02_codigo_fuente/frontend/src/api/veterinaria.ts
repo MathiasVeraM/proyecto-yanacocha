@@ -13,6 +13,9 @@ import type {
 const URL = '/api/animales'
 
 export const veterinariaApi = {
+  contarAnimalesConTratamientoEnCurso: () =>
+    request<number>('GET', `${URL}/metricas/animales-con-tratamiento-en-curso`),
+
   listarDiagnosticos: (idAnimal: number) =>
     request<Diagnostico[]>('GET', `${URL}/${idAnimal}/diagnosticos`),
 
