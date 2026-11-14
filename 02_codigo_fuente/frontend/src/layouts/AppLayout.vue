@@ -9,7 +9,7 @@ import { useRolesStore } from '@/stores/roles'
 
 const auth = useAuthStore()
 const router = useRouter()
-const { contraido, alternar } = useMenuLateral()
+const { contraido } = useMenuLateral()
 const rolesStore = useRolesStore()
 
 const nombreRol = computed(() => rolesStore.nombreDe(auth.payload?.id_rol))
@@ -33,32 +33,13 @@ onMounted(() => {
 
     <div class="main">
       <header class="topbar">
-        <button
-          class="toggle-menu"
-          type="button"
-          :aria-label="contraido ? 'Mostrar menú' : 'Ocultar menú'"
-          :title="contraido ? 'Mostrar menú' : 'Ocultar menú'"
-          aria-controls="menu-lateral"
-          :aria-expanded="!contraido"
-          @click="alternar"
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
-            <path d="M9.5 4.5v15" />
-            <path v-if="contraido" d="m13.5 10 2 2-2 2" />
-            <path v-else d="m15.5 10-2 2 2 2" />
-          </svg>
-        </button>
+        <!-- Las vistas teletransportan aquí su enlace de regreso (p. ej. "Volver a fichas") -->
+        <div id="cabecera-navegacion" class="cabecera-navegacion"></div>
 
         <button class="bell" aria-label="Notificaciones">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-            <path
-              d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16Zm4 4h4"
-              fill="#e0b23c"
-              stroke="#b8861b"
-              stroke-width="1.5"
-              stroke-linejoin="round"
-            />
+          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+            <path d="M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15L6 16Z" />
+            <path d="M10 20.5a2.2 2.2 0 0 0 4 0" />
           </svg>
           <span class="bell-badge">3</span>
         </button>
@@ -70,7 +51,9 @@ onMounted(() => {
               <strong>{{ correo.split('@')[0] }}</strong>
               <small>Área: {{ nombreRol }}</small>
             </span>
-            <span class="account-chevron" aria-hidden="true">⌄</span>
+            <svg class="account-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
           </summary>
           <div class="account-popover">
             <span class="account-email">{{ correo }}</span>
@@ -87,40 +70,20 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* El menú lateral y la cabecera quedan fijos: la ventana no hace scroll,
+   solo el contenido de la página (.content). */
 .shell {
   display: grid;
-  grid-template-columns: 240px 1fr;
-  height: 100%;
+  grid-template-columns: 244px 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   transition: grid-template-columns 0.2s ease;
 }
 
 .shell.contraido {
   grid-template-columns: 72px 1fr;
-}
-
-.toggle-menu {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  margin-right: auto;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-}
-
-.toggle-menu:hover {
-  background: var(--color-surface-alt);
-  color: var(--color-text);
-}
-
-.toggle-menu svg {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -129,10 +92,22 @@ onMounted(() => {
   }
 }
 
+.cabecera-navegacion {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-right: auto;
+}
+
 .main {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+}
+
+.topbar {
+  flex-shrink: 0;
 }
 
 .topbar {
@@ -140,26 +115,43 @@ onMounted(() => {
   justify-content: flex-end;
   align-items: center;
   gap: 12px;
-  padding: 14px 24px;
+  /* Cabecera delgada: solo lo justo para la campana y el botón de usuario */
+  height: 52px;
+  padding: 0 24px 0 32px;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
 
+/* Campana y botón de usuario: botones claros, bien redondeados y con sombra suave */
 .bell {
   position: relative;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  background: var(--color-input);
+  width: 38px;
+  height: 38px;
+  background: var(--color-surface);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(35, 40, 31, 0.06);
+}
+
+.bell:hover {
+  background: var(--color-surface-alt);
+}
+
+.bell svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .bell-badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -4px;
+  right: -4px;
   min-width: 15px;
   height: 15px;
   border-radius: 50%;
@@ -177,14 +169,24 @@ onMounted(() => {
 .account-button {
   display: flex;
   align-items: center;
-  gap: 9px;
-  min-width: 180px;
-  padding: 4px 10px 4px 5px;
+  gap: 10px;
+  min-width: 190px;
+  height: 38px;
+  padding: 0 10px 0 4px;
   list-style: none;
   background: var(--color-surface);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(35, 40, 31, 0.06);
   cursor: pointer;
+}
+
+/* Avatar cuadrado redondeado (solo en la cabecera; en otras vistas sigue circular) */
+.account-button :deep(.avatar) {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  font-size: 11px;
 }
 
 .account-button::-webkit-details-marker {
@@ -213,17 +215,27 @@ onMounted(() => {
 
 .account-info strong {
   color: var(--color-text);
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .account-info small {
   color: var(--color-text-muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .account-chevron {
-  color: var(--color-text-muted);
-  font-size: 13px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s ease;
+}
+
+.account-menu[open] .account-chevron {
+  transform: rotate(180deg);
 }
 
 .account-popover {
@@ -281,6 +293,7 @@ onMounted(() => {
 
 .content {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 24px;
 }
