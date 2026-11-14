@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, statu
 from sqlalchemy.orm import Session
 from src.database import get_db
 from src.esquemas.animal_schema import AnimalCreate, AnimalResponse, AnimalUpdate, EstadoAnimal
-from src.logica_negocio.auth import verificar_acceso_modulo
+from src.logica_negocio.auth import requiere_gestion_fichas, verificar_acceso_modulo
 from src.logica_negocio.animal_service import AnimalService
 from src.logica_negocio.imagen_service import ImagenService
 
@@ -25,7 +25,12 @@ def listar_animales(
 ):
     return AnimalService.listar_animales(db, buscar, id_taxonomia, estado, id_recinto, clase)
 
-@router.post("", response_model=AnimalResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=AnimalResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(requiere_gestion_fichas)],
+)
 def crear_animal(animal_in: AnimalCreate, db: Session = Depends(get_db)):
     return AnimalService.crear_animal(db, animal_in)
 
@@ -33,11 +38,11 @@ def crear_animal(animal_in: AnimalCreate, db: Session = Depends(get_db)):
 def obtener_animal(id_animal: int, db: Session = Depends(get_db)):
     return AnimalService.animal_o_404(db, id_animal)
 
-@router.put("/{id_animal}", response_model=AnimalResponse)
+@router.put("/{id_animal}", response_model=AnimalResponse, dependencies=[Depends(requiere_gestion_fichas)])
 def actualizar_animal(id_animal: int, animal_in: AnimalUpdate, db: Session = Depends(get_db)):
     return AnimalService.actualizar_animal(db, id_animal, animal_in)
 
-@router.put("/{id_animal}/imagen", response_model=AnimalResponse)
+@router.put("/{id_animal}/imagen", response_model=AnimalResponse, dependencies=[Depends(requiere_gestion_fichas)])
 def subir_imagen(id_animal: int, archivo: UploadFile = File(...), db: Session = Depends(get_db)):
     # Sube o reemplaza la foto (JPG, PNG o WEBP, máx. 5 MB) y actualiza url_imagen
     return ImagenService.guardar_imagen(db, id_animal, archivo.file)

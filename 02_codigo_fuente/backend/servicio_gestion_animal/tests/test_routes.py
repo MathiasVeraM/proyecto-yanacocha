@@ -1037,3 +1037,49 @@ def test_alerta_se_combina_con_los_filtros_del_listado(client, h, crear_animal):
     resp = client.get(URL, params={"buscar": "Yaku"}, headers=h).json()
 
     assert [(a["id_animal"], a["tiene_tratamiento_en_curso"]) for a in resp] == [(animal["id_animal"], True)]
+
+
+# ---- Permisos por rol: registrar, editar y dar salida a un animal ----
+
+ESCRITURAS_FICHA = [
+    ("POST", URL, {"id_taxonomia": 1, "id_recinto": 1, "edad_anios": 1}),
+    ("PUT", f"{URL}/1", {"estado_actual": "liberado"}),
+    ("PUT", f"{URL}/1/imagen", None),
+]
+
+
+@pytest.mark.parametrize("metodo,url,cuerpo", ESCRITURAS_FICHA)
+@pytest.mark.parametrize("id_rol", [1, ID_ROL_VOLUNTARIO])
+def test_administrador_y_otros_roles_no_registran_ni_editan_fichas_403(
+    client, headers_con_token, metodo, url, cuerpo, id_rol
+):
+    headers = headers_con_token(id_rol=id_rol)
+    resp = client.request(metodo, url, json=cuerpo, headers=headers)
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Tu rol no tiene permiso para realizar esta acción"
+
+
+def test_administrador_no_da_salida_y_no_cambia_el_estado(client, h, headers_con_token, crear_animal):
+    animal = crear_animal()
+    admin = headers_con_token(id_rol=1, modulos=[])
+
+    resp = client.put(f"{URL}/{animal['id_animal']}", json={"estado_actual": "liberado"}, headers=admin)
+
+    assert resp.status_code == 403
+    assert client.get(f"{URL}/{animal['id_animal']}", headers=h).json()["estado_actual"] == "en_centro"
+
+
+def test_administrador_consulta_fichas(client, headers_con_token, crear_animal):
+    crear_animal()
+    admin = headers_con_token(id_rol=1, modulos=[])
+    assert len(client.get(URL, headers=admin).json()) == 1
+
+
+def test_manejo_de_animales_registra_edita_y_da_salida(client, headers_con_token, nuevo_animal):
+    manejo = headers_con_token(id_rol=ID_ROL_MANEJO_ANIMAL)
+    creado = client.post(URL, json={**nuevo_animal, "edad_anios": 1}, headers=manejo)
+    assert creado.status_code == 201
+
+    salida = client.put(f"{URL}/{creado.json()['id_animal']}", json={"estado_actual": "liberado"}, headers=manejo)
+    assert salida.status_code == 200
+    assert salida.json()["estado_actual"] == "liberado"

@@ -95,9 +95,6 @@ def test_las_lecturas_no_se_restringen_por_rol(metodo, ruta, id_rol):
 @pytest.mark.parametrize(
     "metodo,ruta",
     [
-        ("POST", "/api/animales"),
-        ("PUT", "/api/animales/5"),
-        ("PUT", "/api/animales/5/imagen"),
         ("POST", "/api/animales/recintos"),
         ("POST", "/api/animales/taxonomia"),
         ("POST", "/api/auth/usuarios"),
@@ -120,6 +117,36 @@ def test_metodo_en_minusculas():
 def test_rol_desconocido_no_puede_escribir_en_rutas_restringidas(id_rol):
     assert not rol_autorizado("POST", "/api/actividades", id_rol)
     assert not rol_autorizado("POST", "/api/animales/5/diagnosticos", id_rol)
+
+
+ESCRITURAS_FICHA = [
+    ("POST", "/api/animales"),
+    ("PUT", "/api/animales/5"),
+    ("PUT", "/api/animales/5/imagen"),
+]
+
+
+@pytest.mark.parametrize("metodo,ruta", ESCRITURAS_FICHA)
+@pytest.mark.parametrize("id_rol", TODOS_LOS_ROLES)
+def test_registrar_editar_y_dar_salida_solo_veterinaria_y_manejo(metodo, ruta, id_rol):
+    esperado = id_rol in {ID_ROL_VETERINARIA, ID_ROL_MANEJO_ANIMAL}
+    assert rol_autorizado(metodo, ruta, id_rol) is esperado
+
+
+def test_administrador_no_registra_ni_edita_fichas(client_anonimo, servicio, headers_admin):
+    assert client_anonimo.get("/api/animales", headers=headers_admin).status_code == 200
+    assert client_anonimo.post("/api/animales", headers=headers_admin, json={}).status_code == 403
+    assert client_anonimo.put("/api/animales/5", headers=headers_admin, json={}).status_code == 403
+    assert len(servicio.peticiones) == 1
+
+
+def test_manejo_de_animales_registra_fichas(client_anonimo, servicio, crear_token, cabeceras):
+    token = crear_token(id_rol=ID_ROL_MANEJO_ANIMAL, modulos=[MODULO_FICHAS_EJEMPLARES])
+
+    response = client_anonimo.post("/api/animales", headers=cabeceras(token), json={})
+
+    assert response.status_code == 200
+    assert len(servicio.peticiones) == 1
 
 
 # ---- Integración con el gateway ----

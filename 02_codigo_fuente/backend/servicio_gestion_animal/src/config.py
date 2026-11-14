@@ -24,6 +24,7 @@ CODIGO_MODULO = "servicio-gestion-animal"
 # Deben coincidir con los id_rol de la tabla rol del servicio de accesos
 ID_ROL_ADMIN = 1
 ID_ROL_VETERINARIA = 2
+ID_ROL_MANEJO_ANIMAL = 3
 
 # El servidor de la base de datos está en UTC; las fechas se calculan en hora del centro
 ZONA_HORARIA = ZoneInfo("America/Guayaquil")

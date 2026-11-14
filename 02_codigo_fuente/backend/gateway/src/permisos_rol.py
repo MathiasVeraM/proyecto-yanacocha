@@ -30,6 +30,11 @@ REGLAS_ESCRITURA: list[tuple[re.Pattern, Optional[frozenset[int]]]] = [
         re.compile(r"^/api/animales/(\d+/)?(diagnosticos|tratamientos)(/.*)?$"),
         frozenset({ID_ROL_VETERINARIA}),
     ),
+    # Registrar el ingreso, editar la ficha (también registra la salida) y subir la foto
+    (
+        re.compile(r"^/api/animales(/\d+(/imagen)?)?$"),
+        frozenset({ID_ROL_VETERINARIA, ID_ROL_MANEJO_ANIMAL}),
+    ),
     # ---- Planificación ----
     # La renovación del horizonte de tomas y dosis se dispara al abrir Planificación
     (

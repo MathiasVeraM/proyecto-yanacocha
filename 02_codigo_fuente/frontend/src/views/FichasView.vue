@@ -5,6 +5,7 @@ import AnimalCard from '@/components/AnimalCard.vue'
 import AnimalFormModal from '@/components/AnimalFormModal.vue'
 import { consultas } from '@/api/consultas'
 import { ApiError } from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
 import { CLASES, ESTADOS_ANIMAL, ESTADOS_EN_CENTRO, nombreClase } from '@/config/animales'
 import type { Animal, EstadoAnimal, Recinto, Taxonomia } from '@/types/animales'
 
@@ -17,6 +18,8 @@ const cargando = ref(true)
 const error = ref('')
 const errorMetricas = ref('')
 const formAbierto = ref(false)
+// Registrar ingresos es solo de Veterinaria y Manejo de Animales
+const auth = useAuthStore()
 // Todos los ejemplares sin filtros, solo para las métricas de arriba
 const todos = ref<Animal[] | null>(null)
 const animalesConTratamientoEnCurso = ref<number | null>(null)
@@ -196,7 +199,9 @@ onMounted(() => {
           aria-label="Buscar ejemplares"
         />
       </label>
-      <button class="btn btn-primary registrar" @click="formAbierto = true">+ Registrar ingreso</button>
+      <button v-if="auth.permisos.gestionarFichas" class="btn btn-primary registrar" @click="formAbierto = true">
+        + Registrar ingreso
+      </button>
     </div>
   </div>
 

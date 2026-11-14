@@ -296,7 +296,7 @@ watch(tab, (valor) => {
   </Teleport>
 
   <p v-if="aviso" class="alert-error aviso">
-    {{ aviso }} Puedes volver a adjuntarla desde «Editar ficha».
+    {{ aviso }}<template v-if="auth.permisos.gestionarFichas"> Puedes volver a adjuntarla desde «Editar ficha».</template>
     <button type="button" aria-label="Cerrar aviso" @click="aviso = ''">×</button>
   </p>
 
@@ -324,8 +324,9 @@ watch(tab, (valor) => {
       </div>
 
       <div class="acciones">
-        <button class="btn btn-primary" @click="editarAbierto = true">Editar ficha</button>
-        <div class="menu" @focusout="cerrarMenuSiSaleFoco" @keydown.esc="menuAbierto = false">
+        <!-- Editar la ficha y registrar la salida es solo de Veterinaria y Manejo de Animales -->
+        <button v-if="auth.permisos.gestionarFichas" class="btn btn-primary" @click="editarAbierto = true">Editar ficha</button>
+        <div v-if="auth.permisos.gestionarFichas" class="menu" @focusout="cerrarMenuSiSaleFoco" @keydown.esc="menuAbierto = false">
           <button
             type="button"
             class="btn-mas"

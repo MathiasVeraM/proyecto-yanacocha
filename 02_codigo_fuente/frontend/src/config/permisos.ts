@@ -11,6 +11,8 @@ export const ROL = {
 
 export interface PermisosRol {
   // ---- Fichas ----
+  // Registrar ingreso, editar la ficha y registrar la salida de un animal
+  gestionarFichas: boolean
   verPestanaVeterinaria: boolean
   // Nuevo registro, editar diagnósticos y tratamientos
   registrarVeterinaria: boolean
@@ -25,6 +27,7 @@ export interface PermisosRol {
 export function permisosDeRol(idRol: number | null | undefined): PermisosRol {
   const es = (...roles: number[]) => idRol != null && roles.includes(idRol)
   return {
+    gestionarFichas: es(ROL.VETERINARIA, ROL.MANEJO_ANIMAL),
     verPestanaVeterinaria: es(ROL.VETERINARIA, ROL.ADMIN),
     registrarVeterinaria: es(ROL.VETERINARIA),
     generarPdfVeterinaria: es(ROL.VETERINARIA, ROL.ADMIN),
