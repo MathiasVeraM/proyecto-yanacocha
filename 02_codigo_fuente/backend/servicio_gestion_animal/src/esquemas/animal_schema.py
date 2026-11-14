@@ -1,11 +1,18 @@
 from datetime import date
 from typing import Any, Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from src.esquemas.recinto_schema import RecintoResponse
+from src.modelos.fechas import hoy_local
 from src.esquemas.taxonomia_schema import TaxonomiaResponse
 
 EstadoAnimal = Literal["en_centro", "en_tratamiento", "liberado", "trasladado", "fallecido"]
 Sexo = Literal["macho", "hembra", "indeterminado"]
+
+def _validar_ingreso(fecha: Optional[date]) -> Optional[date]:
+    if fecha is not None and fecha > hoy_local():
+        raise ValueError("La fecha de ingreso no puede ser futura")
+    return fecha
+
 
 # El código no se envía: lo genera el servicio con el formato YC-año-número.
 # La foto se sube aparte (PUT /api/animales/{id}/imagen) y el servicio llena url_imagen
@@ -22,6 +29,11 @@ class AnimalCreate(BaseModel):
     estado_actual: EstadoAnimal = "en_centro"
     # Si no se envía, se usa la fecha de hoy
     fecha_ingreso: Optional[date] = None
+
+    @field_validator("fecha_ingreso")
+    @classmethod
+    def ingreso_no_futuro(cls, fecha: Optional[date]) -> Optional[date]:
+        return _validar_ingreso(fecha)
 
     @model_validator(mode="before")
     @classmethod
@@ -53,6 +65,11 @@ class AnimalUpdate(BaseModel):
     sexo: Optional[Sexo] = None
     estado_actual: Optional[EstadoAnimal] = None
     fecha_ingreso: Optional[date] = None
+
+    @field_validator("fecha_ingreso")
+    @classmethod
+    def ingreso_no_futuro(cls, fecha: Optional[date]) -> Optional[date]:
+        return _validar_ingreso(fecha)
 
     @model_validator(mode="before")
     @classmethod

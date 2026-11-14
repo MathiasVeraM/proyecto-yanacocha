@@ -858,3 +858,51 @@ def test_listar_tratamientos_del_animal_sin_tratamientos(client, h, crear_animal
 def test_listar_tratamientos_de_animal_inexistente_404(client, h):
     resp = client.get(f"{URL}/999/tratamientos", headers=h)
     assert resp.status_code == 404
+
+
+# ---- Reglas de fechas (validaciones 34, 35 y 36) ----
+
+def test_tratamiento_no_empieza_antes_del_ingreso(client, h, crear_animal):
+    hoy = hoy_local()
+    animal = crear_animal(fecha_ingreso=hoy.isoformat())
+    diagnostico = _crear_diagnostico(client, h, animal["id_animal"])
+    resp = client.post(
+        f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos",
+        json={"descripcion": "X", "frecuencia_valor": 1, "frecuencia_unidad": "dias",
+              "hora_inicio": "08:00:00", "fecha_inicio": (hoy - timedelta(days=3)).isoformat()},
+        headers=h,
+    )
+    assert resp.status_code == 422
+    assert "ingreso del animal" in resp.json()["detail"]
+
+
+def test_finalizar_tratamiento_guarda_la_fecha_de_hoy(client, h, diagnostico):
+    tratamiento = _crear_tratamiento(client, h, diagnostico["id_diagnostico"])
+    assert tratamiento["fecha_fin"] is None
+    resp = client.put(f"{URL}/tratamientos/{tratamiento['id_tratamiento']}", json={"estado": "finalizado"}, headers=h)
+    assert resp.status_code == 200
+    assert resp.json()["fecha_fin"] == hoy_local().isoformat()
+
+
+def test_ingreso_del_animal_no_puede_ser_futuro(client, h, nuevo_animal):
+    manana = (hoy_local() + timedelta(days=1)).isoformat()
+    resp = client.post(URL, json={**nuevo_animal, "edad_anios": 1, "fecha_ingreso": manana}, headers=h)
+    assert resp.status_code == 422
+
+
+def test_metrica_no_cuenta_tratamientos_vencidos_ni_animales_que_salieron(client, h, crear_animal):
+    hoy = hoy_local()
+    vencido = crear_animal(fecha_ingreso=(hoy - timedelta(days=10)).isoformat())
+    d1 = _crear_diagnostico(client, h, vencido["id_animal"])
+    _crear_tratamiento(
+        client, h, d1["id_diagnostico"],
+        fecha_inicio=hoy.isoformat(), fecha_fin=hoy.isoformat(),
+    )
+    url = f"{URL}/metricas/animales-con-tratamiento-en-curso"
+    assert client.get(url, headers=h).json() == 1
+    salio = crear_animal()
+    d2 = _crear_diagnostico(client, h, salio["id_animal"])
+    _crear_tratamiento(client, h, d2["id_diagnostico"])
+    assert client.get(url, headers=h).json() == 2
+    client.put(f"{URL}/{salio['id_animal']}", json={"estado_actual": "trasladado"}, headers=h)
+    assert client.get(url, headers=h).json() == 1

@@ -2,7 +2,7 @@ from datetime import date, time
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 EstadoTratamiento = Literal["en_curso", "finalizado", "suspendido"]
@@ -20,6 +20,10 @@ class TratamientoMedicamentoResponse(TratamientoMedicamentoCreate):
     id_tratamiento_medicamento: int
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("dosis_ml")
+    def serializar_dosis(self, dosis: Decimal) -> float:
+        return float(dosis)
 
 
 class TratamientoCreate(BaseModel):

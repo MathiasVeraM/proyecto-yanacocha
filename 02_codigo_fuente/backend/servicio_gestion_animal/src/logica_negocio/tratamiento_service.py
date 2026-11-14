@@ -36,6 +36,33 @@ def _validar_frecuencia(frecuencia_valor, frecuencia_unidad, hora_inicio):
         )
 
 
+def _validar_inicio(db: Session, diagnostico, fecha_inicio):
+    """El tratamiento no puede empezar antes del ingreso del animal ni antes del diagnóstico."""
+    animal = AnimalService.animal_o_404(db, diagnostico.id_animal)
+    fecha_diagnostico = diagnostico.fecha_registro.date()
+    if fecha_inicio < animal.fecha_ingreso:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"El tratamiento no puede empezar antes del ingreso del animal ({animal.fecha_ingreso:%d/%m/%Y})",
+        )
+    if fecha_inicio < fecha_diagnostico:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"El tratamiento no puede empezar antes del diagnóstico ({fecha_diagnostico:%d/%m/%Y})",
+        )
+
+
+def _fin_al_finalizar(datos: dict, estado, fecha_inicio, fecha_fin) -> None:
+    """Al marcar "finalizado" sin fecha de fin, el sistema guarda la fecha de hoy (modifica datos)."""
+    if estado == "finalizado" and fecha_fin is None:
+        datos["fecha_fin"] = max(hoy_local(), fecha_inicio)
+
+
+def _como_dict(medicamento):
+    # Según cómo llegue (esquema o diccionario ya convertido)
+    return medicamento if isinstance(medicamento, dict) else medicamento.model_dump()
+
+
 class TratamientoService:
     @staticmethod
     def contar_animales_con_tratamiento_en_curso(db: Session) -> int:
@@ -60,8 +87,10 @@ class TratamientoService:
 
     @staticmethod
     def crear_tratamiento(db: Session, id_diagnostico: int, tratamiento_in):
-        DiagnosticoService.diagnostico_o_404(db, id_diagnostico)
-        _validar_fechas(tratamiento_in.fecha_inicio or hoy_local(), tratamiento_in.fecha_fin)
+        diagnostico = DiagnosticoService.diagnostico_o_404(db, id_diagnostico)
+        fecha_inicio = tratamiento_in.fecha_inicio or hoy_local()
+        _validar_fechas(fecha_inicio, tratamiento_in.fecha_fin)
+        _validar_inicio(db, diagnostico, fecha_inicio)
         _validar_frecuencia(
             tratamiento_in.frecuencia_valor,
             tratamiento_in.frecuencia_unidad,
@@ -69,6 +98,7 @@ class TratamientoService:
         )
         datos = tratamiento_in.model_dump(exclude={"medicamentos"}, exclude_none=True)
         datos["id_diagnostico"] = id_diagnostico
+        _fin_al_finalizar(datos, datos.get("estado"), fecha_inicio, datos.get("fecha_fin"))
         medicamentos = [medicamento.model_dump() for medicamento in tratamiento_in.medicamentos]
         return TratamientoRepository.crear_tratamiento(db, datos, medicamentos)
 
@@ -86,8 +116,16 @@ class TratamientoService:
             datos.get("frecuencia_unidad", tratamiento.frecuencia_unidad),
             datos.get("hora_inicio", tratamiento.hora_inicio),
         )
+        fecha_inicio = datos.get("fecha_inicio", tratamiento.fecha_inicio)
+        if "fecha_inicio" in datos:
+            diagnostico = DiagnosticoService.diagnostico_o_404(db, tratamiento.id_diagnostico)
+            _validar_inicio(db, diagnostico, fecha_inicio)
+        _fin_al_finalizar(
+            datos,
+            datos.get("estado", tratamiento.estado),
+            fecha_inicio,
+            datos.get("fecha_fin", tratamiento.fecha_fin),
+        )
         if "medicamentos" in datos and datos["medicamentos"] is not None:
-            datos["medicamentos"] = [
-                medicamento.model_dump() for medicamento in datos["medicamentos"]
-            ]
+            datos["medicamentos"] = [_como_dict(medicamento) for medicamento in datos["medicamentos"]]
         return TratamientoRepository.actualizar_tratamiento(db, tratamiento, datos)
