@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import AppBadge from '@/components/AppBadge.vue'
 import VeterinariaRegistroModal from '@/components/VeterinariaRegistroModal.vue'
 import { ApiError } from '@/api/http'
@@ -14,7 +14,8 @@ import type {
   UnidadFrecuenciaTratamiento,
 } from '@/types/veterinaria'
 
-const props = defineProps<{ idAnimal: number; nombreEjemplar?: string }>()
+// fechaIngreso: para que un tratamiento no empiece antes del ingreso del animal
+const props = defineProps<{ idAnimal: number; nombreEjemplar?: string; fechaIngreso?: string }>()
 
 type RegistroExistente =
   | { tipo: 'diagnostico'; datos: Diagnostico }
@@ -28,7 +29,8 @@ const modalAbierto = ref(false)
 const registroEditando = ref<RegistroExistente | null>(null)
 const tipoNuevo = ref<'diagnostico' | 'tratamiento'>('diagnostico')
 const paginaHistorial = ref(1)
-const registrosPorPagina = 4
+// Cuántas tarjetas caben en el alto de la tarjeta de signos vitales (se mide; ver más abajo)
+const registrosPorPagina = ref(4)
 const pestanaHistorial = ref<'recientes' | 'historial'>('historial')
 const diagnosticoSeleccionado = ref<Diagnostico | null>(null)
 
@@ -148,10 +150,10 @@ const diagnosticosOrdenados = computed(() =>
   ),
 )
 const diagnosticoReciente = computed(() => diagnosticosOrdenados.value[0] ?? null)
-const paginasHistorial = computed(() => Math.max(1, Math.ceil(diagnosticosOrdenados.value.length / registrosPorPagina)))
+const paginasHistorial = computed(() => Math.max(1, Math.ceil(diagnosticosOrdenados.value.length / registrosPorPagina.value)))
 const diagnosticosPaginados = computed(() => {
-  const inicio = (paginaHistorial.value - 1) * registrosPorPagina
-  return diagnosticosOrdenados.value.slice(inicio, inicio + registrosPorPagina)
+  const inicio = (paginaHistorial.value - 1) * registrosPorPagina.value
+  return diagnosticosOrdenados.value.slice(inicio, inicio + registrosPorPagina.value)
 })
 const tratamientosOrdenados = computed(() =>
   diagnosticosOrdenados.value
@@ -239,6 +241,41 @@ function valoresSignosVitales(signos: SignosVitales | null) {
   if (signos.mucosas) valores.push({ etiqueta: 'Mucosas', valor: etiquetaCategoria(signos.mucosas) })
   if (signos.actitud) valores.push({ etiqueta: 'Actitud', valor: etiquetaCategoria(signos.actitud) })
   return valores
+}
+
+// ---- Tarjetas resumen del historial ----
+
+const tratamientosDe = (diagnostico: Diagnostico) => tratamientos.value[diagnostico.id_diagnostico] ?? []
+const activosDe = (diagnostico: Diagnostico) => tratamientosDe(diagnostico).filter((t) => t.estado === 'en_curso').length
+// Total de tratamientos en curso del animal (métrica de la cabecera)
+const tratamientosActivos = computed(() =>
+  Object.values(tratamientos.value).reduce((total, lista) => total + lista.filter((t) => t.estado === 'en_curso').length, 0),
+)
+
+// La lista de tarjetas ocupa el mismo alto que la tarjeta de signos vitales: se mide el espacio
+// disponible y se muestran las que entran; las demás van en las páginas siguientes
+const ALTO_TARJETA = 74
+const ESPACIO_TARJETAS = 8
+const listaHistorial = ref<HTMLElement | null>(null)
+const pantallaAncha = window.matchMedia('(min-width: 901px)')
+const observador = new ResizeObserver(([entrada]) => {
+  const alto = entrada?.contentRect.height ?? 0
+  // En pantallas angostas (una sola columna) no hay tarjeta de signos al lado: se usan 4 por página
+  registrosPorPagina.value = pantallaAncha.matches && alto >= ALTO_TARJETA
+    ? Math.max(1, Math.floor((alto + ESPACIO_TARJETAS) / (ALTO_TARJETA + ESPACIO_TARJETAS)))
+    : 4
+})
+watch(listaHistorial, (elemento, anterior) => {
+  if (anterior) observador.unobserve(anterior)
+  if (elemento) observador.observe(elemento)
+})
+onBeforeUnmount(() => observador.disconnect())
+
+// ---- Modal de detalle: se elige un tratamiento para ver todo su detalle ----
+const tratamientoAbierto = ref<number | null>(null)
+watch(diagnosticoSeleccionado, () => (tratamientoAbierto.value = null))
+function alternarTratamiento(id: number) {
+  tratamientoAbierto.value = tratamientoAbierto.value === id ? null : id
 }
 
 function abrirDetalle(diagnostico: Diagnostico) {
@@ -396,7 +433,10 @@ watch(paginasHistorial, (total) => {
             <div>
               <h2>Historial clínico</h2>
               <p>{{ diagnosticos.length }} {{ diagnosticos.length === 1 ? 'diagnóstico' : 'diagnósticos' }} ·
-                {{ cantidadTratamientos }} {{ cantidadTratamientos === 1 ? 'tratamiento' : 'tratamientos' }} registrados
+                {{ cantidadTratamientos }} {{ cantidadTratamientos === 1 ? 'tratamiento' : 'tratamientos' }}
+                <span v-if="!cargando" class="metrica-activos" :class="{ hay: tratamientosActivos > 0 }">
+                  · {{ tratamientosActivos }} {{ tratamientosActivos === 1 ? 'activo' : 'activos' }}
+                </span>
               </p>
             </div>
             <nav
@@ -545,25 +585,32 @@ watch(paginasHistorial, (total) => {
             <p v-if="diagnosticosOrdenados.length === 0" class="estado-vacio">
               Aún no hay diagnósticos registrados.
             </p>
-            <ol v-else class="lista-diagnosticos">
-              <li v-for="diagnostico in diagnosticosPaginados" :key="diagnostico.id_diagnostico">
-                <button
-                  type="button"
-                  class="resumen-diagnostico"
-                  :aria-label="`Ver diagnóstico ${diagnostico.diagnostico}`"
-                  @click="abrirDetalle(diagnostico)"
-                >
-                  <span class="resumen-cabecera">
-                    <strong>{{ diagnostico.diagnostico }}</strong>
-                    <AppBadge v-if="diagnostico.es_critico" tone="amber">Crítico</AppBadge>
-                    <time :datetime="diagnostico.fecha_registro">{{ fechaHora(diagnostico.fecha_registro) }}</time>
-                  </span>
-                  <span class="resumen-descripcion">
-                    {{ diagnostico.observaciones || 'Sin descripción registrada.' }}
-                  </span>
-                </button>
-              </li>
-            </ol>
+            <!-- Tarjeta resumen (título y fecha) por diagnóstico; al hacer clic se abre el detalle -->
+            <div v-else ref="listaHistorial" class="lista-medida">
+              <ol class="lista-diagnosticos">
+                <li v-for="diagnostico in diagnosticosPaginados" :key="diagnostico.id_diagnostico">
+                  <button
+                    type="button"
+                    class="tarjeta-diagnostico"
+                    :class="{ critico: diagnostico.es_critico }"
+                    :aria-label="`Ver diagnóstico ${diagnostico.diagnostico}`"
+                    @click="abrirDetalle(diagnostico)"
+                  >
+                    <span class="td-fila">
+                      <strong class="td-titulo">{{ diagnostico.diagnostico }}</strong>
+                      <AppBadge v-if="diagnostico.es_critico" tone="amber">Crítico</AppBadge>
+                    </span>
+                    <span class="td-fila td-pie">
+                      <time :datetime="diagnostico.fecha_registro">{{ fechaHora(diagnostico.fecha_registro) }}</time>
+                      <span class="td-metrica" :class="{ hay: activosDe(diagnostico) > 0 }">
+                        {{ activosDe(diagnostico) }} {{ activosDe(diagnostico) === 1 ? 'tratamiento activo' : 'tratamientos activos' }}
+                        · {{ tratamientosDe(diagnostico).length }} en total
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              </ol>
+            </div>
             <nav
               class="paginacion"
               aria-label="Paginación del historial de diagnósticos"
@@ -634,15 +681,30 @@ watch(paginasHistorial, (total) => {
             <p v-else class="detalle-vacio">No se registraron signos vitales.</p>
           </section>
           <section class="detalle-seccion">
-            <h3>Tratamientos</h3>
+            <h3>Tratamientos <span class="detalle-cuenta">Elige uno para ver su detalle</span></h3>
             <ul v-if="tratamientosSeleccionados.length" class="detalle-tratamientos">
-              <li v-for="tratamiento in tratamientosSeleccionados" :key="tratamiento.id_tratamiento">
-                <div class="resumen-cabecera">
+              <li
+                v-for="tratamiento in tratamientosSeleccionados"
+                :key="tratamiento.id_tratamiento"
+                :class="{ abierto: tratamientoAbierto === tratamiento.id_tratamiento }"
+              >
+                <button
+                  type="button"
+                  class="tratamiento-opcion"
+                  :aria-expanded="tratamientoAbierto === tratamiento.id_tratamiento"
+                  @click="alternarTratamiento(tratamiento.id_tratamiento)"
+                >
                   <strong>{{ tratamiento.descripcion }}</strong>
+                  <span class="tratamiento-fechas">
+                    {{ formatearFecha(tratamiento.fecha_inicio) }}
+                    <template v-if="tratamiento.fecha_fin"> — {{ formatearFecha(tratamiento.fecha_fin) }}</template>
+                  </span>
                   <AppBadge :tone="tonoTratamiento(tratamiento.estado)">
                     {{ etiquetaTratamiento(tratamiento.estado) }}
                   </AppBadge>
-                </div>
+                  <span class="flecha" aria-hidden="true">{{ tratamientoAbierto === tratamiento.id_tratamiento ? '▴' : '▾' }}</span>
+                </button>
+                <div v-if="tratamientoAbierto === tratamiento.id_tratamiento" class="tratamiento-detalle">
                 <p v-if="tratamiento.frecuencia_valor && tratamiento.frecuencia_unidad">
                   Frecuencia: cada {{ tratamiento.frecuencia_valor }}
                   {{ etiquetaUnidadFrecuencia(tratamiento.frecuencia_unidad) }}
@@ -665,10 +727,6 @@ watch(paginasHistorial, (total) => {
                 <p v-else-if="tratamiento.dosis" class="dato-legado">
                   Dosis anterior: {{ tratamiento.dosis }}
                 </p>
-                <p>
-                  {{ formatearFecha(tratamiento.fecha_inicio) }}
-                  <template v-if="tratamiento.fecha_fin"> — {{ formatearFecha(tratamiento.fecha_fin) }}</template>
-                </p>
                 <button
                   type="button"
                   class="accion-link"
@@ -676,6 +734,7 @@ watch(paginasHistorial, (total) => {
                 >
                   Editar tratamiento
                 </button>
+                </div>
               </li>
             </ul>
             <p v-else class="detalle-vacio">No hay tratamientos asociados.</p>
@@ -695,6 +754,7 @@ watch(paginasHistorial, (total) => {
     :id-animal="idAnimal"
     :nombre-ejemplar="nombreEjemplar"
     :diagnosticos="diagnosticos"
+    :fecha-ingreso="fechaIngreso"
     :registro="registroEditando"
     :tipo-inicial="tipoNuevo"
     @close="modalAbierto = false"
@@ -739,12 +799,13 @@ watch(paginasHistorial, (total) => {
 
 /* Vive en la barra de pestañas de la ficha: ocupa todo el alto para que el
    subrayado de la pestaña activa quede sobre la línea de la barra. */
+/* Las sub-pestañas van a la derecha, junto a "Generar PDF" */
 .pestanas-historial {
   display: flex;
   align-self: stretch;
   align-items: flex-end;
   gap: 18px;
-  margin-right: auto;
+  margin-left: auto;
   margin-bottom: -6px;
 }
 
@@ -775,6 +836,70 @@ watch(paginasHistorial, (total) => {
   display: flex;
   flex: 1;
   flex-direction: column;
+  min-height: 0;
+}
+
+/* Ocupa el alto que le deja la tarjeta de signos vitales (contain: size evita que las tarjetas
+   estiren la columna); el panel mide ese alto y calcula cuántas tarjetas entran por página */
+.lista-medida {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  contain: size;
+}
+
+.tarjeta-diagnostico {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 74px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid #3f5a96;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tarjeta-diagnostico.critico {
+  border-left-color: #b9791b;
+}
+
+.tarjeta-diagnostico:hover {
+  background: var(--color-surface-alt);
+}
+
+.td-fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.td-titulo {
+  overflow: hidden;
+  font-size: 14.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.td-pie {
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.td-metrica {
+  white-space: nowrap;
+}
+
+.td-metrica.hay,
+.metrica-activos.hay {
+  color: #87661a;
+  font-weight: 600;
 }
 
 .registro-reciente {
@@ -858,7 +983,7 @@ watch(paginasHistorial, (total) => {
   display: grid;
   flex: 1;
   align-content: start;
-  gap: 10px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -895,19 +1020,72 @@ watch(paginasHistorial, (total) => {
   background: rgb(20 24 20 / 32%);
 }
 
+/* Modal centrado con todo el detalle del diagnóstico */
 .detalle-lateral {
   position: fixed;
   z-index: 1200;
-  top: 0;
-  right: 0;
+  top: 50%;
+  left: 50%;
   display: flex;
   flex-direction: column;
-  width: min(440px, 100vw);
-  height: 100vh;
-  height: 100dvh;
-  border-left: 1px solid var(--color-border);
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
-  box-shadow: var(--shadow-card);
+  box-shadow: 0 24px 60px rgba(35, 40, 31, 0.25);
+  transform: translate(-50%, -50%);
+}
+
+.detalle-cuenta {
+  margin-left: 6px;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.tratamiento-opcion {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto 14px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tratamiento-opcion strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tratamiento-fechas {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.flecha {
+  color: var(--color-text-muted);
+}
+
+.tratamiento-detalle {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.detalle-tratamientos li.abierto {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-alt);
 }
 
 .detalle-header {
@@ -1236,6 +1414,13 @@ watch(paginasHistorial, (total) => {
 }
 
 @media (max-width: 900px) {
+  /* Una sola columna: sin la tarjeta de signos al lado, la lista toma su alto natural */
+  .lista-medida {
+    flex: none;
+    overflow: visible;
+    contain: none;
+  }
+
   .veterinaria-grid {
     grid-template-columns: 1fr;
   }

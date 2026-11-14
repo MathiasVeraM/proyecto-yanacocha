@@ -169,12 +169,14 @@ const chipsMes = (fecha: string) =>
     return { tipo, items, hechas: items.filter((a) => a.completada).length, tarde: items.some(tarde) }
   }).filter((c) => c.items.length)
 
-// Al abrir la semana o el día, la rejilla arranca en el horario de trabajo (06:00)
+// Al abrir la semana o el día (y al volver a "Hoy"), la rejilla se ubica en la hora actual,
+// con un par de horas de margen arriba para ver lo que viene justo antes
 function desplazar() {
   void nextTick(() => {
     if (!scroll.value) return
     const maximo = scroll.value.scrollHeight - scroll.value.clientHeight
-    scroll.value.scrollTop = Math.min(6 * ALTO_HORA + 10, maximo)
+    const posicion = Math.max(0, y(props.ahora) - 2 * ALTO_HORA)
+    scroll.value.scrollTop = Math.min(posicion, maximo)
   })
 }
 function enfocarActividad(actividad: Actividad) {
@@ -208,6 +210,10 @@ watch(
 <template>
   <!-- Semana / Día -->
   <div v-if="vista !== 'mes'" class="rejilla">
+    <!-- Una sola área con scroll: la cabecera de días queda fija arriba al bajar y se mueve
+         junto con sus columnas al desplazarse de lado (barra inferior) -->
+    <div ref="scroll" class="scroll">
+    <div class="cabecera-fija">
     <div class="cols cabeza" :style="{ '--n': dias.length }">
       <div class="gutter">Hora</div>
       <div v-for="f in dias" :key="f" :class="{ 'hoy-columna': f === hoy }">
@@ -233,8 +239,8 @@ watch(
         </button>
       </div>
     </div>
+    </div>
 
-    <div ref="scroll" class="scroll">
       <div class="cols cuerpo" :style="{ '--n': dias.length }">
         <div class="horas">
           <div v-for="h in 24" :key="h"><span v-if="h > 1">{{ String(h - 1).padStart(2, '0') }}:00</span></div>
@@ -327,16 +333,27 @@ watch(
 </template>
 
 <style scoped>
+/* La rejilla ocupa todo el alto que le da la página; dentro, una sola área con scroll */
 .rejilla {
-  display: grid;
-  grid-template-rows: auto auto 1fr;
+  height: 100%;
   min-width: 0;
-  overflow-x: auto;
+  min-height: 0;
 }
 
+/* Cabecera de días (y fila "sin hora") fija arriba dentro del área con scroll */
+.cabecera-fija {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  min-width: max-content;
+  background: #fffefb;
+}
+
+/* Cabecera y cuerpo con el mismo ancho mínimo: si no entran, se desplazan juntos de lado */
 .cols {
   display: grid;
   grid-template-columns: 62px repeat(var(--n), minmax(118px, 1fr));
+  min-width: calc(62px + var(--n) * 118px);
 }
 
 .cabeza {
@@ -456,9 +473,9 @@ watch(
 }
 
 .scroll {
+  height: 100%;
   min-height: 0;
-  max-height: 66vh;
-  overflow-y: auto;
+  overflow: auto;
 }
 
 .cuerpo {
@@ -654,11 +671,14 @@ watch(
 }
 
 /* ---- Mes ---- */
+/* El mes también ocupa el alto disponible y hace scroll por dentro si no entra */
 .mes {
   display: grid;
   grid-template-rows: auto 1fr;
+  height: 100%;
+  min-height: 0;
   padding: 0 14px 14px;
-  overflow-x: auto;
+  overflow: auto;
 }
 
 .mes-cabeza {

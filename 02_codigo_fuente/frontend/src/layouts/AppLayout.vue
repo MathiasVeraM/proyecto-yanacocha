@@ -41,7 +41,6 @@ onMounted(() => {
             <path d="M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15L6 16Z" />
             <path d="M10 20.5a2.2 2.2 0 0 0 4 0" />
           </svg>
-          <span class="bell-badge">3</span>
         </button>
 
         <details class="account-menu">
@@ -295,6 +294,7 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 24px;
+  /* Margen alrededor de las pantallas: lo justo para separar del menú y la cabecera */
+  padding: 12px 12px 14px;
 }
 </style>

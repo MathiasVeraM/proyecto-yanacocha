@@ -6,7 +6,6 @@ import {
   TIPOS_ACTIVIDAD,
   TIPO_LABEL,
   describirActividades,
-  diaLargo,
   estaAtrasada,
   horaCorta,
   horaFin,
@@ -45,7 +44,7 @@ const TEXTOS: Record<TipoActividad, { unidad: string; pendientes: string }> = {
   tratamiento: { unidad: 'dosis aplicadas', pendientes: 'Dosis de tratamiento pendientes' },
 }
 
-// Alimentación se cuenta por ejemplar: "alimentado" = al menos una toma del día confirmada
+// Alimentación se cuenta por ejemplar: "alimentado" = se confirmaron TODAS sus tomas registradas ese día
 const filasAlimentacion = computed(() => {
   const porAnimal = new Map<number, Actividad[]>()
   for (const t of delTipo('alimentacion')) {
@@ -57,7 +56,7 @@ const filasAlimentacion = computed(() => {
     return {
       id,
       tomas,
-      comio: tomas.some((t) => t.completada),
+      comio: tomas.every((t) => t.completada),
       tarde: tomas.some(tarde),
       siguiente: pendientes.find(tarde) ?? pendientes[0] ?? null,
     }
@@ -87,6 +86,8 @@ const indicadores = computed(() =>
 )
 
 const actual = computed(() => indicadores.value.find((i) => i.tipo === seleccion.value) ?? null)
+// Las tarjetas usan orden par (0, 2, 4…); el detalle toma el impar siguiente a su tarjeta
+const ordenDetalle = computed(() => indicadores.value.findIndex((i) => i.tipo === seleccion.value) * 2 + 1)
 
 const filas = computed(() => {
   if (seleccion.value === 'alimentacion') {
@@ -120,18 +121,15 @@ const iniciales = (texto: string) => texto.trim().slice(0, 2).toUpperCase()
 
 <template>
   <section class="indicadores" aria-label="Resumen del día">
-    <div class="ind-h">
-      <h2>{{ fecha === hoy ? 'Hoy' : diaLargo(fecha) }}</h2>
-      <span>{{ fecha === hoy ? `${diaLargo(hoy)} · ${ahora}` : 'Resumen del día elegido en el calendario' }}</span>
-    </div>
 
     <div class="grid">
       <button
-        v-for="ind in indicadores"
+        v-for="(ind, i) in indicadores"
         :key="ind.tipo"
         type="button"
         class="ind"
         :class="[`t-${ind.tipo}`, { sel: seleccion === ind.tipo }]"
+        :style="{ order: i * 2 }"
         :aria-expanded="seleccion === ind.tipo"
         @click="alternar(ind.tipo)"
       >
@@ -150,91 +148,92 @@ const iniciales = (texto: string) => texto.trim().slice(0, 2).toUpperCase()
         <span class="ring" :style="{ '--p': ind.pct }"><span>{{ ind.pct }}%</span></span>
         <span class="caret" aria-hidden="true">{{ seleccion === ind.tipo ? '▴' : '▾' }}</span>
       </button>
-    </div>
-
-    <div v-if="actual" class="detalle" :class="`t-${actual.tipo}`">
-      <div class="det-h">
-        <h3>
-          {{ modo === 'pend' ? actual.pendientes : `${TIPO_LABEL[actual.tipo]} del día` }}
-          <span class="cnt">{{ cantidadFilas }}</span>
-        </h3>
-        <span class="det-acc">
-          <span class="seg" role="group" aria-label="Mostrar">
-            <button type="button" :class="{ on: modo === 'pend' }" @click="modo = 'pend'">Pendientes</button>
-            <button type="button" :class="{ on: modo === 'todos' }" @click="modo = 'todos'">Todos</button>
+      <!-- El detalle aparece justo debajo de la tarjeta a la que pertenece -->
+      <div v-if="actual" class="detalle" :class="`t-${actual.tipo}`" :style="{ order: ordenDetalle }">
+        <div class="det-h">
+          <h3>
+            {{ modo === 'pend' ? actual.pendientes : `${TIPO_LABEL[actual.tipo]} del día` }}
+            <span class="cnt">{{ cantidadFilas }}</span>
+          </h3>
+          <span class="det-acc">
+            <span class="seg" role="group" aria-label="Mostrar">
+              <button type="button" :class="{ on: modo === 'pend' }" @click="modo = 'pend'">Pendientes</button>
+              <button type="button" :class="{ on: modo === 'todos' }" @click="modo = 'todos'">Todos</button>
+            </span>
+            <button class="cerrar" type="button" aria-label="Cerrar detalle" @click="seleccion = null">×</button>
           </span>
-          <button class="cerrar" type="button" aria-label="Cerrar detalle" @click="seleccion = null">×</button>
-        </span>
-      </div>
+        </div>
 
-      <p v-if="!cantidadFilas" class="vacio">
-        {{ actual.total ? 'No queda nada pendiente. Todo al día.' : 'No hay actividades de este tipo para este día.' }}
-      </p>
+        <p v-if="!cantidadFilas" class="vacio">
+          {{ actual.total ? 'No queda nada pendiente. Todo al día.' : 'No hay actividades de este tipo para este día.' }}
+        </p>
 
-      <ul v-else-if="actual.tipo === 'alimentacion'" class="filas">
-        <li v-for="f in filas" :key="f.id">
-          <span class="avatar">{{ iniciales(d.nombreAnimal(f.id)) }}</span>
-          <button type="button" class="quien" @click="emit('abrir', f.siguiente ?? f.tomas[f.tomas.length - 1]!)">
-            <strong>{{ d.nombreAnimal(f.id) }}</strong>
-            <small>{{ d.animal(f.id)?.taxonomia.nombre_comun }} · {{ d.lugar(f.tomas[0]!) }} · {{ d.alimentos(f.tomas[0]!) }}</small>
-          </button>
-          <span class="tomas">
-            <button
-              v-for="t in f.tomas"
-              :key="t.id_actividad"
-              type="button"
-              class="toma"
-              :class="{ hecha: t.completada, tarde: tarde(t) }"
-              :title="t.completada ? 'Hecha' : tarde(t) ? 'Atrasada · ver detalle' : 'Pendiente · ver detalle'"
-              @click="emit('abrir', t)"
-            >
-              {{ horaCorta(t) }}
+        <ul v-else-if="actual.tipo === 'alimentacion'" class="filas">
+          <li v-for="f in filas" :key="f.id">
+            <span class="avatar">{{ iniciales(d.nombreAnimal(f.id)) }}</span>
+            <button type="button" class="quien" @click="emit('abrir', f.siguiente ?? f.tomas[f.tomas.length - 1]!)">
+              <strong>{{ d.nombreAnimal(f.id) }}</strong>
+              <small>{{ d.animal(f.id)?.taxonomia.nombre_comun }} · {{ d.lugar(f.tomas[0]!) }} · {{ d.alimentos(f.tomas[0]!) }}</small>
             </button>
-          </span>
-          <button
-            v-if="f.siguiente"
-            class="btn btn-primary chico"
-            type="button"
-            :disabled="actualizandoId === f.siguiente.id_actividad"
-            @click="emit('completar', f.siguiente)"
-          >
-            ✓ Hecha {{ horaCorta(f.siguiente) }}
-          </button>
-          <span v-else class="ok">Alimentado ✓</span>
-          <BotonesActividad
-            sin-check
-            :hecha="false"
-            :observaciones="f.tomas.reduce((n, t) => n + (obsPorActividad[t.id_actividad] ?? 0), 0)"
-            :nombre="d.nombreAnimal(f.id)"
-            @observar="emit('observar', f.siguiente ?? f.tomas[f.tomas.length - 1]!)"
-          />
-        </li>
-      </ul>
+            <span class="tomas">
+              <button
+                v-for="t in f.tomas"
+                :key="t.id_actividad"
+                type="button"
+                class="toma"
+                :class="{ hecha: t.completada, tarde: tarde(t) }"
+                :title="t.completada ? 'Hecha' : tarde(t) ? 'Atrasada · ver detalle' : 'Pendiente · ver detalle'"
+                @click="emit('abrir', t)"
+              >
+                {{ horaCorta(t) }}
+              </button>
+            </span>
+            <button
+              v-if="f.siguiente"
+              class="btn btn-primary chico"
+              type="button"
+              :disabled="actualizandoId === f.siguiente.id_actividad"
+              @click="emit('completar', f.siguiente)"
+            >
+              ✓ Hecha {{ horaCorta(f.siguiente) }}
+            </button>
+            <span v-else class="ok">Alimentado ✓</span>
+            <BotonesActividad
+              sin-check
+              :hecha="false"
+              :observaciones="f.tomas.reduce((n, t) => n + (obsPorActividad[t.id_actividad] ?? 0), 0)"
+              :nombre="d.nombreAnimal(f.id)"
+              @observar="emit('observar', f.siguiente ?? f.tomas[f.tomas.length - 1]!)"
+            />
+          </li>
+        </ul>
 
-      <ul v-else class="filas">
-        <li v-for="a in actividadesFila" :key="a.id_actividad" :class="{ hecha: a.completada }">
-          <span class="avatar"><IconoTipo :tipo="a.tipo_actividad" /></span>
-          <button type="button" class="quien" @click="emit('abrir', a)">
-            <strong>{{ d.titulo(a) }}</strong>
-            <small>{{ d.detalle(a) }}</small>
-          </button>
-          <span class="hora" :class="{ tarde: tarde(a) }">
-            {{ horaCorta(a) || 'Sin hora' }}{{ horaFin(a) && horaFin(a) !== horaCorta(a) ? `–${horaFin(a)}` : '' }}{{ tarde(a) ? ' · atrasada' : '' }}
-          </span>
-          <span class="badge" :class="a.completada ? 'b-hecha' : tarde(a) ? 'b-tarde' : 'b-pend'">
-            {{ a.completada ? 'Hecha' : tarde(a) ? 'Atrasada' : 'Pendiente' }}
-          </span>
-          <BotonesActividad
-            :hecha="a.completada"
-            :ocupado="actualizandoId === a.id_actividad"
-            :observaciones="obsPorActividad[a.id_actividad] ?? 0"
-            :nombre="d.titulo(a)"
-            @completar="emit('completar', a)"
-            @observar="emit('observar', a)"
-          />
-        </li>
-      </ul>
+        <ul v-else class="filas">
+          <li v-for="a in actividadesFila" :key="a.id_actividad" :class="{ hecha: a.completada }">
+            <span class="avatar"><IconoTipo :tipo="a.tipo_actividad" /></span>
+            <button type="button" class="quien" @click="emit('abrir', a)">
+              <strong>{{ d.titulo(a) }}</strong>
+              <small>{{ d.detalle(a) }}</small>
+            </button>
+            <span class="hora" :class="{ tarde: tarde(a) }">
+              {{ horaCorta(a) || 'Sin hora' }}{{ horaFin(a) && horaFin(a) !== horaCorta(a) ? `–${horaFin(a)}` : '' }}{{ tarde(a) ? ' · atrasada' : '' }}
+            </span>
+            <span class="badge" :class="a.completada ? 'b-hecha' : tarde(a) ? 'b-tarde' : 'b-pend'">
+              {{ a.completada ? 'Hecha' : tarde(a) ? 'Atrasada' : 'Pendiente' }}
+            </span>
+            <BotonesActividad
+              :hecha="a.completada"
+              :ocupado="actualizandoId === a.id_actividad"
+              :observaciones="obsPorActividad[a.id_actividad] ?? 0"
+              :nombre="d.titulo(a)"
+              @completar="emit('completar', a)"
+              @observar="emit('observar', a)"
+            />
+          </li>
+        </ul>
+      </div>
     </div>
+
   </section>
 </template>
 
@@ -397,6 +396,8 @@ const iniciales = (texto: string) => texto.trim().slice(0, 2).toUpperCase()
 }
 
 .detalle {
+  /* Ocupa toda la fila de la cuadrícula, debajo de su tarjeta */
+  grid-column: 1 / -1;
   display: grid;
   gap: 4px;
   min-width: 0;

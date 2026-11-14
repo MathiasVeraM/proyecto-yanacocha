@@ -153,6 +153,8 @@ const eventosLineaVidaPaginados = computed(() => {
   const inicio = (paginaLineaVida.value - 1) * eventosPorPagina
   return eventosLineaVida.value.slice(inicio, inicio + eventosPorPagina)
 })
+// La página 1 son los eventos más recientes; dentro de la página van de izquierda (antiguo) a derecha
+const eventosLineaVidaCronologicos = computed(() => [...eventosLineaVidaPaginados.value].reverse())
 
 // ---- Carga de datos ----
 
@@ -481,30 +483,34 @@ watch(tab, (valor) => {
 
         <article class="panel">
           <h2>Línea de vida</h2>
-          <ol class="linea">
-            <li v-for="evento in eventosLineaVidaPaginados" :key="evento.clave">
-              <time>{{ evento.fecha ? formatearFecha(evento.fecha.slice(0, 10)) : '—' }}</time>
+          <!-- Línea de tiempo horizontal: del más antiguo (izquierda) al más reciente (derecha) -->
+          <ol class="linea-h" :style="{ '--n': eventosLineaVidaCronologicos.length }">
+            <li
+              v-for="evento in eventosLineaVidaCronologicos"
+              :key="evento.clave"
+              class="hito"
+              :class="[`hito-${evento.tipo}`, { critico: evento.tipo === 'diagnostico' && evento.datos.es_critico }]"
+            >
+              <time>{{ evento.fecha ? formatearFecha(evento.fecha.slice(0, 10)) : 'Sin fecha' }}</time>
+              <span class="punto" aria-hidden="true" />
               <template v-if="evento.tipo === 'ingreso'">
                 <AppBadge tone="green">Ingreso</AppBadge>
-                <span>Ingreso al centro · {{ animal.recinto.nombre_recinto }}</span>
+                <span class="texto-evento">Ingreso al centro · {{ animal.recinto.nombre_recinto }}</span>
               </template>
               <template v-else-if="evento.tipo === 'diagnostico'">
                 <AppBadge :tone="evento.datos.es_critico ? 'amber' : 'blue'">Diagnóstico</AppBadge>
-                <span class="texto-evento">
+                <span class="texto-evento" :title="evento.datos.diagnostico">
                   {{ evento.datos.diagnostico }}
                   <strong v-if="evento.datos.es_critico"> · Crítico</strong>
                 </span>
               </template>
               <template v-else-if="evento.tipo === 'dieta'">
-                <AppBadge tone="gray">Dieta</AppBadge>
-                <span class="texto-evento">
-                  {{ evento.datos.es_restriccion ? 'Inicio de restricción' : 'Inicio de dieta' }}:
-                  {{ resumenDieta(evento.datos) }}
-                </span>
+                <AppBadge tone="gray">{{ evento.datos.es_restriccion ? 'Restricción' : 'Dieta' }}</AppBadge>
+                <span class="texto-evento" :title="resumenDieta(evento.datos)">{{ resumenDieta(evento.datos) }}</span>
               </template>
               <template v-else>
                 <AppBadge :tone="estado?.tono">Salida</AppBadge>
-                <span>{{ estado?.label }}</span>
+                <span class="texto-evento">{{ estado?.label }}</span>
               </template>
             </li>
           </ol>
@@ -514,20 +520,20 @@ watch(tab, (valor) => {
             <button type="button" class="accion-reintentar" @click="reintentarDiagnosticos">Reintentar</button>
           </p>
           <nav v-if="eventosLineaVida.length > eventosPorPagina" class="paginacion" aria-label="Paginación de la línea de vida">
-            <button type="button" class="btn btn-secondary" :disabled="paginaLineaVida === 1" @click="paginaLineaVida--">
-              Anterior
-            </button>
-            <span>Página {{ paginaLineaVida }} de {{ paginasLineaVida }}</span>
             <button
               type="button"
               class="btn btn-secondary"
               :disabled="paginaLineaVida === paginasLineaVida"
               @click="paginaLineaVida++"
             >
-              Siguiente
+              ‹ Más antiguos
+            </button>
+            <span>Página {{ paginaLineaVida }} de {{ paginasLineaVida }}</span>
+            <button type="button" class="btn btn-secondary" :disabled="paginaLineaVida === 1" @click="paginaLineaVida--">
+              Más recientes ›
             </button>
           </nav>
-          <p class="linea-ayuda">Eventos del ejemplar, del más reciente al más antiguo</p>
+          <p class="linea-ayuda">Eventos del ejemplar, del más antiguo (izquierda) al más reciente (derecha)</p>
         </article>
       </div>
     </div>
@@ -537,6 +543,7 @@ watch(tab, (valor) => {
       v-else-if="tab === 'veterinaria'"
       :id-animal="animal.id_animal"
       :nombre-ejemplar="animal.nombre ?? animal.taxonomia.nombre_comun"
+      :fecha-ingreso="animal.fecha_ingreso"
     />
 
   </template>
@@ -952,10 +959,85 @@ dd {
 
 /* Línea de vida */
 
-.linea {
-  margin-top: 14px;
+/* Línea horizontal: un punto por evento, repartidos a lo ancho; la línea une el primero con el último */
+.linea-h {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  margin: 18px 0 0;
   padding: 0;
   list-style: none;
+}
+
+.linea-h::before {
+  content: '';
+  position: absolute;
+  top: 28px;
+  right: calc(50% / var(--n));
+  left: calc(50% / var(--n));
+  height: 2px;
+  background: var(--color-border-strong);
+}
+
+.hito {
+  --punto: var(--color-primary);
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 6px;
+  text-align: center;
+}
+
+.hito time {
+  height: 16px;
+  font-size: 11.5px;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+.punto {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--punto);
+  box-shadow: 0 0 0 1px var(--punto);
+}
+
+.hito-diagnostico {
+  --punto: #3f5a96;
+}
+
+.hito-diagnostico.critico {
+  --punto: #b9791b;
+}
+
+.hito-dieta {
+  --punto: #8f9d3a;
+}
+
+.hito-salida {
+  --punto: var(--color-danger);
+}
+
+.hito :deep(.badge) {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.hito .texto-evento {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .linea-ayuda {
@@ -964,26 +1046,6 @@ dd {
   border-top: 1px solid var(--color-border);
   color: var(--color-text-subtle);
   font-size: 11px;
-}
-
-.linea li {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 7px 0;
-  font-size: 14px;
-}
-
-.linea time {
-  min-width: 100px;
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-.linea :deep(.badge) {
-  padding: 5px 11px;
-  border-radius: 999px;
-  font-size: 12px;
 }
 
 .texto-evento {
@@ -1084,10 +1146,10 @@ dd {
     padding: 18px;
   }
 
-  .linea li {
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 8px;
+  /* En pantallas angostas la línea se puede desplazar de lado */
+  .linea-h {
+    grid-template-columns: repeat(var(--n), minmax(110px, 1fr));
+    overflow-x: auto;
   }
 }
 </style>
