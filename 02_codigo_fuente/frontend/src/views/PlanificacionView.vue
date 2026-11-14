@@ -7,7 +7,9 @@ import IndicadoresDia from '@/components/planificacion/IndicadoresDia.vue'
 import ObservacionModal from '@/components/planificacion/ObservacionModal.vue'
 import PanelActividad from '@/components/planificacion/PanelActividad.vue'
 import PanelCrearActividad from '@/components/planificacion/PanelCrearActividad.vue'
-import { actividadesApi, planificacionReferenciasApi } from '@/api/actividades'
+import { actividadesApi, renovarHorizonteDeSesion } from '@/api/actividades'
+import { cargarEnDosPasadas, fijar, type Pasada } from '@/api/cache'
+import { clavesCache, consultas } from '@/api/consultas'
 import { ApiError } from '@/api/http'
 import {
   TIPOS_ACTIVIDAD,
@@ -190,11 +192,12 @@ function mensajeError(error: unknown, predeterminado: string) {
   return error instanceof ApiError ? error.message : predeterminado
 }
 
+// Animales: se muestran los guardados y se confirman por detrás. Recintos y usuarios: una vez por sesión
 async function cargarReferencias() {
   const [rAnimales, rRecintos, rUsuarios] = await Promise.allSettled([
-    planificacionReferenciasApi.animales(),
-    planificacionReferenciasApi.recintos(),
-    planificacionReferenciasApi.usuariosAuditoria(),
+    consultas.animales({}, { alActualizar: (lista) => (animales.value = lista) }),
+    consultas.recintos(),
+    consultas.usuariosAuditoria(),
   ])
   const errores: string[] = []
   if (rAnimales.status === 'fulfilled') animales.value = rAnimales.value
@@ -206,53 +209,89 @@ async function cargarReferencias() {
   errorReferencias.value = errores.length ? `No se pudieron cargar algunos datos de referencia (${errores.join('; ')}).` : ''
 }
 
-async function cargarDietas() {
-  if (!animales.value.length) {
+async function cargarDietas({ maxEdad, silencioso }: Pasada = { maxEdad: 0, silencioso: false }) {
+  const lista = animales.value
+  if (!lista.length) {
     dietasPorAnimal.value = {}
     return
   }
-  cargandoDietas.value = true
-  errorDietas.value = ''
+  if (!silencioso) {
+    cargandoDietas.value = true
+    errorDietas.value = ''
+  }
   const resultados = await Promise.allSettled(
-    animales.value.map(async (animal) => ({ id: animal.id_animal, dietas: await actividadesApi.dietasPorAnimal(animal.id_animal) })),
+    lista.map(async (animal) => ({ id: animal.id_animal, dietas: await consultas.dietasPorAnimal(animal.id_animal, { maxEdad }) })),
   )
   const siguientes: Record<number, Dieta[]> = {}
   const errores: string[] = []
   resultados.forEach((r, i) => {
+    const animal = lista[i]
     if (r.status === 'fulfilled') siguientes[r.value.id] = r.value.dietas
-    else {
-      const animal = animales.value[i]
+    else if (silencioso && animal && dietasPorAnimal.value[animal.id_animal]) {
+      // En la revalidación por detrás, si falla se conserva lo que ya se mostraba
+      siguientes[animal.id_animal] = dietasPorAnimal.value[animal.id_animal]!
+    } else {
       errores.push(`${animal?.nombre ?? animal?.taxonomia.nombre_comun ?? 'un ejemplar'}: ${mensajeError(r.reason, 'no se pudo cargar su historial')}`)
     }
   })
   dietasPorAnimal.value = siguientes
-  errorDietas.value = errores.length ? `No se pudieron cargar todos los historiales de dieta (${errores.join('; ')}).` : ''
-  cargandoDietas.value = false
+  if (!silencioso) {
+    errorDietas.value = errores.length ? `No se pudieron cargar todos los historiales de dieta (${errores.join('; ')}).` : ''
+    cargandoDietas.value = false
+  }
 }
 
-async function cargarActividades() {
+function contarObservaciones(obs: Observacion[]) {
+  const conteoObs: Record<number, number> = {}
+  for (const o of obs) conteoObs[o.id_actividad] = (conteoObs[o.id_actividad] ?? 0) + 1
+  return conteoObs
+}
+
+// Cada rango (semana, día o mes) se guarda en la caché: al volver a uno ya visitado aparece al
+// instante y se confirma con la API por detrás.
+// fresco: espera la respuesta de la API · silencioso: no muestra "Cargando…" ni errores
+async function cargarActividades({ fresco = false, silencioso = false } = {}) {
   const { desde, hasta } = rango.value
-  cargandoActividades.value = true
-  errorActividades.value = ''
+  const filtros = { fecha_desde: desde, fecha_hasta: hasta }
+  const esElRangoActual = () => desde === rango.value.desde && hasta === rango.value.hasta
+  if (!silencioso) {
+    cargandoActividades.value = true
+    errorActividades.value = ''
+  }
   try {
-    const lista = await actividadesApi.listar({ fecha_desde: desde, fecha_hasta: hasta })
-    if (desde !== rango.value.desde) return
+    const lista = await consultas.actividades(
+      filtros,
+      fresco ? {} : { alActualizar: (nueva) => esElRangoActual() && (actividades.value = nueva) },
+    )
+    if (!esElRangoActual()) return
     actividades.value = lista
   } catch (error) {
+    if (silencioso || !esElRangoActual()) return
     errorActividades.value = mensajeError(error, 'No se pudieron cargar las actividades.')
     actividades.value = []
   } finally {
-    cargandoActividades.value = false
+    if (!silencioso) cargandoActividades.value = false
   }
   // Los contadores de observaciones son un extra: si fallan, el calendario sigue funcionando
   try {
-    const obs = await actividadesApi.observacionesEnRango(desde, hasta)
-    const conteoObs: Record<number, number> = {}
-    for (const o of obs) conteoObs[o.id_actividad] = (conteoObs[o.id_actividad] ?? 0) + 1
-    obsPorActividad.value = conteoObs
+    const obs = await consultas.observacionesEnRango(
+      desde,
+      hasta,
+      fresco
+        ? {}
+        : { alActualizar: (nuevas) => esElRangoActual() && (obsPorActividad.value = contarObservaciones(nuevas)) },
+    )
+    if (esElRangoActual()) obsPorActividad.value = contarObservaciones(obs)
   } catch {
-    obsPorActividad.value = {}
+    if (!silencioso && esElRangoActual()) obsPorActividad.value = {}
   }
+}
+
+// Lo que el usuario cambió (completar, reabrir, observar) ya está en pantalla: se guarda tal cual
+// en la caché del rango, para que al volver no haya que pedirlo de nuevo
+function guardarRangoEnCache() {
+  const { desde, hasta } = rango.value
+  fijar(clavesCache.actividades({ fecha_desde: desde, fecha_hasta: hasta }), actividades.value)
 }
 
 watch(() => `${rango.value.desde}|${rango.value.hasta}`, () => void cargarActividades())
@@ -279,6 +318,7 @@ function avisar(texto: string) {
 
 function reemplazar(actualizada: Actividad) {
   actividades.value = actividades.value.map((a) => (a.id_actividad === actualizada.id_actividad ? { ...a, ...actualizada } : a))
+  guardarRangoEnCache()
 }
 
 async function completar(actividad: Actividad) {
@@ -362,6 +402,7 @@ async function guardarObservacion(datos: ObservacionCreate, marcarHecha: boolean
   try {
     const creada = await actividadesApi.agregarObservacion(actividad.id_actividad, datos)
     obsPorActividad.value = { ...obsPorActividad.value, [actividad.id_actividad]: (obsPorActividad.value[actividad.id_actividad] ?? 0) + 1 }
+    guardarRangoEnCache()
     obsActividad.value = null
     if (panel.value?.modo === 'detalle' && panel.value.id === actividad.id_actividad) {
       observacionesPanel.value = [...observacionesPanel.value, creada]
@@ -410,7 +451,7 @@ async function guardarDieta(dieta: Dieta, extras: { unidades: ('g' | 'kg' | 'uni
 function cambiarPestana(nueva: Pestana) {
   pestana.value = nueva
   formularioDietaAbierto.value = false
-  if (nueva === 'dietas') void cargarDietas()
+  if (nueva === 'dietas') void cargarEnDosPasadas(cargarDietas)
   else void cargarActividades()
 }
 
@@ -421,27 +462,27 @@ const subtituloObs = computed(() =>
     : '',
 )
 
-onMounted(async () => {
-  await cargarReferencias()
-  await cargarDietas()
-  let errorRenovacion = ''
-  try {
-    await actividadesApi.renovarTomas()
-  } catch (error) {
-    errorRenovacion = `No se pudo renovar el horizonte de alimentaciones: ${mensajeError(error, 'error desconocido')}`
+// Las tomas y dosis de los próximos días se completan por detrás, sin bloquear la pantalla.
+// Al terminar se refresca el rango que se está viendo por si aparecieron actividades nuevas.
+async function renovarHorizonte() {
+  const [tomas, tratamientos] = await renovarHorizonteDeSesion()
+  const errores: string[] = []
+  if (tomas?.status === 'rejected') {
+    errores.push(`No se pudo renovar el horizonte de alimentaciones: ${mensajeError(tomas.reason, 'error desconocido')}`)
   }
-  try {
-    await actividadesApi.renovarTratamientos()
-  } catch (error) {
-    errorRenovacion = [
-      errorRenovacion,
-      `No se pudo renovar el horizonte de tratamientos: ${mensajeError(error, 'error desconocido')}`,
-    ]
-      .filter(Boolean)
-      .join(' ')
+  if (tratamientos?.status === 'rejected') {
+    errores.push(`No se pudo renovar el horizonte de tratamientos: ${mensajeError(tratamientos.reason, 'error desconocido')}`)
   }
-  await cargarActividades()
-  if (errorRenovacion) errorActividades.value = [errorActividades.value, errorRenovacion].filter(Boolean).join(' ')
+  if (errores.length) errorActividades.value = [errorActividades.value, ...errores].filter(Boolean).join(' ')
+  await cargarActividades({ fresco: true, silencioso: true })
+}
+
+// Todo se pide a la vez: el calendario aparece apenas llegan las actividades, sin esperar
+// a los datos de referencia, a las dietas ni a la renovación
+onMounted(() => {
+  void cargarActividades()
+  void cargarReferencias().then(() => cargarEnDosPasadas(cargarDietas))
+  void renovarHorizonte()
 })
 </script>
 
@@ -977,8 +1018,14 @@ onMounted(async () => {
   border-radius: 999px;
 }
 
+/* Tipos de actividad a la izquierda y filtros a la derecha, en la misma fila
+   (si no caben, los filtros bajan a la siguiente línea) */
 .leyenda {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
   margin: 0 20px 14px;
   padding: 6px 10px;
   border: 1px solid var(--color-border);
@@ -998,8 +1045,7 @@ onMounted(async () => {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--color-border);
+  margin-left: auto;
 }
 
 .ley {
@@ -1118,6 +1164,8 @@ onMounted(async () => {
   .filtros-calendario {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    margin-left: 0;
   }
 
   .leyenda select {

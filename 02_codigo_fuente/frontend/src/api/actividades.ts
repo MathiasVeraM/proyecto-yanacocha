@@ -1,4 +1,5 @@
 import { request } from './http'
+import { alLimpiar } from './cache'
 import type {
   Actividad,
   Dieta,
@@ -58,10 +59,13 @@ export const actividadesApi = {
       fecha_hasta: fechaHasta,
     }),
 
-  renovarTomas: () => request<Actividad[]>('POST', `${URL}/tomas/renovar`),
+  // La renovación solo agrega días al horizonte: no invalida la caché (Planificación refresca
+  // lo que se está viendo al terminar, y el resto se revalida al mostrarse)
+  renovarTomas: () =>
+    request<Actividad[]>('POST', `${URL}/tomas/renovar`, undefined, { invalidaCache: false }),
 
   renovarTratamientos: () =>
-    request<Actividad[]>('POST', `${URL}/tratamientos/renovar`),
+    request<Actividad[]>('POST', `${URL}/tratamientos/renovar`, undefined, { invalidaCache: false }),
 
   programarEnriquecimiento: (datos: {
     id_animal: number
@@ -100,6 +104,23 @@ export const actividadesApi = {
 
   dietaVigente: (idAnimal: number) =>
     request<Dieta>('GET', `${URL}/animales/${idAnimal}/dietas/vigente`),
+}
+
+// Renovación del horizonte de tomas y dosis (agrega los días que faltan a los próximos 30/7).
+// Basta con hacerla una vez por sesión: los horizontes son de varios días. Si falla, se vuelve
+// a intentar la próxima vez que se abra Planificación. Se reinicia al cerrar sesión.
+let renovacion: Promise<PromiseSettledResult<Actividad[]>[]> | null = null
+alLimpiar(() => (renovacion = null))
+
+export function renovarHorizonteDeSesion() {
+  renovacion ??= Promise.allSettled([
+    actividadesApi.renovarTomas(),
+    actividadesApi.renovarTratamientos(),
+  ]).then((resultados) => {
+    if (resultados.some((r) => r.status === 'rejected')) renovacion = null
+    return resultados
+  })
+  return renovacion
 }
 
 export const planificacionReferenciasApi = {

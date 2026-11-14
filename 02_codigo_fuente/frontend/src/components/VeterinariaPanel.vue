@@ -3,7 +3,8 @@ import { computed, ref, watch } from 'vue'
 import AppBadge from '@/components/AppBadge.vue'
 import VeterinariaRegistroModal from '@/components/VeterinariaRegistroModal.vue'
 import { ApiError } from '@/api/http'
-import { veterinariaApi } from '@/api/veterinaria'
+import { cargarEnDosPasadas, type Pasada } from '@/api/cache'
+import { consultas } from '@/api/consultas'
 import { formatearFecha } from '@/config/animales'
 import type {
   Diagnostico,
@@ -253,21 +254,24 @@ function editarDiagnosticoSeleccionado() {
   editarDiagnostico(diagnosticoSeleccionado.value)
 }
 
-async function cargar() {
+// Usa las mismas claves de caché que la ficha: si ambas piden a la vez, la API recibe un solo pedido
+async function cargar({ maxEdad, silencioso }: Pasada = { maxEdad: 0, silencioso: false }) {
   const idAnimal = props.idAnimal
-  cargando.value = true
-  error.value = ''
+  if (!silencioso) {
+    cargando.value = true
+    error.value = ''
+  }
   try {
-    const registros = await veterinariaApi.listarDiagnosticos(idAnimal)
+    const registros = await consultas.diagnosticos(idAnimal, { maxEdad })
     const [pares, signos] = await Promise.all([
       Promise.all(
         registros.map(async (diagnostico) => [
           diagnostico.id_diagnostico,
-          await veterinariaApi.listarTratamientos(diagnostico.id_diagnostico),
+          await consultas.tratamientos(diagnostico.id_diagnostico, { maxEdad }),
         ] as const),
       ),
       // Si el historial de signos falla, se arma con los signos que ya traen los diagnósticos
-      veterinariaApi.listarSignosVitales(idAnimal).catch(() =>
+      consultas.signosVitales(idAnimal, { maxEdad }).catch(() =>
         registros.flatMap((d) =>
           d.signos_vitales ? [{ ...d.signos_vitales, fecha_diagnostico: d.fecha_registro }] : [],
         ),
@@ -282,11 +286,11 @@ async function cargar() {
         registros.find((d) => d.id_diagnostico === diagnosticoSeleccionado.value?.id_diagnostico) ?? null
     }
   } catch (e) {
-    if (idAnimal === props.idAnimal) {
+    if (idAnimal === props.idAnimal && !silencioso) {
       error.value = e instanceof ApiError ? e.message : 'No se pudo cargar el historial veterinario'
     }
   } finally {
-    if (idAnimal === props.idAnimal) cargando.value = false
+    if (idAnimal === props.idAnimal && !silencioso) cargando.value = false
   }
 }
 
@@ -310,7 +314,8 @@ watch(
   () => props.idAnimal,
   () => {
     paginaHistorial.value = 1
-    void cargar()
+    // Aparece al instante con lo guardado y se confirma con la API por detrás
+    void cargarEnDosPasadas(cargar)
   },
   { immediate: true },
 )
@@ -383,50 +388,57 @@ watch(paginasHistorial, (total) => {
       </aside>
 
       <section class="columna-historial">
-        <div class="historial-cabecera">
-          <div>
-            <h2>Historial clínico</h2>
-            <p>{{ diagnosticos.length }} {{ diagnosticos.length === 1 ? 'diagnóstico' : 'diagnósticos' }} ·
-              {{ cantidadTratamientos }} {{ cantidadTratamientos === 1 ? 'tratamiento' : 'tratamientos' }} registrados
-            </p>
+        <!-- La cabecera (título, contadores y acciones) se muestra en la barra de pestañas de la ficha -->
+        <Teleport defer to="#acciones-pestanas-ficha">
+          <div class="historial-cabecera">
+            <div>
+              <h2>Historial clínico</h2>
+              <p>{{ diagnosticos.length }} {{ diagnosticos.length === 1 ? 'diagnóstico' : 'diagnósticos' }} ·
+                {{ cantidadTratamientos }} {{ cantidadTratamientos === 1 ? 'tratamiento' : 'tratamientos' }} registrados
+              </p>
+            </div>
+            <nav
+              v-if="!error && !cargando"
+              class="pestanas-historial"
+              role="tablist"
+              aria-label="Vistas del historial clínico"
+            >
+              <button
+                type="button"
+                role="tab"
+                id="tab-registros-recientes"
+                aria-controls="panel-registros-recientes"
+                :aria-selected="pestanaHistorial === 'recientes'"
+                :class="{ activa: pestanaHistorial === 'recientes' }"
+                @click="pestanaHistorial = 'recientes'"
+              >
+                Más recientes
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="tab-historial-diagnosticos"
+                aria-controls="panel-historial-diagnosticos"
+                :aria-selected="pestanaHistorial === 'historial'"
+                :class="{ activa: pestanaHistorial === 'historial' }"
+                @click="pestanaHistorial = 'historial'"
+              >
+                Historial de diagnósticos
+              </button>
+            </nav>
+            <div class="acciones-cabecera">
+              <button class="btn btn-secondary" type="button">Generar PDF</button>
+              <button class="btn btn-primary" @click="nuevoDiagnostico">+ Nuevo registro</button>
+            </div>
           </div>
-          <div class="acciones-cabecera">
-            <button class="btn btn-secondary" type="button">Generar PDF</button>
-            <button class="btn btn-primary" @click="nuevoDiagnostico">+ Nuevo registro</button>
-          </div>
-        </div>
+        </Teleport>
 
         <p v-if="error" class="alert-error mensaje-error">
           {{ error }}
-          <button class="btn btn-secondary" @click="cargar">Reintentar</button>
+          <button class="btn btn-secondary" @click="cargar()">Reintentar</button>
         </p>
         <p v-else-if="cargando" class="estado-vacio">Cargando historial clínico…</p>
         <template v-else>
-          <nav class="pestanas-historial" role="tablist" aria-label="Vistas del historial clínico">
-            <button
-              type="button"
-              role="tab"
-              id="tab-registros-recientes"
-              aria-controls="panel-registros-recientes"
-              :aria-selected="pestanaHistorial === 'recientes'"
-              :class="{ activa: pestanaHistorial === 'recientes' }"
-              @click="pestanaHistorial = 'recientes'"
-            >
-              Más recientes
-            </button>
-            <button
-              type="button"
-              role="tab"
-              id="tab-historial-diagnosticos"
-              aria-controls="panel-historial-diagnosticos"
-              :aria-selected="pestanaHistorial === 'historial'"
-              :class="{ activa: pestanaHistorial === 'historial' }"
-              @click="pestanaHistorial = 'historial'"
-            >
-              Historial de diagnósticos
-            </button>
-          </nav>
-
           <section
             v-show="pestanaHistorial === 'recientes'"
             id="panel-registros-recientes"
@@ -684,7 +696,7 @@ watch(paginasHistorial, (total) => {
     :registro="registroEditando"
     :tipo-inicial="tipoNuevo"
     @close="modalAbierto = false"
-    @saved="cargar"
+    @saved="cargar()"
   />
 </template>
 
@@ -723,11 +735,15 @@ watch(paginasHistorial, (total) => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* Vive en la barra de pestañas de la ficha: ocupa todo el alto para que el
+   subrayado de la pestaña activa quede sobre la línea de la barra. */
 .pestanas-historial {
   display: flex;
+  align-self: stretch;
+  align-items: flex-end;
   gap: 18px;
-  margin-bottom: 14px;
-  border-bottom: 1px solid var(--color-border);
+  margin-right: auto;
+  margin-bottom: -6px;
 }
 
 .pestanas-historial button {
@@ -1094,7 +1110,8 @@ watch(paginasHistorial, (total) => {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  margin: 0 0 12px;
+  width: 100%;
+  margin: 0;
 }
 
 .historial-cabecera h2 {
@@ -1239,13 +1256,10 @@ watch(paginasHistorial, (total) => {
     flex-direction: column;
   }
 
-  .acciones-cabecera {
-    width: 100%;
+  .pestanas-historial {
+    margin-bottom: 0;
   }
 
-  .acciones-cabecera .btn {
-    flex: 1;
-  }
 }
 
 @media (max-width: 420px) {

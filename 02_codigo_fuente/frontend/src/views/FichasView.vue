@@ -3,8 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AnimalCard from '@/components/AnimalCard.vue'
 import AnimalFormModal from '@/components/AnimalFormModal.vue'
-import { animalesApi, recintosApi, taxonomiaApi } from '@/api/animales'
-import { veterinariaApi } from '@/api/veterinaria'
+import { consultas } from '@/api/consultas'
 import { ApiError } from '@/api/http'
 import { CLASES, ESTADOS_ANIMAL, ESTADOS_EN_CENTRO, nombreClase } from '@/config/animales'
 import type { Animal, EstadoAnimal, Recinto, Taxonomia } from '@/types/animales'
@@ -49,13 +48,17 @@ async function cargarAnimales() {
   cargando.value = true
   error.value = ''
   try {
-    const resultado = await animalesApi.listar({
-      buscar: filtros.buscar.trim() || undefined,
-      estado: filtros.estado || undefined,
-      id_taxonomia: filtros.id_taxonomia || undefined,
-      id_recinto: filtros.id_recinto || undefined,
-      clase: filtros.clase || undefined,
-    })
+    // Si ya se vio esta lista, se muestra al instante y se confirma con la API por detrás
+    const resultado = await consultas.animales(
+      {
+        buscar: filtros.buscar.trim() || undefined,
+        estado: filtros.estado || undefined,
+        id_taxonomia: filtros.id_taxonomia || undefined,
+        id_recinto: filtros.id_recinto || undefined,
+        clase: filtros.clase || undefined,
+      },
+      { alActualizar: (lista) => id === consultaActual && (animales.value = lista) },
+    )
     if (id === consultaActual) animales.value = resultado
   } catch (e) {
     if (id === consultaActual) {
@@ -68,7 +71,7 @@ async function cargarAnimales() {
 
 async function cargarOpcionesDeFiltro() {
   try {
-    ;[especies.value, recintos.value] = await Promise.all([taxonomiaApi.listar(), recintosApi.listar()])
+    ;[especies.value, recintos.value] = await Promise.all([consultas.especies(), consultas.recintos()])
     opcionesCargadas.value = true
   } catch {
     // Sin estas listas solo se pierden los filtros por especie y recinto
@@ -77,9 +80,12 @@ async function cargarOpcionesDeFiltro() {
 
 async function cargarMetricas() {
   errorMetricas.value = ''
+  // La lista sin filtros es la misma consulta que la del catálogo al abrir: se pide una sola vez
   const [lista, conteoTratamientos] = await Promise.allSettled([
-    animalesApi.listar(),
-    veterinariaApi.contarAnimalesConTratamientoEnCurso(),
+    consultas.animales({}, { alActualizar: (nueva) => (todos.value = nueva) }),
+    consultas.animalesConTratamientoEnCurso({
+      alActualizar: (n) => (animalesConTratamientoEnCurso.value = n),
+    }),
   ])
   if (lista.status === 'fulfilled') todos.value = lista.value
   else errorMetricas.value = 'No se pudo cargar el total de ejemplares.'

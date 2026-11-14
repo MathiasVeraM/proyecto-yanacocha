@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { authApi } from '@/api/auth'
+import { limpiarCache } from '@/api/cache'
 import type { TokenPayload } from '@/types'
 
 const TOKEN_KEY = 'yanacocha_token'
@@ -38,11 +39,15 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(correo: string, password: string, recordar: boolean) {
     const { access_token } = await authApi.login(correo, password)
+    // Nada de una sesión anterior debe verse con el usuario nuevo
+    limpiarCache()
     token.value = access_token
     ;(recordar ? localStorage : sessionStorage).setItem(TOKEN_KEY, access_token)
   }
 
   function logout() {
+    // Los datos en memoria (fichas, actividades, fotos) se borran al salir
+    limpiarCache()
     token.value = null
     localStorage.removeItem(TOKEN_KEY)
     sessionStorage.removeItem(TOKEN_KEY)

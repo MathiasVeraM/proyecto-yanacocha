@@ -6,9 +6,8 @@ import AnimalFormModal from '@/components/AnimalFormModal.vue'
 import AppBadge from '@/components/AppBadge.vue'
 import SalidaModal from '@/components/SalidaModal.vue'
 import VeterinariaPanel from '@/components/VeterinariaPanel.vue'
-import { actividadesApi } from '@/api/actividades'
-import { animalesApi } from '@/api/animales'
-import { veterinariaApi } from '@/api/veterinaria'
+import { cargarEnDosPasadas, fijar, type Pasada } from '@/api/cache'
+import { clavesCache, consultas } from '@/api/consultas'
 import { ApiError } from '@/api/http'
 import { ESTADOS_ANIMAL, ESTADOS_SALIDA, SEXOS, formatearFecha, hoyIso, nombreClase } from '@/config/animales'
 import { MODULO_PLANIFICACION } from '@/config/modulos'
@@ -80,8 +79,13 @@ function resumenDieta(dieta: Dieta) {
   return dieta.alimentos.map((alimento) => alimento.nombre_alimento).join(' + ') || 'Sin alimentos'
 }
 
-function formatearEdad(anios: number | null, meses: number | null, legado: string | null | undefined) {
-  if (anios === null || meses === null) return legado ?? 'No registrada'
+// `== null` cubre null y undefined (si la API no envía los campos de edad)
+function formatearEdad(
+  anios: number | null | undefined,
+  meses: number | null | undefined,
+  legado: string | null | undefined,
+) {
+  if (anios == null || meses == null) return legado || 'No registrada'
   return `${anios} ${anios === 1 ? 'año' : 'años'} y ${meses} ${meses === 1 ? 'mes' : 'meses'}`
 }
 
@@ -153,10 +157,14 @@ const eventosLineaVidaPaginados = computed(() => {
 // ---- Carga de datos ----
 
 async function cargar() {
+  const idAnimal = Number(props.id)
   cargando.value = true
   error.value = ''
   try {
-    animal.value = await animalesApi.obtener(Number(props.id))
+    // Si la ficha ya se abrió antes, aparece al instante y se confirma con la API por detrás
+    animal.value = await consultas.animal(idAnimal, {
+      alActualizar: (nuevo) => idAnimal === Number(props.id) && (animal.value = nuevo),
+    })
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'No se pudo cargar la ficha'
   } finally {
@@ -164,60 +172,70 @@ async function cargar() {
   }
 }
 
-async function cargarDiagnosticos() {
+// Mismas claves de caché que el panel de Veterinaria: si los dos piden a la vez, se pide una sola vez
+async function cargarDiagnosticos({ maxEdad, silencioso }: Pasada) {
   const idAnimal = Number(props.id)
-  cargandoDiagnosticos.value = true
-  errorDiagnosticos.value = ''
+  if (!silencioso) {
+    cargandoDiagnosticos.value = true
+    errorDiagnosticos.value = ''
+  }
   try {
-    const registros = await veterinariaApi.listarDiagnosticos(idAnimal)
+    const registros = await consultas.diagnosticos(idAnimal, { maxEdad })
     const listas = await Promise.all(
-      registros.map((diagnostico) => veterinariaApi.listarTratamientos(diagnostico.id_diagnostico)),
+      registros.map((diagnostico) => consultas.tratamientos(diagnostico.id_diagnostico, { maxEdad })),
     )
     if (idAnimal !== Number(props.id)) return
     diagnosticos.value = registros
     tratamientos.value = listas.flat()
   } catch (e) {
-    if (idAnimal === Number(props.id)) {
+    if (idAnimal === Number(props.id) && !silencioso) {
       errorDiagnosticos.value =
         e instanceof ApiError ? e.message : 'No se pudieron cargar los registros veterinarios'
     }
   } finally {
-    if (idAnimal === Number(props.id)) cargandoDiagnosticos.value = false
+    if (idAnimal === Number(props.id) && !silencioso) cargandoDiagnosticos.value = false
   }
 }
 
-async function cargarPlanificacion() {
+async function cargarPlanificacion({ maxEdad, silencioso }: Pasada) {
   if (!puedeVerPlanificacion.value) return
   const idAnimal = Number(props.id)
   const hoy = hoyIso()
-  cargandoPlanificacion.value = true
-  errorPlanificacion.value = ''
+  if (!silencioso) {
+    cargandoPlanificacion.value = true
+    errorPlanificacion.value = ''
+  }
   try {
     const [vigente, historial, programadas] = await Promise.all([
-      // Sin dieta vigente el servicio responde 404: no es un error para la ficha
-      actividadesApi.dietaVigente(idAnimal).catch((e) => {
-        if (e instanceof ApiError && e.status === 404) return null
-        throw e
-      }),
-      actividadesApi.dietasPorAnimal(idAnimal),
-      actividadesApi.listar({ id_animal: idAnimal, fecha_desde: hoy, fecha_hasta: sumarDias(hoy, 7) }),
+      consultas.dietaVigente(idAnimal, { maxEdad }),
+      consultas.dietasPorAnimal(idAnimal, { maxEdad }),
+      consultas.actividades(
+        { id_animal: idAnimal, fecha_desde: hoy, fecha_hasta: sumarDias(hoy, 7) },
+        { maxEdad },
+      ),
     ])
     if (idAnimal !== Number(props.id)) return
     dietaVigente.value = vigente
     dietas.value = historial
     actividades.value = programadas
   } catch (e) {
-    if (idAnimal === Number(props.id)) {
+    if (idAnimal === Number(props.id) && !silencioso) {
       errorPlanificacion.value =
         e instanceof ApiError ? e.message : 'No se pudieron cargar las actividades del ejemplar'
     }
   } finally {
-    if (idAnimal === Number(props.id)) cargandoPlanificacion.value = false
+    if (idAnimal === Number(props.id) && !silencioso) cargandoPlanificacion.value = false
   }
 }
 
+// "Reintentar" siempre vuelve a preguntar a la API
+const reintentarDiagnosticos = () => cargarDiagnosticos({ maxEdad: 0, silencioso: false })
+const reintentarPlanificacion = () => cargarPlanificacion({ maxEdad: 0, silencioso: false })
+
 function onGuardado(actualizado: Animal, nuevoAviso?: string) {
   animal.value = actualizado
+  // Lo que devolvió la API ya es la ficha actualizada: se guarda sin volver a pedirla
+  fijar(clavesCache.animal(actualizado.id_animal), actualizado)
   aviso.value = nuevoAviso ?? ''
   editarAbierto.value = false
   salidaAbierta.value = false
@@ -253,14 +271,17 @@ watch(
 // El resumen consulta sus datos al abrirse; Veterinaria tiene su propio panel.
 watch(tab, (valor) => {
   if (valor === 'resumen') {
-    void cargarDiagnosticos()
-    void cargarPlanificacion()
+    void cargarEnDosPasadas(cargarDiagnosticos)
+    void cargarEnDosPasadas(cargarPlanificacion)
   }
 })
 </script>
 
 <template>
-  <RouterLink :to="{ name: 'fichas' }" class="volver">‹ Volver a fichas</RouterLink>
+  <!-- El enlace de regreso se muestra en la cabecera de la app (AppLayout) -->
+  <Teleport defer to="#cabecera-navegacion">
+    <RouterLink :to="{ name: 'fichas' }" class="volver">‹ Volver a fichas</RouterLink>
+  </Teleport>
 
   <p v-if="aviso" class="alert-error aviso">
     {{ aviso }} Puedes volver a adjuntarla desde «Editar ficha».
@@ -313,9 +334,13 @@ watch(tab, (valor) => {
     </header>
 
     <!-- ---- Pestañas ---- -->
-    <nav class="tabs" aria-label="Secciones de la ficha">
-      <button :class="{ activo: tab === 'resumen' }" @click="tab = 'resumen'">Resumen</button>
-      <button :class="{ activo: tab === 'veterinaria' }" @click="tab = 'veterinaria'">Veterinaria</button>
+    <nav class="tabs" :class="{ 'con-cabecera': tab === 'veterinaria' }" aria-label="Secciones de la ficha">
+      <div class="tabs-botones">
+        <button :class="{ activo: tab === 'resumen' }" @click="tab = 'resumen'">Resumen</button>
+        <button :class="{ activo: tab === 'veterinaria' }" @click="tab = 'veterinaria'">Veterinaria</button>
+      </div>
+      <!-- Destino de las acciones de la pestaña activa (VeterinariaPanel las teletransporta aquí) -->
+      <div id="acciones-pestanas-ficha" class="tabs-acciones"></div>
     </nav>
 
     <!-- ---- Resumen ---- -->
@@ -413,7 +438,7 @@ watch(tab, (valor) => {
           <p v-if="cargandoPlanificacion && !actividades.length" class="estado-linea">Cargando…</p>
           <p v-else-if="errorPlanificacion" class="alert-error error-linea">
             {{ errorPlanificacion }}
-            <button type="button" class="accion-reintentar" @click="cargarPlanificacion">Reintentar</button>
+            <button type="button" class="accion-reintentar" @click="reintentarPlanificacion">Reintentar</button>
           </p>
           <dl v-else class="hoy">
             <div>
@@ -485,7 +510,7 @@ watch(tab, (valor) => {
           <p v-if="cargandoDiagnosticos" class="estado-linea">Cargando registros veterinarios…</p>
           <p v-else-if="errorDiagnosticos" class="alert-error error-linea">
             {{ errorDiagnosticos }}
-            <button type="button" class="accion-reintentar" @click="cargarDiagnosticos">Reintentar</button>
+            <button type="button" class="accion-reintentar" @click="reintentarDiagnosticos">Reintentar</button>
           </p>
           <nav v-if="eventosLineaVida.length > eventosPorPagina" class="paginacion" aria-label="Paginación de la línea de vida">
             <button type="button" class="btn btn-secondary" :disabled="paginaLineaVida === 1" @click="paginaLineaVida--">
@@ -522,7 +547,6 @@ watch(tab, (valor) => {
 <style scoped>
 .volver {
   display: inline-block;
-  margin-bottom: 14px;
   font-size: 13px;
   color: var(--color-text-muted);
 }
@@ -686,6 +710,46 @@ h1 {
   font-size: 15px;
   font-weight: 500;
   color: var(--color-text-muted);
+}
+
+.tabs-botones {
+  display: flex;
+  gap: 4px;
+}
+
+/* En Veterinaria la barra usa las mismas columnas que el panel, para que la
+   cabecera del historial quede alineada sobre la columna del historial. */
+.tabs.con-cabecera {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.7fr);
+  gap: 18px;
+}
+
+.tabs-acciones {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  padding: 0 0 6px 18px;
+}
+
+.tabs-acciones:empty {
+  display: none;
+}
+
+/* Continúa hacia arriba la línea punteada que separa las columnas del panel de
+   Veterinaria: cruza la barra y el margen inferior de la barra (22px + 1px de borde). */
+.tabs.con-cabecera .tabs-acciones {
+  position: relative;
+}
+
+.tabs.con-cabecera .tabs-acciones::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: -23px;
+  left: 0;
+  border-left: 1px dashed var(--color-border-strong);
+  pointer-events: none;
 }
 
 .tabs button.activo {
@@ -977,6 +1041,23 @@ dd {
   }
 }
 
+/* Igual que el panel de Veterinaria: a 900px pasa a una sola columna */
+@media (max-width: 900px) {
+  .tabs.con-cabecera {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .tabs-acciones {
+    padding-left: 0;
+  }
+
+  /* En una sola columna el panel tampoco tiene línea vertical */
+  .tabs.con-cabecera .tabs-acciones::before {
+    display: none;
+  }
+}
+
 @media (max-width: 760px) {
   .cabecera {
     grid-template-columns: 1fr;
@@ -991,8 +1072,9 @@ dd {
     grid-template-columns: 1fr;
   }
 
-  .tabs {
-    overflow-x: auto;
+  /* En móvil la cabecera baja a su propia fila, debajo de las pestañas */
+  .tabs-acciones {
+    padding: 0 0 10px;
   }
 }
 

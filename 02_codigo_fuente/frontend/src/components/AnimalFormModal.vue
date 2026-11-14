@@ -3,7 +3,9 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import EspecieAutocomplete from './EspecieAutocomplete.vue'
 import { animalesApi, recintosApi, taxonomiaApi } from '@/api/animales'
+import { consultas } from '@/api/consultas'
 import { ApiError } from '@/api/http'
+import { optimizarFoto } from '@/utils/fotos'
 import { CLASES, ESTADOS_ANIMAL, ESTADOS_EN_CENTRO, SEXOS, hoyIso, nombreClase } from '@/config/animales'
 import type { Animal, EstadoAnimal, Recinto, Sexo, Taxonomia } from '@/types/animales'
 
@@ -18,7 +20,10 @@ const emit = defineEmits<{ close: []; saved: [animal: Animal, aviso?: string] }>
 
 // Mismos límites que valida el servicio
 const TIPOS_FOTO = ['image/jpeg', 'image/png', 'image/webp']
+// Límite del servidor (lo que se sube, ya reducido)
 const TAMANO_MAXIMO_MB = 5
+// Se aceptan fotos originales más pesadas porque se reducen antes de subirlas
+const TAMANO_ORIGINAL_MAXIMO_MB = 25
 const MAX_NOMBRE = 100
 const MAX_ESPECIE = 150
 const MAX_TAXONOMIA = 100
@@ -52,6 +57,7 @@ const form = reactive({
 // Foto adjunta: se sube después de guardar la ficha, porque necesita el id del animal
 const archivo = ref<File | null>(null)
 const vistaPrevia = ref<string | null>(null)
+const procesandoFoto = ref(false)
 const arrastrando = ref(false)
 
 const error = ref('')
@@ -88,25 +94,34 @@ function quitarFoto() {
   vistaPrevia.value = null
 }
 
-function adjuntar(elegido: File | undefined) {
+async function adjuntar(elegido: File | undefined) {
   if (!elegido) return
   error.value = ''
   if (!TIPOS_FOTO.includes(elegido.type)) {
     error.value = 'La fotografía debe ser una imagen JPG, PNG o WEBP'
     return
   }
-  if (elegido.size > TAMANO_MAXIMO_MB * 1024 * 1024) {
+  if (elegido.size > TAMANO_ORIGINAL_MAXIMO_MB * 1024 * 1024) {
+    error.value = `La fotografía no puede superar los ${TAMANO_ORIGINAL_MAXIMO_MB} MB`
+    return
+  }
+  // Se reduce en el navegador antes de subirla (ver utils/fotos.ts)
+  procesandoFoto.value = true
+  const optimizada = await optimizarFoto(elegido)
+  procesandoFoto.value = false
+  // El límite del servidor se aplica a lo que realmente se sube
+  if (optimizada.size > TAMANO_MAXIMO_MB * 1024 * 1024) {
     error.value = `La fotografía no puede superar los ${TAMANO_MAXIMO_MB} MB`
     return
   }
   quitarFoto()
-  archivo.value = elegido
-  vistaPrevia.value = URL.createObjectURL(elegido)
+  archivo.value = optimizada
+  vistaPrevia.value = URL.createObjectURL(optimizada)
 }
 
 function onSeleccion(evento: Event) {
   const input = evento.target as HTMLInputElement
-  adjuntar(input.files?.[0])
+  void adjuntar(input.files?.[0])
   // Permite volver a elegir el mismo archivo después de quitarlo
   input.value = ''
 }
@@ -115,7 +130,7 @@ onBeforeUnmount(quitarFoto)
 
 function onSoltar(evento: DragEvent) {
   arrastrando.value = false
-  adjuntar(evento.dataTransfer?.files[0])
+  void adjuntar(evento.dataTransfer?.files[0])
 }
 
 // Un animal que ya salió conserva su estado: la salida se registra con su propio flujo
@@ -146,7 +161,7 @@ watch(
     })
     quitarFoto()
     try {
-      recintos.value = await recintosApi.listar()
+      recintos.value = await consultas.recintos()
       // Si todavía no hay recintos, se ofrece crear el primero
       if (recintos.value.length === 0) recintoNuevo.value = true
       else if (!form.id_recinto) form.id_recinto = recintos.value[0]!.id_recinto
@@ -347,7 +362,7 @@ async function guardar() {
             <circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6" />
           </svg>
           <span>{{ animal?.url_imagen ? 'Reemplazar fotografía' : 'Adjuntar fotografía' }}</span>
-          <small>JPG, PNG o WEBP · máx. {{ TAMANO_MAXIMO_MB }} MB</small>
+          <small>JPG, PNG o WEBP · máx. {{ TAMANO_ORIGINAL_MAXIMO_MB }} MB · se optimiza al subir</small>
         </label>
         <p class="ayuda-foto">Arrastra el archivo aquí o haz clic para elegirlo.</p>
 
@@ -606,8 +621,16 @@ async function guardar() {
 
     <template #footer>
       <button type="button" class="btn btn-secondary" @click="emit('close')">Cancelar</button>
-      <button type="submit" form="animal-form" class="btn btn-primary" :disabled="guardando">
-        {{ guardando ? 'Guardando…' : esEdicion ? 'Guardar cambios' : 'Registrar ingreso' }}
+      <button type="submit" form="animal-form" class="btn btn-primary" :disabled="guardando || procesandoFoto">
+        {{
+          procesandoFoto
+            ? 'Preparando foto…'
+            : guardando
+              ? 'Guardando…'
+              : esEdicion
+                ? 'Guardar cambios'
+                : 'Registrar ingreso'
+        }}
       </button>
     </template>
   </BaseModal>
