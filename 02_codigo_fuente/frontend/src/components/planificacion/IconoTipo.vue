@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { TipoActividad } from '@/types/actividades'
 
-// Ícono de cada tipo: plato (alimentación), destello (enriquecimiento), diana (entrenamiento), gota (limpieza)
+// Ícono de cada tipo: plato (alimentación), destello (enriquecimiento), diana (entrenamiento),
+// cruz (tratamiento), gota (limpieza)
 defineProps<{ tipo: TipoActividad }>()
 </script>
 
@@ -20,6 +21,7 @@ defineProps<{ tipo: TipoActividad }>()
       <circle cx="12" cy="12" r="4.5" />
       <circle cx="12" cy="12" r="1" />
     </template>
+    <path v-else-if="tipo === 'tratamiento'" d="M9.5 3.5h5v6h6v5h-6v6h-5v-6h-6v-5h6Z" />
     <path v-else d="M12 3.5c3 4 6 7 6 10.5a6 6 0 0 1-12 0c0-3.5 3-6.5 6-10.5Z" />
   </svg>
 </template>

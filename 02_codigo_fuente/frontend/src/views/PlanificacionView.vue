@@ -75,7 +75,7 @@ const tipos = reactive<Record<TipoActividad, boolean>>({
   enriquecimiento: true,
   entrenamiento: true,
   limpieza: true,
-  tratamiento: false,
+  tratamiento: true,
 })
 const idAnimal = ref(0)
 const estado = ref<EstadoFiltro>('todas')
@@ -339,7 +339,7 @@ function reemplazar(actualizada: Actividad) {
 }
 
 async function completar(actividad: Actividad) {
-  if (actividad.completada || actualizandoId.value !== null) return
+  if (!auth.permisos.completarActividades || actividad.completada || actualizandoId.value !== null) return
   if (actividad.fecha_programada > hoy.value) {
     avisar('Solo se pueden completar actividades de hoy o de días anteriores')
     return
@@ -360,7 +360,7 @@ async function completar(actividad: Actividad) {
 }
 
 async function reabrir(actividad: Actividad) {
-  if (!actividad.completada || actualizandoId.value !== null) return
+  if (!auth.permisos.gestionarActividades || !actividad.completada || actualizandoId.value !== null) return
   actualizandoId.value = actividad.id_actividad
   errorActividades.value = ''
   try {
@@ -391,6 +391,7 @@ function volverALista() {
 }
 
 function abrirCrear(fecha: string, hora: string) {
+  if (!auth.permisos.gestionarActividades) return
   panel.value = { modo: 'crear', fecha: fecha || ancla.value, hora }
 }
 
@@ -445,6 +446,7 @@ async function eliminarActividad(actividad: Actividad) {
 }
 
 function observar(actividad: Actividad) {
+  if (!auth.permisos.completarActividades) return
   errorObs.value = ''
   obsActividad.value = actividad
 }
@@ -654,7 +656,16 @@ onMounted(() => {
           <div class="seg" role="group" aria-label="Vista del calendario">
             <button v-for="v in VISTAS" :key="v.id" type="button" :class="{ on: vista === v.id }" @click="vista = v.id">{{ v.texto }}</button>
           </div>
-          <button class="btn btn-primary crear" type="button" aria-label="Crear actividad" title="Crear actividad" @click="abrirCrear(ancla, '')">+ Crear</button>
+          <button
+            v-if="auth.permisos.gestionarActividades"
+            class="btn btn-primary crear"
+            type="button"
+            aria-label="Crear actividad"
+            title="Crear actividad"
+            @click="abrirCrear(ancla, '')"
+          >
+            + Crear
+          </button>
         </header>
 
         <div class="cal-cuerpo" :class="{ 'con-panel': panel }">
@@ -795,6 +806,13 @@ onMounted(() => {
   --c: #4a538f;
   --cb: #e8eaf6;
   --cd: #c8cdea;
+}
+
+/* Dosis de tratamientos en curso: rojo clínico, distinto de los demás tipos */
+.t-tratamiento {
+  --c: #b0303f;
+  --cb: #fbe6e8;
+  --cd: #f0bcc2;
 }
 
 .planning-page {

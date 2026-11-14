@@ -64,6 +64,8 @@ export interface Animal {
   url_imagen: string | null
   taxonomia: Taxonomia
   recinto: Recinto
+  // Tiene un tratamiento en curso hoy (lo calcula el servicio en la misma consulta del listado)
+  tiene_tratamiento_en_curso?: boolean
 }
 
 // El código no se envía: lo genera el servicio a partir del nombre científico.

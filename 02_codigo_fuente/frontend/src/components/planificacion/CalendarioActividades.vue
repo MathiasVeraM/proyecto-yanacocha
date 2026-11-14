@@ -18,6 +18,7 @@ import {
   sumarDias,
   type ContextoActividades,
 } from '@/config/actividades'
+import { useAuthStore } from '@/stores/auth'
 import type { Actividad, TipoActividad } from '@/types/actividades'
 
 export type VistaCalendario = 'dia' | 'semana' | 'mes'
@@ -48,6 +49,9 @@ const emit = defineEmits<{
 
 const ALTO_HORA = 60
 const scroll = ref<HTMLElement | null>(null)
+// Solo Manejo de Animales crea actividades al hacer clic en un hueco
+const auth = useAuthStore()
+const puedeCrear = computed(() => auth.permisos.gestionarActividades)
 const d = computed(() => describirActividades(props.ctx))
 const tarde = (a: Actividad) => estaAtrasada(a, props.hoy, props.ahora)
 const y = (hora: string) => (aMinutos(hora) / 60) * ALTO_HORA
@@ -142,9 +146,12 @@ const estiloBloque = (b: Bloque, alto = true) => ({
   [alto ? 'width' : 'maxWidth']: `calc(${100 / b.carriles}% - 6px)`,
 })
 const altoBloque = (b: Bloque) => Math.max(((b.fin - b.ini) / 60) * ALTO_HORA - 4, 24)
-const conBotones = (b: Bloque) => b.carriles === 1 || props.vista === 'dia'
+// Los roles que solo consultan no tienen botones: el título usa todo el ancho
+const conBotones = (b: Bloque) =>
+  auth.permisos.completarActividades && (b.carriles === 1 || props.vista === 'dia')
 
 function clicHueco(evento: MouseEvent, fecha: string) {
+  if (!puedeCrear.value) return
   const minutos = Math.floor((evento.offsetY / ALTO_HORA) * 2) * 30
   emit('crear', fecha, `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`)
 }
@@ -249,7 +256,7 @@ watch(
           v-for="f in dias"
           :key="f"
           class="col"
-          :class="{ 'hoy-columna': f === hoy }"
+          :class="{ 'hoy-columna': f === hoy, creable: puedeCrear }"
           @click.self="clicHueco($event, f)"
         >
           <div
@@ -313,8 +320,8 @@ watch(
         v-for="c in celdasMes"
         :key="c.fecha"
         class="celda"
-        :class="{ fuera: c.fuera, hoy: c.fecha === hoy }"
-        @click.self="emit('crear', c.fecha, '')"
+        :class="{ fuera: c.fuera, hoy: c.fecha === hoy, creable: puedeCrear }"
+        @click.self="puedeCrear && emit('crear', c.fecha, '')"
       >
         <button class="num" type="button" :aria-label="`Ver ${diaLargo(c.fecha)}`" @click="emit('verDia', c.fecha)">{{ c.numero }}</button>
         <button
@@ -503,6 +510,11 @@ watch(
 .col {
   position: relative;
   border-left: 1px solid var(--linea);
+}
+
+/* Clic en un hueco para crear: solo para quien puede crear actividades */
+.col.creable,
+.celda.creable {
   cursor: copy;
 }
 
@@ -711,7 +723,6 @@ watch(
   border: 1px solid var(--color-border);
   border-radius: 14px;
   background: var(--color-surface);
-  cursor: copy;
 }
 
 .celda:hover {

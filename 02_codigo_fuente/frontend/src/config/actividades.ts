@@ -8,12 +8,14 @@ import type {
 } from '@/types/actividades'
 import type { Animal, Recinto } from '@/types/animales'
 
-// Orden en que aparecen los tipos en indicadores, leyenda y vista mes
-export const TIPOS_ACTIVIDAD: Exclude<TipoActividad, 'tratamiento'>[] = [
+// Orden en que aparecen los tipos en indicadores, leyenda y vista mes.
+// Las dosis de tratamiento las genera el sistema a partir de los tratamientos en curso
+export const TIPOS_ACTIVIDAD: TipoActividad[] = [
   'alimentacion',
   'enriquecimiento',
   'entrenamiento',
   'limpieza',
+  'tratamiento',
 ]
 
 export const TIPO_LABEL: Record<TipoActividad, string> = {
@@ -183,6 +185,7 @@ export function describirActividades(ctx: ContextoActividades) {
     if (a.tipo_actividad === 'alimentacion') return alimentos(a)
     if (a.tipo_actividad === 'enriquecimiento') return a.descripcion_estimulo ?? 'Enriquecimiento'
     if (a.tipo_actividad === 'entrenamiento') return a.objetivo_entrenamiento ?? 'Entrenamiento'
+    if (a.tipo_actividad === 'tratamiento') return a.descripcion_tratamiento || 'Dosis de tratamiento'
     return a.observaciones || recinto(a.id_recinto)?.tipo || 'Limpieza del recinto'
   }
 

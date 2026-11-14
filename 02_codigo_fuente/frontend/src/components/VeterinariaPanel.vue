@@ -6,6 +6,7 @@ import { ApiError } from '@/api/http'
 import { cargarEnDosPasadas, type Pasada } from '@/api/cache'
 import { consultas } from '@/api/consultas'
 import { formatearFecha } from '@/config/animales'
+import { useAuthStore } from '@/stores/auth'
 import type {
   Diagnostico,
   SignosVitales,
@@ -16,6 +17,9 @@ import type {
 
 // fechaIngreso: para que un tratamiento no empiece antes del ingreso del animal
 const props = defineProps<{ idAnimal: number; nombreEjemplar?: string; fechaIngreso?: string }>()
+
+// Registrar y editar es solo de Veterinaria; Administración consulta y genera el PDF
+const auth = useAuthStore()
 
 type RegistroExistente =
   | { tipo: 'diagnostico'; datos: Diagnostico }
@@ -334,17 +338,20 @@ async function cargar({ maxEdad, silencioso }: Pasada = { maxEdad: 0, silencioso
 }
 
 function nuevoDiagnostico() {
+  if (!auth.permisos.registrarVeterinaria) return
   registroEditando.value = null
   tipoNuevo.value = 'diagnostico'
   modalAbierto.value = true
 }
 
 function editarDiagnostico(datos: Diagnostico) {
+  if (!auth.permisos.registrarVeterinaria) return
   registroEditando.value = { tipo: 'diagnostico', datos }
   modalAbierto.value = true
 }
 
 function editarTratamiento(datos: Tratamiento) {
+  if (!auth.permisos.registrarVeterinaria) return
   registroEditando.value = { tipo: 'tratamiento', datos }
   modalAbierto.value = true
 }
@@ -469,8 +476,19 @@ watch(paginasHistorial, (total) => {
               </button>
             </nav>
             <div class="acciones-cabecera">
-              <button class="btn btn-secondary" type="button">Generar PDF</button>
-              <button class="btn btn-primary" @click="nuevoDiagnostico">+ Nuevo registro</button>
+              <button class="btn btn-secondary" type="button" :disabled="!auth.permisos.generarPdfVeterinaria">
+                Generar PDF
+              </button>
+              <!-- Solo Veterinaria registra; los demás roles lo ven deshabilitado -->
+              <button
+                class="btn btn-primary"
+                type="button"
+                :disabled="!auth.permisos.registrarVeterinaria"
+                :title="auth.permisos.registrarVeterinaria ? undefined : 'Solo el rol de Veterinaria puede registrar diagnósticos y tratamientos'"
+                @click="nuevoDiagnostico"
+              >
+                + Nuevo registro
+              </button>
             </div>
           </div>
         </Teleport>
@@ -728,6 +746,7 @@ watch(paginasHistorial, (total) => {
                   Dosis anterior: {{ tratamiento.dosis }}
                 </p>
                 <button
+                  v-if="auth.permisos.registrarVeterinaria"
                   type="button"
                   class="accion-link"
                   @click="editarTratamiento(tratamiento)"
@@ -740,7 +759,7 @@ watch(paginasHistorial, (total) => {
             <p v-else class="detalle-vacio">No hay tratamientos asociados.</p>
           </section>
         </div>
-        <footer class="detalle-footer">
+        <footer v-if="auth.permisos.registrarVeterinaria" class="detalle-footer">
           <button type="button" class="btn btn-secondary" @click="editarDiagnosticoSeleccionado">
             Editar
           </button>

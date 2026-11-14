@@ -14,6 +14,7 @@ import {
   textoDuracion,
   type ContextoActividades,
 } from '@/config/actividades'
+import { useAuthStore } from '@/stores/auth'
 import type { Actividad, Observacion } from '@/types/actividades'
 
 // Panel derecho del calendario: el detalle de una actividad o la lista de un grupo
@@ -43,8 +44,11 @@ const emit = defineEmits<{
   eliminar: [a: Actividad]
 }>()
 
-// Se puede editar o eliminar mientras esté pendiente; las dosis se manejan desde el tratamiento
-const modificable = (a: Actividad) => !a.completada && a.tipo_actividad !== 'tratamiento'
+const auth = useAuthStore()
+// Se puede editar o eliminar mientras esté pendiente; las dosis se manejan desde el tratamiento.
+// Crear, editar, eliminar y reabrir es solo de Manejo de Animales
+const modificable = (a: Actividad) =>
+  auth.permisos.gestionarActividades && !a.completada && a.tipo_actividad !== 'tratamiento'
 // Solo se completan actividades de hoy o de días anteriores
 const esFutura = (a: Actividad) => a.fecha_programada > props.hoy
 
@@ -100,6 +104,10 @@ const capitalizar = (texto: string) => texto.charAt(0).toUpperCase() + texto.sli
               <template v-else>{{ d.alimentos(a) }}</template>
             </dd>
           </div>
+          <div v-if="a.tipo_actividad === 'tratamiento'">
+            <dt>Tratamiento</dt>
+            <dd>{{ d.detalle(a) }} <small class="tenue">· en curso, indicado por Veterinaria</small></dd>
+          </div>
           <div v-if="a.tipo_enriquecimiento"><dt>Tipo</dt><dd>{{ TIPOS_ENRIQUECIMIENTO[a.tipo_enriquecimiento] }}</dd></div>
           <div v-if="a.descripcion_estimulo"><dt>Estímulo</dt><dd>{{ a.descripcion_estimulo }}</dd></div>
           <div v-if="a.objetivo_entrenamiento"><dt>Objetivo</dt><dd>{{ a.objetivo_entrenamiento }}</dd></div>
@@ -116,7 +124,8 @@ const capitalizar = (texto: string) => texto.charAt(0).toUpperCase() + texto.sli
           <h4>Observaciones <span>{{ observaciones.length }}</span></h4>
           <p v-if="cargandoObservaciones" class="tenue">Cargando observaciones…</p>
           <p v-else-if="!observaciones.length" class="tenue">
-            Aún no hay observaciones. Registra lo que notes del comportamiento, el recinto o el estado físico.
+            Aún no hay observaciones.<template v-if="auth.permisos.completarActividades">
+              Registra lo que notes del comportamiento, el recinto o el estado físico.</template>
           </p>
           <article v-for="o in observaciones" :key="o.id_observacion" class="obs-item">
             <div class="obs-tags">
@@ -130,17 +139,19 @@ const capitalizar = (texto: string) => texto.charAt(0).toUpperCase() + texto.sli
         </section>
       </div>
 
-      <footer class="p-f">
+      <!-- Veterinaria y Administración solo consultan: sin acciones -->
+      <footer v-if="auth.permisos.gestionarActividades || auth.permisos.completarActividades" class="p-f">
         <div v-if="modificable(a)" class="p-f-gestion">
           <button class="btn btn-secondary" type="button" @click="emit('editar', a)">Editar</button>
           <button class="btn btn-peligro" type="button" @click="emit('eliminar', a)">Eliminar</button>
         </div>
-        <button class="btn btn-secondary" type="button" @click="emit('observar', a)">
+        <button v-if="auth.permisos.completarActividades" class="btn btn-secondary" type="button" @click="emit('observar', a)">
           <svg class="ico-btn" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16Z" /><path d="m13.5 6.5 4 4" /></svg>
           Agregar observación
         </button>
+        <!-- Reabrir es solo de Manejo; completar, de Manejo y Voluntarios -->
         <button
-          v-if="a.completada"
+          v-if="a.completada && auth.permisos.gestionarActividades"
           class="btn btn-secondary"
           type="button"
           :disabled="actualizandoId === a.id_actividad"
@@ -149,7 +160,7 @@ const capitalizar = (texto: string) => texto.charAt(0).toUpperCase() + texto.sli
           Marcar como pendiente
         </button>
         <button
-          v-else
+          v-else-if="!a.completada && auth.permisos.completarActividades"
           class="btn btn-primary"
           type="button"
           :disabled="actualizandoId === a.id_actividad || esFutura(a)"

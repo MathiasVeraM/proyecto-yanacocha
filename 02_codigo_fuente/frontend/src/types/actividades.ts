@@ -53,6 +53,8 @@ export interface Actividad {
   objetivo_entrenamiento: string | null
   tipo_refuerzo: string | null
   id_tratamiento: number | null
+  // Qué se aplica en una dosis (solo en actividades de tipo tratamiento)
+  descripcion_tratamiento?: string | null
   cancelada: boolean
   animal?: Animal
   recinto?: Recinto

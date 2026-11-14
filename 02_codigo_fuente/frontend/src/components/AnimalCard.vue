@@ -9,6 +9,16 @@ defineProps<{ animal: Animal }>()
 <template>
   <RouterLink :to="{ name: 'ficha-animal', params: { id: animal.id_animal } }" class="card">
     <AnimalFoto :url="animal.url_imagen" :nombre="animal.taxonomia.nombre_comun" class="foto">
+      <!-- Alerta: el ejemplar tiene un tratamiento en curso -->
+      <span
+        v-if="animal.tiene_tratamiento_en_curso"
+        class="alerta-tratamiento"
+        role="img"
+        aria-label="Tratamiento en curso"
+        title="Tratamiento en curso"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 3.5h5v6h6v5h-6v6h-5v-6h-6v-5h6Z" /></svg>
+      </span>
       <span v-if="animal.estado_actual !== 'en_centro'" class="estado" :class="animal.estado_actual">
         {{ ESTADOS_ANIMAL[animal.estado_actual].label }}
       </span>
@@ -87,6 +97,26 @@ defineProps<{ animal: Animal }>()
 
 .estado.trasladado {
   background: #4a538f;
+}
+
+.alerta-tratamiento {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(35, 40, 31, 0.3);
+  color: #b0303f;
+}
+
+.alerta-tratamiento svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
 }
 
 .codigo {

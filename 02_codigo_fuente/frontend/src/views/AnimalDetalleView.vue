@@ -20,11 +20,14 @@ const props = defineProps<{ id: string }>()
 
 const auth = useAuthStore()
 const puedeVerPlanificacion = computed(() => auth.tieneAcceso(MODULO_PLANIFICACION))
+// Manejo de Animales solo ve el resumen; Veterinaria y Administración también la pestaña Veterinaria
+const puedeVerVeterinaria = computed(() => auth.permisos.verPestanaVeterinaria)
+const pestanaInicial = () => (puedeVerVeterinaria.value ? 'veterinaria' : 'resumen')
 
 const animal = ref<Animal | null>(null)
 const cargando = ref(true)
 const error = ref('')
-const tab = ref<'resumen' | 'veterinaria'>('veterinaria')
+const tab = ref<'resumen' | 'veterinaria'>(pestanaInicial())
 const editarAbierto = ref(false)
 const salidaAbierta = ref(false)
 const menuAbierto = ref(false)
@@ -265,18 +268,24 @@ watch(
     dietas.value = []
     actividades.value = []
     paginaLineaVida.value = 1
-    tab.value = 'veterinaria'
+    const inicial = pestanaInicial()
+    // Si ya estaba en el resumen (roles sin la pestaña Veterinaria), el watch de abajo no se
+    // dispara: se cargan sus datos aquí
+    if (tab.value === inicial && inicial === 'resumen') cargarResumen()
+    else tab.value = inicial
     void cargar()
   },
   { immediate: true },
 )
 
+function cargarResumen() {
+  void cargarEnDosPasadas(cargarDiagnosticos)
+  void cargarEnDosPasadas(cargarPlanificacion)
+}
+
 // El resumen consulta sus datos al abrirse; Veterinaria tiene su propio panel.
 watch(tab, (valor) => {
-  if (valor === 'resumen') {
-    void cargarEnDosPasadas(cargarDiagnosticos)
-    void cargarEnDosPasadas(cargarPlanificacion)
-  }
+  if (valor === 'resumen') cargarResumen()
 })
 </script>
 
@@ -340,7 +349,9 @@ watch(tab, (valor) => {
     <nav class="tabs" :class="{ 'con-cabecera': tab === 'veterinaria' }" aria-label="Secciones de la ficha">
       <div class="tabs-botones">
         <button :class="{ activo: tab === 'resumen' }" @click="tab = 'resumen'">Resumen</button>
-        <button :class="{ activo: tab === 'veterinaria' }" @click="tab = 'veterinaria'">Veterinaria</button>
+        <button v-if="puedeVerVeterinaria" :class="{ activo: tab === 'veterinaria' }" @click="tab = 'veterinaria'">
+          Veterinaria
+        </button>
       </div>
       <!-- Destino de las acciones de la pestaña activa (VeterinariaPanel las teletransporta aquí) -->
       <div id="acciones-pestanas-ficha" class="tabs-acciones"></div>
@@ -540,7 +551,7 @@ watch(tab, (valor) => {
 
     <!-- ---- Veterinaria ---- -->
     <VeterinariaPanel
-      v-else-if="tab === 'veterinaria'"
+      v-else-if="tab === 'veterinaria' && puedeVerVeterinaria"
       :id-animal="animal.id_animal"
       :nombre-ejemplar="animal.nombre ?? animal.taxonomia.nombre_comun"
       :fecha-ingreso="animal.fecha_ingreso"

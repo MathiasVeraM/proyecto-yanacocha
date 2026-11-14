@@ -1,5 +1,9 @@
 <script setup lang="ts">
-// Los dos botones rápidos de una actividad: marcarla como hecha y agregar una observación
+import { useAuthStore } from '@/stores/auth'
+
+// Los dos botones rápidos de una actividad: marcarla como hecha y agregar una observación.
+// Solo los ven los roles que pueden completar actividades (Manejo de Animales y Voluntarios)
+const auth = useAuthStore()
 defineProps<{
   hecha: boolean
   observaciones: number
@@ -12,7 +16,7 @@ const emit = defineEmits<{ completar: []; observar: [] }>()
 </script>
 
 <template>
-  <span class="botones" :class="{ compacto }">
+  <span v-if="auth.permisos.completarActividades" class="botones" :class="{ compacto }">
     <button
       v-if="!sinCheck"
       type="button"

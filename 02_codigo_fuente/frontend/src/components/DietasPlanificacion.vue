@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { hoyIso, iniciales } from '@/config/animales'
+import { useAuthStore } from '@/stores/auth'
 import type { Dieta, UnidadCantidad } from '@/types/actividades'
 import type { Animal } from '@/types/animales'
+
+// Registrar, cambiar la fecha de fin y finalizar dietas es solo de Manejo de Animales
+const auth = useAuthStore()
 
 const props = defineProps<{
   animales: Animal[]
@@ -82,7 +86,9 @@ function toggleHistorial(idAnimal: number) {
           Plan nutricional asignado a cada ejemplar. Las restricciones vienen de indicaciones veterinarias.
         </p>
       </div>
-      <button class="btn btn-primary" type="button" @click="emit('registrar')">+ Registrar dieta</button>
+      <button v-if="auth.permisos.gestionarActividades" class="btn btn-primary" type="button" @click="emit('registrar')">
+        + Registrar dieta
+      </button>
     </div>
 
     <p v-if="error" class="alert-error" role="alert">{{ error }}</p>
@@ -132,8 +138,16 @@ function toggleHistorial(idAnimal: number) {
                   <button class="history-button" type="button" @click="toggleHistorial(animal.id_animal)">
                     {{ historialAbierto === animal.id_animal ? 'Ocultar historial' : 'Historial' }}
                   </button>
-                  <button class="history-button" type="button" @click="abrirEditorFin(dieta)">Fecha de fin</button>
                   <button
+                    v-if="auth.permisos.gestionarActividades"
+                    class="history-button"
+                    type="button"
+                    @click="abrirEditorFin(dieta)"
+                  >
+                    Fecha de fin
+                  </button>
+                  <button
+                    v-if="auth.permisos.gestionarActividades"
                     class="finish-button"
                     type="button"
                     @click="finalizar(dieta, animal.nombre ?? animal.taxonomia.nombre_comun)"
@@ -143,7 +157,7 @@ function toggleHistorial(idAnimal: number) {
                 </div>
               </td>
             </tr>
-            <tr v-if="editandoFin === dieta.id_dieta" class="history-row">
+            <tr v-if="editandoFin === dieta.id_dieta && auth.permisos.gestionarActividades" class="history-row">
               <td colspan="6">
                 <form class="editor-fin" @submit.prevent="guardarFin(dieta, nuevaFin || null)">
                   <label :for="`fin-${dieta.id_dieta}`">Fecha de fin de la dieta</label>

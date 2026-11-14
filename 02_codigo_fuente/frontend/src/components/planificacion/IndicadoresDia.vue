@@ -11,7 +11,10 @@ import {
   horaFin,
   type ContextoActividades,
 } from '@/config/actividades'
+import { useAuthStore } from '@/stores/auth'
 import type { Actividad, TipoActividad } from '@/types/actividades'
+
+const auth = useAuthStore()
 
 // Resumen del día por tipo de actividad. Reemplaza al Checklist y a Monitoreo de alimentación:
 // cada tarjeta se despliega con lo que falta hacer y se puede completar desde aquí.
@@ -189,7 +192,7 @@ const iniciales = (texto: string) => texto.trim().slice(0, 2).toUpperCase()
               </button>
             </span>
             <button
-              v-if="f.siguiente"
+              v-if="f.siguiente && auth.permisos.completarActividades"
               class="btn btn-primary chico"
               type="button"
               :disabled="actualizandoId === f.siguiente.id_actividad"
@@ -197,7 +200,7 @@ const iniciales = (texto: string) => texto.trim().slice(0, 2).toUpperCase()
             >
               ✓ Hecha {{ horaCorta(f.siguiente) }}
             </button>
-            <span v-else class="ok">Alimentado ✓</span>
+            <span v-else-if="!f.siguiente" class="ok">Alimentado ✓</span>
             <BotonesActividad
               sin-check
               :hecha="false"
