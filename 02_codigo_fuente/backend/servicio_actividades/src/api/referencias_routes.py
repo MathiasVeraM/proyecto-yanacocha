@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -16,7 +18,7 @@ router = APIRouter(
 # Este router se incluye antes que el de actividades en src/main.py para que
 # /referencias no sea capturado por GET /api/actividades/{id_actividad}.
 @router.get("/referencias", response_model=ReferenciasPlanificacion)
-def consultar_referencias(db: Session = Depends(get_db)):
+def consultar_referencias(db: Annotated[Session, Depends(get_db)]):
     # Todos los roles con el módulo de Planificación pueden consultarlas: así no necesitan
     # permisos sobre Fichas ni Accesos solo para ver nombres de ejemplares, recintos y usuarios
     return ReferenciasService.planificacion(db)

@@ -93,16 +93,16 @@ class AnimalUpdate(BaseModel):
 class AnimalResponse(BaseModel):
     id_animal: int
     codigo_animal: str
-    nombre: Optional[str]
+    nombre: Optional[str] = None
     id_taxonomia: int
     id_recinto: int
-    edad_anios: Optional[int]
-    edad_meses: Optional[int]
-    edad_aproximada: Optional[str]
-    sexo: Optional[str]
+    edad_anios: Optional[int] = None
+    edad_meses: Optional[int] = None
+    edad_aproximada: Optional[str] = None
+    sexo: Optional[str] = None
     estado_actual: str
     fecha_ingreso: date
-    url_imagen: Optional[str]
+    url_imagen: Optional[str] = None
     taxonomia: TaxonomiaResponse
     recinto: RecintoResponse
     # Alerta para las tarjetas del listado; se calcula en la misma consulta del animal

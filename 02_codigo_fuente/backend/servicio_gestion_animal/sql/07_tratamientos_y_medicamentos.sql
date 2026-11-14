@@ -19,7 +19,7 @@ SET descripcion = COALESCE(
     NULLIF(BTRIM(medicamento_o_proceso), ''),
     'Tratamiento registrado antes de la actualización'
 )
-WHERE descripcion IS NULL OR BTRIM(descripcion) = '';
+WHERE descripcion IS NULL OR LENGTH(BTRIM(descripcion)) = 0;
 
 ALTER TABLE gestion_animal.tratamiento
     ALTER COLUMN descripcion SET NOT NULL;
@@ -29,12 +29,14 @@ ALTER TABLE gestion_animal.tratamiento
     ALTER COLUMN medicamento_o_proceso DROP NOT NULL;
 
 DO $$
+DECLARE
+    tabla_tratamiento CONSTANT regclass := 'gestion_animal.tratamiento'::regclass;
 BEGIN
     IF NOT EXISTS (
         SELECT 1
         FROM pg_constraint
         WHERE conname = 'ck_tratamiento_fechas'
-          AND conrelid = 'gestion_animal.tratamiento'::regclass
+          AND conrelid = tabla_tratamiento
     ) THEN
         ALTER TABLE gestion_animal.tratamiento
             ADD CONSTRAINT ck_tratamiento_fechas
@@ -45,7 +47,7 @@ BEGIN
         SELECT 1
         FROM pg_constraint
         WHERE conname = 'ck_tratamiento_frecuencia_valor'
-          AND conrelid = 'gestion_animal.tratamiento'::regclass
+          AND conrelid = tabla_tratamiento
     ) THEN
         ALTER TABLE gestion_animal.tratamiento
             ADD CONSTRAINT ck_tratamiento_frecuencia_valor
@@ -56,7 +58,7 @@ BEGIN
         SELECT 1
         FROM pg_constraint
         WHERE conname = 'ck_tratamiento_frecuencia_unidad'
-          AND conrelid = 'gestion_animal.tratamiento'::regclass
+          AND conrelid = tabla_tratamiento
     ) THEN
         ALTER TABLE gestion_animal.tratamiento
             ADD CONSTRAINT ck_tratamiento_frecuencia_unidad
@@ -67,7 +69,7 @@ BEGIN
         SELECT 1
         FROM pg_constraint
         WHERE conname = 'ck_tratamiento_frecuencia_completa'
-          AND conrelid = 'gestion_animal.tratamiento'::regclass
+          AND conrelid = tabla_tratamiento
     ) THEN
         ALTER TABLE gestion_animal.tratamiento
             ADD CONSTRAINT ck_tratamiento_frecuencia_completa

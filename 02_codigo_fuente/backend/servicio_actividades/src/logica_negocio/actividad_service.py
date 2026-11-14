@@ -423,7 +423,7 @@ class ActividadService:
             dieta.frecuencia_valor,
             dieta.frecuencia_unidad,
         )
-        # Todo en lote: con la base remota cada ida y vuelta cuesta ~200 ms, así que crear las
+        # Se hace en lote: con la base remota cada ida y vuelta cuesta ~200 ms, así que crear las
         # tomas una por una (unas 5 consultas cada una) superaba el tiempo de espera del gateway.
         def tomas_existentes():
             return {
@@ -464,7 +464,8 @@ class ActividadService:
         ]
 
     @staticmethod
-    def generar_tratamiento(db: Session, id_tratamiento: int, id_usuario: int) -> list:
+    def _tratamiento_para_generar(db: Session, id_tratamiento: int):
+        """Datos del tratamiento y su animal; falla si no existe o no tiene frecuencia y hora."""
         tabla_tratamiento = Base.metadata.tables["gestion_animal.tratamiento"]
         tabla_diagnostico = Base.metadata.tables["gestion_animal.diagnostico"]
         consulta = (
@@ -502,6 +503,70 @@ class ActividadService:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="El tratamiento requiere frecuencia y hora de inicio para generar actividades",
             )
+        return tratamiento
+
+    @staticmethod
+    def _conservar_dosis(
+        db: Session,
+        id_tratamiento: int,
+        horarios_esperados: set,
+        ahora: datetime,
+    ) -> dict:
+        """Quita las dosis futuras pendientes que ya no corresponden y devuelve las que se conservan."""
+        conservadas = {}
+        for actividad in ActividadRepository.obtener_actividades_tratamiento(db, id_tratamiento):
+            detalle = actividad.tratamiento
+            programacion = (detalle.fecha_programada, detalle.hora_programada)
+            instante = datetime.combine(*programacion)
+            sobrante = (
+                not actividad.completada
+                and instante > ahora
+                and programacion not in horarios_esperados
+            )
+            if sobrante:
+                ActividadRepository.eliminar_actividad_tratamiento(db, actividad)
+            else:
+                conservadas[programacion] = actividad
+        return conservadas
+
+    @staticmethod
+    def _crear_dosis(db: Session, tratamiento, id_usuario: int, fecha: date, hora: time):
+        """Crea la dosis; si otra petición la creó a la vez, devuelve la que ya existe."""
+        id_tratamiento = tratamiento["id_tratamiento"]
+        try:
+            return ActividadRepository.crear(
+                db,
+                {
+                    "tipo_actividad": "tratamiento",
+                    "id_animal": tratamiento["id_animal"],
+                    "fecha_programada": fecha,
+                    "hora_programada": hora,
+                    "duracion_horas": 0,
+                    "duracion_minutos": 0,
+                    "id_usuario_programo": id_usuario,
+                    "completada": False,
+                    "observaciones": "Dosis programada de tratamiento",
+                    "id_usuario_completo": None,
+                    "fecha_completada": None,
+                },
+                {
+                    "_modelo": ActividadTratamientoModel,
+                    "id_tratamiento": id_tratamiento,
+                    "fecha_programada": fecha,
+                    "hora_programada": hora,
+                },
+            )
+        except IntegrityError:
+            actividad = ActividadRepository.obtener_actividad_tratamiento(
+                db, id_tratamiento, fecha, hora
+            )
+            if actividad is None:
+                raise
+            return actividad
+
+    @staticmethod
+    def generar_tratamiento(db: Session, id_tratamiento: int, id_usuario: int) -> list:
+        tratamiento = ActividadService._tratamiento_para_generar(db, id_tratamiento)
 
         ahora = ahora_local()
         horarios = (
@@ -516,62 +581,14 @@ class ActividadService:
             if tratamiento["estado"] == "en_curso"
             else []
         )
-        horarios_esperados = set(horarios)
-
-        existentes = ActividadRepository.obtener_actividades_tratamiento(
-            db, id_tratamiento
-        )
         # Las dosis que se conservan se buscan en memoria, sin una consulta por horario
-        conservadas = {}
-        for actividad in existentes:
-            detalle = actividad.tratamiento
-            programacion = (
-                detalle.fecha_programada,
-                detalle.hora_programada,
-            )
-            instante = datetime.combine(*programacion)
-            if (
-                not actividad.completada
-                and instante > ahora
-                and programacion not in horarios_esperados
-            ):
-                ActividadRepository.eliminar_actividad_tratamiento(db, actividad)
-            else:
-                conservadas[programacion] = actividad
+        conservadas = ActividadService._conservar_dosis(db, id_tratamiento, set(horarios), ahora)
 
         resultado = []
         for fecha, hora in horarios:
             actividad = conservadas.get((fecha, hora))
             if actividad is None:
-                try:
-                    actividad = ActividadRepository.crear(
-                        db,
-                        {
-                            "tipo_actividad": "tratamiento",
-                            "id_animal": tratamiento["id_animal"],
-                            "fecha_programada": fecha,
-                            "hora_programada": hora,
-                            "duracion_horas": 0,
-                            "duracion_minutos": 0,
-                            "id_usuario_programo": id_usuario,
-                            "completada": False,
-                            "observaciones": "Dosis programada de tratamiento",
-                            "id_usuario_completo": None,
-                            "fecha_completada": None,
-                        },
-                        {
-                            "_modelo": ActividadTratamientoModel,
-                            "id_tratamiento": id_tratamiento,
-                            "fecha_programada": fecha,
-                            "hora_programada": hora,
-                        },
-                    )
-                except IntegrityError:
-                    actividad = ActividadRepository.obtener_actividad_tratamiento(
-                        db, id_tratamiento, fecha, hora
-                    )
-                    if actividad is None:
-                        raise
+                actividad = ActividadService._crear_dosis(db, tratamiento, id_usuario, fecha, hora)
             resultado.append(actividad)
         return resultado
 

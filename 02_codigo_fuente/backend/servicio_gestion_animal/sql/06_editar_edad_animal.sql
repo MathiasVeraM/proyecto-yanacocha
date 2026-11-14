@@ -5,12 +5,14 @@ ALTER TABLE gestion_animal.animal
     ADD COLUMN IF NOT EXISTS edad_meses SMALLINT;
 
 DO $$
+DECLARE
+    tabla_animal CONSTANT regclass := 'gestion_animal.animal'::regclass;
 BEGIN
     IF NOT EXISTS (
         SELECT 1
         FROM pg_constraint
         WHERE conname = 'ck_animal_edad_anios'
-          AND conrelid = 'gestion_animal.animal'::regclass
+          AND conrelid = tabla_animal
     ) THEN
         ALTER TABLE gestion_animal.animal
             ADD CONSTRAINT ck_animal_edad_anios
@@ -21,7 +23,7 @@ BEGIN
         SELECT 1
         FROM pg_constraint
         WHERE conname = 'ck_animal_edad_meses'
-          AND conrelid = 'gestion_animal.animal'::regclass
+          AND conrelid = tabla_animal
     ) THEN
         ALTER TABLE gestion_animal.animal
             ADD CONSTRAINT ck_animal_edad_meses
@@ -32,7 +34,7 @@ BEGIN
         SELECT 1
         FROM pg_constraint
         WHERE conname = 'ck_animal_edad_completa'
-          AND conrelid = 'gestion_animal.animal'::regclass
+          AND conrelid = tabla_animal
     ) THEN
         ALTER TABLE gestion_animal.animal
             ADD CONSTRAINT ck_animal_edad_completa
