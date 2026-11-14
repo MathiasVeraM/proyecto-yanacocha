@@ -1,6 +1,17 @@
+import unicodedata
+
 from sqlalchemy.orm import Session
 
 from src.repositorios.listas_referencia_repo import ListasReferenciaRepository
+
+
+def _clave_orden(texto: str | None) -> str:
+    """Clave para ordenar por nombre ignorando tildes y mayúsculas ("Álvarez" va antes que "Pérez").
+
+    Con la comparación normal, las letras con tilde quedarían después de la z.
+    """
+    sin_tildes = unicodedata.normalize("NFD", texto or "")
+    return "".join(c for c in sin_tildes if not unicodedata.combining(c)).casefold()
 
 
 class ReferenciasService:
@@ -54,9 +65,9 @@ class ReferenciasService:
         ]
         # Mismo orden que los listados originales: ejemplares por código, recintos por nombre
         animales.sort(key=lambda animal: animal["codigo_animal"])
-        usuarios.sort(key=lambda usuario: (usuario["apellido"].lower(), usuario["nombre"].lower()))
+        usuarios.sort(key=lambda usuario: (_clave_orden(usuario["apellido"]), _clave_orden(usuario["nombre"])))
         return {
             "animales": animales,
-            "recintos": sorted(recintos.values(), key=lambda recinto: recinto["nombre_recinto"]),
+            "recintos": sorted(recintos.values(), key=lambda recinto: _clave_orden(recinto["nombre_recinto"])),
             "usuarios": usuarios,
         }

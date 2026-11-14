@@ -95,12 +95,31 @@ def test_no_expone_correo_ni_rol_ni_datos_de_la_ficha(client, datos):
 
 
 def test_ejemplar_sin_especie_no_aparece_y_el_resto_si(client, db):
-    # La fixture base no tiene especie: su ejemplar no aparece; el recinto y el usuario sí
+    # La fixture base no tiene especie: su ejemplar no aparece; el recinto y el usuario sí.
+    # Se les pone nombre porque en la base real son obligatorios (la fixture solo crea el id)
+    recintos = _tabla("gestion_animal.recinto")
+    usuarios = _tabla("public.usuario")
+    db.execute(recintos.update().where(recintos.c.id_recinto == 201).values(nombre_recinto="Sector A", estado="disponible"))
+    db.execute(usuarios.update().where(usuarios.c.id_usuario == 301).values(nombre="Ana", apellido="Pérez", activo=True))
+    db.commit()
+
     cuerpo = client.get(URL).json()
 
     assert cuerpo["animales"] == []
-    assert len(cuerpo["recintos"]) == 1
-    assert len(cuerpo["usuarios"]) == 1
+    assert [r["nombre_recinto"] for r in cuerpo["recintos"]] == ["Sector A"]
+    assert [u["id_usuario"] for u in cuerpo["usuarios"]] == [301]
+
+
+def test_el_orden_ignora_las_tildes(client, db, datos):
+    # "Álvarez" va antes que "Pérez" y "Área" antes que "Sector", aunque la tilde pese más al comparar
+    recintos = _tabla("gestion_animal.recinto")
+    db.execute(recintos.update().where(recintos.c.id_recinto == 202).values(nombre_recinto="Área de cuarentena"))
+    db.commit()
+
+    cuerpo = client.get(URL).json()
+
+    assert [r["nombre_recinto"] for r in cuerpo["recintos"]] == ["Área de cuarentena", "Sector de osos"]
+    assert [u["apellido"] for u in cuerpo["usuarios"]] == ["Álvarez", "Pérez"]
 
 
 @pytest.mark.parametrize("id_rol", [ID_ROL_ADMIN, ID_ROL_VETERINARIA, ID_ROL_MANEJO_ANIMAL, ID_ROL_VOLUNTARIO])
