@@ -19,6 +19,12 @@ usan un horizonte móvil de siete días.
 El servicio no crea tablas al arrancar. Antes de iniciar la API, ejecute manualmente los scripts `sql/` en orden.
 `03_tratamientos.sql` requiere que exista `gestion_animal.tratamiento`, creado o actualizado por
 `servicio_gestion_animal/sql/07_tratamientos_y_medicamentos.sql`.
+`04_validaciones_actividades.sql` agrega el índice único que impide actividades duplicadas (ya aplicado en
+la base compartida; se puede volver a ejecutar sin problema).
+
+Los límites de fechas y duración (un año hacia adelante, 4 horas por actividad, 30 min por defecto para el
+enriquecimiento, repeticiones de hasta 3 meses y dietas que empiezan hasta 30 días después) se configuran en
+`.env` (ver `.env.example`) y el frontend los consulta en `GET /api/actividades/limites`.
 
 ## Instalar y levantar
 

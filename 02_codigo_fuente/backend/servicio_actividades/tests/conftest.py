@@ -268,3 +268,22 @@ def actividad_limpieza(crear_actividad):
     )
     assert respuesta.status_code == 201
     return respuesta.json()
+
+
+# ---- "Ahora" fijo para las reglas de fechas (reglas_actividad) ----
+# Las pruebas usan fechas fijas de 2026; sin esto, "no programar en el pasado" dependería del día
+# en que se ejecuten. Una prueba puede cambiarlo con: ahora_fijo(datetime(...)).
+AHORA_PRUEBAS = datetime(2026, 1, 2, 8, 0)
+
+
+@pytest.fixture(autouse=True)
+def ahora_fijo(monkeypatch):
+    from src.logica_negocio import reglas_actividad
+
+    estado = {"ahora": AHORA_PRUEBAS}
+    monkeypatch.setattr(reglas_actividad, "ahora", lambda: estado["ahora"])
+
+    def fijar(momento):
+        estado["ahora"] = momento
+
+    return fijar

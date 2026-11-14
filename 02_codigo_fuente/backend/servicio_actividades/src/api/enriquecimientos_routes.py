@@ -1,7 +1,7 @@
 from datetime import date
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from src.database import get_db
@@ -25,12 +25,15 @@ def programar_enriquecimiento(
     actividad_in: EnriquecimientoCreate,
     db: Session = Depends(get_db),
     usuario: dict = Depends(verificar_token_access),
+    # true cuando la persona ya vio el aviso de cruce de horario y eligió "crear igual"
+    permitir_cruce: bool = Query(False),
 ):
     actividad = ActividadService.crear(
         db,
         "enriquecimiento",
         actividad_in.model_dump(),
         usuario["id_usuario"],
+        permitir_cruce,
     )
     return actividad_a_dict(actividad)
 

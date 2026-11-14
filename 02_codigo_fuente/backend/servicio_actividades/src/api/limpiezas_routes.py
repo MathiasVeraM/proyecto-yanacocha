@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from src.database import get_db
@@ -20,11 +20,14 @@ def programar_limpieza(
     actividad_in: LimpiezaCreate,
     db: Session = Depends(get_db),
     usuario: dict = Depends(verificar_token_access),
+    # true cuando la persona ya vio el aviso de cruce de horario y eligió "crear igual"
+    permitir_cruce: bool = Query(False),
 ):
     actividad = ActividadService.crear(
         db,
         "limpieza",
         actividad_in.model_dump(),
         usuario["id_usuario"],
+        permitir_cruce,
     )
     return actividad_a_dict(actividad)

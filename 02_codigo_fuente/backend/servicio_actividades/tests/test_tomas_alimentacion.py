@@ -1,5 +1,7 @@
 """Asume POST /api/actividades/tomas/generar y asociación con actividad_alimentacion."""
 
+from datetime import datetime
+
 import pytest
 
 
@@ -20,7 +22,10 @@ def test_generar_tomas_segun_frecuencia(
     desde,
     hasta,
     cantidad_esperada,
+    ahora_fijo,
 ):
+    # Una dieta puede empezar como máximo 30 días después de "hoy"
+    ahora_fijo(datetime(2026, 2, 20, 8, 0))
     dieta = client.post(
         "/api/actividades/dietas",
         json={
@@ -46,8 +51,9 @@ def test_generar_tomas_segun_frecuencia(
 
 
 def test_generar_tomas_respeta_horizonte_y_fecha_fin(
-    client, animal_prueba
+    client, animal_prueba, ahora_fijo
 ):
+    ahora_fijo(datetime(2026, 3, 20, 8, 0))
     dieta = client.post(
         "/api/actividades/dietas",
         json={

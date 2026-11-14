@@ -1,5 +1,7 @@
 """Asume POST/GET /api/actividades/dietas y GET /api/actividades/animales/{id}/dietas."""
 
+from datetime import datetime
+
 import pytest
 
 
@@ -38,8 +40,10 @@ def test_consultar_historial_y_dieta_vigente(client, dieta_con_alimentos, animal
 
 
 def test_reemplazar_dieta_cierra_la_anterior_en_la_misma_operacion(
-    client, dieta_con_alimentos, animal_prueba
+    client, dieta_con_alimentos, animal_prueba, ahora_fijo
 ):
+    # La dieta nueva empieza el 10/02: "hoy" debe estar a menos de 30 días
+    ahora_fijo(datetime(2026, 2, 1, 8, 0))
     respuesta = client.post(
         "/api/actividades/dietas",
         json=_nueva_dieta(
@@ -163,7 +167,8 @@ def test_historial_ordena_dietas_de_la_mas_reciente_a_la_mas_antigua(
     ]
 
 
-def test_listar_todas_las_dietas_en_una_sola_peticion(client, animal_prueba, dieta_con_alimentos):
+def test_listar_todas_las_dietas_en_una_sola_peticion(client, animal_prueba, dieta_con_alimentos, ahora_fijo):
+    ahora_fijo(datetime(2026, 2, 20, 8, 0))
     # Planificación usa este endpoint en lugar de pedir el historial animal por animal
     nueva = client.post(
         "/api/actividades/dietas",

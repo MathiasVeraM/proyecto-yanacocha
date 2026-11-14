@@ -111,3 +111,47 @@ class EventoCalendario(BaseModel):
     tipo: str
     completada: bool
     todo_el_dia: bool
+
+
+class Repeticion(BaseModel):
+    """Cómo se repite una actividad: todos los días o ciertos días, hasta una fecha o N meses."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    # 0 = lunes … 6 = domingo. Vacío o null = todos los días
+    dias_semana: list[int] | None = None
+    fecha_fin: date | None = None
+    meses: int | None = Field(default=None, ge=1)
+
+
+class ActividadRepetidaCreate(ActividadBaseCreate):
+    repeticion: Repeticion
+
+
+class ActividadUpdate(BaseModel):
+    """Cambios de una actividad pendiente; solo se aplican los campos que se envían."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
+
+    fecha_programada: date | None = None
+    hora_programada: time | None = None
+    duracion_horas: int | None = Field(default=None, ge=0, le=32767)
+    duracion_minutos: int | None = Field(default=None, ge=0, le=59)
+    observaciones: str | None = None
+    tipo_enriquecimiento: str | None = None
+    descripcion_estimulo: str | None = None
+    objetivo_entrenamiento: str | None = None
+    tipo_refuerzo: str | None = Field(default=None, max_length=150)
+
+
+class LimitesActividades(BaseModel):
+    """Límites que el frontend usa como min y max de los campos (se definen en config.py)."""
+
+    hoy: date
+    hora_actual: time
+    fecha_min: date
+    fecha_max: date
+    duracion_max_minutos: int
+    duracion_enriquecimiento_minutos: int
+    repeticion_meses_max: int
+    dieta_inicio_fecha_max: date

@@ -76,6 +76,21 @@ class DietaRepository:
         return dieta
 
     @staticmethod
+    def cambiar_fin(db: Session, dieta: DietaModel, fecha_fin: date | None, vigente: bool) -> DietaModel:
+        """Guarda la fecha de fin y quita las tomas pendientes posteriores a ella."""
+        try:
+            dieta.fecha_fin = fecha_fin
+            dieta.vigente = vigente
+            if fecha_fin is not None:
+                DietaRepository.cancelar_tomas_pendientes(db, dieta.id_dieta, fecha_fin + date.resolution)
+            db.commit()
+            db.refresh(dieta)
+        except SQLAlchemyError:
+            db.rollback()
+            raise
+        return dieta
+
+    @staticmethod
     def cancelar_tomas_pendientes(db: Session, id_dieta: int, desde: date) -> None:
         actividades = (
             db.query(ActividadModel)

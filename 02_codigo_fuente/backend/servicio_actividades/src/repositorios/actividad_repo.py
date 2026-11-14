@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from src.modelos.actividad_model import ActividadModel
 from src.modelos.actividad_alimentacion_model import ActividadAlimentacionModel
 from src.modelos.actividad_tratamiento_model import ActividadTratamientoModel
+from src.modelos.observacion_actividad_model import ObservacionActividadModel
 
 
 class ActividadRepository:
@@ -86,6 +87,73 @@ class ActividadRepository:
             )
             .first()
         )
+
+    @staticmethod
+    def crear_varias(db: Session, filas: list[tuple[dict, dict | None]]) -> list[ActividadModel]:
+        """Crea varias actividades (con su detalle) con un solo guardado. filas: (datos, detalle)."""
+        actividades = []
+        try:
+            for datos, detalle in filas:
+                actividad = ActividadModel(**datos)
+                if detalle is not None:
+                    modelo = detalle.pop("_modelo")
+                    relacion = {
+                        "ActividadAlimentacionModel": "alimentacion",
+                        "ActividadEnriquecimientoModel": "enriquecimiento",
+                        "ActividadEntrenamientoModel": "entrenamiento",
+                    }[modelo.__name__]
+                    setattr(actividad, relacion, modelo(**detalle))
+                actividades.append(actividad)
+            db.add_all(actividades)
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise
+        # Se vuelven a leer en una sola consulta (con su id y su detalle)
+        ids = [actividad.id_actividad for actividad in actividades]
+        return (
+            db.query(ActividadModel)
+            .filter(ActividadModel.id_actividad.in_(ids))
+            .order_by(ActividadModel.fecha_programada, ActividadModel.hora_programada)
+            .all()
+        )
+
+    @staticmethod
+    def actualizar(
+        db: Session,
+        actividad: ActividadModel,
+        campos: dict,
+        campos_detalle: dict,
+    ) -> ActividadModel:
+        try:
+            for campo, valor in campos.items():
+                setattr(actividad, campo, valor)
+            detalle = actividad.alimentacion or actividad.enriquecimiento or actividad.entrenamiento
+            if detalle is not None:
+                for campo, valor in campos_detalle.items():
+                    setattr(detalle, campo, valor)
+            db.commit()
+            db.refresh(actividad)
+        except SQLAlchemyError:
+            db.rollback()
+            raise
+        return actividad
+
+    @staticmethod
+    def eliminar(db: Session, actividad: ActividadModel) -> None:
+        """Borra la actividad, su detalle y sus observaciones."""
+        try:
+            db.query(ObservacionActividadModel).filter(
+                ObservacionActividadModel.id_actividad == actividad.id_actividad
+            ).delete(synchronize_session=False)
+            for detalle in (actividad.alimentacion, actividad.enriquecimiento, actividad.entrenamiento):
+                if detalle is not None:
+                    db.delete(detalle)
+            db.delete(actividad)
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise
 
     @staticmethod
     def crear_tomas(

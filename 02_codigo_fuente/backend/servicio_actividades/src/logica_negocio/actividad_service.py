@@ -14,7 +14,8 @@ from src.modelos.actividad_enriquecimiento_model import ActividadEnriquecimiento
 from src.modelos.actividad_entrenamiento_model import ActividadEntrenamientoModel
 from src.modelos.actividad_tratamiento_model import ActividadTratamientoModel
 from src.modelos.fechas import ahora_local, hoy_local
-from src.repositorios.actividad_repo import ActividadRepository
+from src.logica_negocio import reglas_actividad as reglas
+from src.repositorios.actividad_repo import ActividadRepository, actividad_a_dict
 from src.repositorios.dieta_repo import DietaRepository
 from src.repositorios.referencias_repo import ReferenciasRepository
 
@@ -121,49 +122,189 @@ class ActividadService:
                 )
 
     @staticmethod
-    def crear(
-        db: Session,
-        tipo: str,
-        datos: dict,
-        id_usuario: int,
-    ):
-        ActividadService._validar_datos(tipo, datos)
-        ActividadService._verificar_referencias(db, tipo, datos)
-        detalle = None
+    def _separar_detalle(tipo: str, datos: dict) -> dict | None:
+        """Saca de datos los campos de la tabla de detalle según el tipo (modifica datos)."""
         if tipo == "alimentacion":
-            detalle = {"_modelo": ActividadAlimentacionModel, "id_dieta": datos.pop("id_dieta")}
-        elif tipo == "enriquecimiento":
-            detalle = {
+            return {"_modelo": ActividadAlimentacionModel, "id_dieta": datos.pop("id_dieta")}
+        if tipo == "enriquecimiento":
+            return {
                 "_modelo": ActividadEnriquecimientoModel,
                 "tipo_enriquecimiento": datos.pop("tipo_enriquecimiento"),
                 "descripcion_estimulo": datos.pop("descripcion_estimulo"),
             }
-        elif tipo == "entrenamiento":
-            detalle = {
+        if tipo == "entrenamiento":
+            return {
                 "_modelo": ActividadEntrenamientoModel,
                 "objetivo_entrenamiento": datos.pop("objetivo_entrenamiento"),
                 "tipo_refuerzo": datos.pop("tipo_refuerzo"),
             }
+        return None
 
+    @staticmethod
+    def _completar_datos_comunes(tipo: str, datos: dict, id_usuario: int) -> None:
         datos["tipo_actividad"] = tipo
         datos["id_usuario_programo"] = id_usuario
         datos["completada"] = False
         datos["id_usuario_completo"] = None
         datos["fecha_completada"] = None
-        return ActividadRepository.crear(db, datos, detalle)
+
+    @staticmethod
+    def _error_duplicado_por_indice(tipo: str) -> HTTPException:
+        # Dos personas crearon la misma actividad a la vez: lo frena el índice único de la base
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=reglas.mensaje_duplicado(tipo))
+
+    @staticmethod
+    def crear(
+        db: Session,
+        tipo: str,
+        datos: dict,
+        id_usuario: int,
+        permitir_cruce: bool = False,
+    ):
+        ActividadService._validar_datos(tipo, datos)
+        reglas.validar_fecha(datos["fecha_programada"], datos.get("hora_programada"))
+        reglas.validar_duracion(tipo, datos)
+        ActividadService._verificar_referencias(db, tipo, datos)
+        relacionadas = reglas.actividades_relacionadas(
+            db, datos, datos["fecha_programada"], datos["fecha_programada"]
+        )
+        reglas.verificar_duplicado(db, tipo, datos, relacionadas=relacionadas)
+        if not permitir_cruce:
+            cruces = reglas.buscar_cruces(db, datos, relacionadas=relacionadas)
+            if cruces:
+                raise reglas.error_cruce(cruces)
+        detalle = ActividadService._separar_detalle(tipo, datos)
+        ActividadService._completar_datos_comunes(tipo, datos, id_usuario)
+        try:
+            return ActividadRepository.crear(db, datos, detalle)
+        except IntegrityError as error:
+            raise ActividadService._error_duplicado_por_indice(tipo) from error
+
+    @staticmethod
+    def crear_repetida(
+        db: Session,
+        tipo: str,
+        datos: dict,
+        repeticion: dict,
+        id_usuario: int,
+        permitir_cruce: bool = False,
+    ) -> list:
+        """Crea la misma actividad en varias fechas (todos los días o ciertos días) en un solo guardado."""
+        fechas = reglas.fechas_de_repeticion(
+            datos["fecha_programada"],
+            repeticion.get("dias_semana"),
+            repeticion.get("fecha_fin"),
+            repeticion.get("meses"),
+        )
+        ActividadService._validar_datos(tipo, datos)
+        reglas.validar_duracion(tipo, datos)
+        ActividadService._verificar_referencias(db, tipo, datos)
+        # Una sola consulta para revisar duplicados y cruces de todas las fechas
+        relacionadas = reglas.actividades_relacionadas(db, datos, fechas[0], fechas[-1])
+        filas, duplicadas, cruces = [], [], []
+        for fecha in fechas:
+            datos_fecha = {**datos, "fecha_programada": fecha}
+            reglas.validar_fecha(fecha, datos_fecha.get("hora_programada"))
+            if any(reglas.es_duplicado(o, tipo, datos_fecha) for o in relacionadas):
+                duplicadas.append(fecha)
+                continue
+            if not permitir_cruce:
+                cruces.extend(reglas.buscar_cruces(db, datos_fecha, relacionadas=relacionadas))
+            filas.append(datos_fecha)
+        if duplicadas:
+            ejemplos = ", ".join(f.strftime("%d/%m") for f in duplicadas[:5])
+            mas = f" y {len(duplicadas) - 5} más" if len(duplicadas) > 5 else ""
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Ya existen actividades iguales el {ejemplos}{mas}",
+            )
+        if cruces:
+            raise reglas.error_cruce(cruces)
+        preparadas = []
+        for datos_fecha in filas:
+            detalle = ActividadService._separar_detalle(tipo, datos_fecha)
+            ActividadService._completar_datos_comunes(tipo, datos_fecha, id_usuario)
+            preparadas.append((datos_fecha, detalle))
+        try:
+            return ActividadRepository.crear_varias(db, preparadas)
+        except IntegrityError as error:
+            raise ActividadService._error_duplicado_por_indice(tipo) from error
 
     @staticmethod
     def crear_desde_esquema(
         db: Session,
         datos: ActividadBaseCreate,
         id_usuario: int,
+        permitir_cruce: bool = False,
     ):
         return ActividadService.crear(
             db,
             datos.tipo_actividad,
             datos.model_dump(exclude={"tipo_actividad"}, exclude_none=True),
             id_usuario,
+            permitir_cruce,
         )
+
+    @staticmethod
+    def _editable(actividad) -> None:
+        if actividad.tipo_actividad == "tratamiento":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Las dosis de un tratamiento se cambian desde el tratamiento",
+            )
+        if actividad.completada:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="La actividad ya está completada; márcala como pendiente para cambiarla",
+            )
+
+    @staticmethod
+    def actualizar(db: Session, id_actividad: int, cambios: dict, permitir_cruce: bool = False):
+        actividad = ActividadService.actividad_o_404(db, id_actividad)
+        ActividadService._editable(actividad)
+        tipo = actividad.tipo_actividad
+        actual = actividad_a_dict(actividad)
+        campos = (
+            "id_animal", "id_recinto", "fecha_programada", "hora_programada", "duracion_horas",
+            "duracion_minutos", "observaciones", "id_dieta", "tipo_enriquecimiento",
+            "descripcion_estimulo", "objetivo_entrenamiento", "tipo_refuerzo",
+        )
+        datos = {campo: actual[campo] for campo in campos}
+        datos.update(cambios)
+        ActividadService._validar_datos(tipo, datos)
+        if (
+            datos["fecha_programada"] != actividad.fecha_programada
+            or datos["hora_programada"] != actividad.hora_programada
+        ):
+            reglas.validar_fecha(datos["fecha_programada"], datos["hora_programada"])
+        reglas.validar_duracion(tipo, datos)
+        relacionadas = reglas.actividades_relacionadas(
+            db, datos, datos["fecha_programada"], datos["fecha_programada"]
+        )
+        reglas.verificar_duplicado(db, tipo, datos, excluir_id=id_actividad, relacionadas=relacionadas)
+        if not permitir_cruce:
+            cruces = reglas.buscar_cruces(db, datos, excluir_id=id_actividad, relacionadas=relacionadas)
+            if cruces:
+                raise reglas.error_cruce(cruces)
+        detalle = ActividadService._separar_detalle(tipo, datos)
+        if detalle is not None:
+            detalle.pop("_modelo")
+        en_actividad = {
+            campo: datos[campo]
+            for campo in (
+                "fecha_programada", "hora_programada", "duracion_horas", "duracion_minutos", "observaciones",
+            )
+        }
+        try:
+            return ActividadRepository.actualizar(db, actividad, en_actividad, detalle or {})
+        except IntegrityError as error:
+            raise ActividadService._error_duplicado_por_indice(tipo) from error
+
+    @staticmethod
+    def eliminar(db: Session, id_actividad: int) -> None:
+        actividad = ActividadService.actividad_o_404(db, id_actividad)
+        ActividadService._editable(actividad)
+        ActividadRepository.eliminar(db, actividad)
 
     @staticmethod
     def actividad_o_404(db: Session, id_actividad: int):
@@ -225,6 +366,11 @@ class ActividadService:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="La actividad ya está completada",
+            )
+        if actividad.fecha_programada > reglas.ahora().date():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Solo se pueden completar actividades de hoy o de días anteriores",
             )
         return ActividadRepository.completar(
             db,
