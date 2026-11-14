@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import DietaFormPanel from '@/components/DietaFormPanel.vue'
 import DietasPlanificacion from '@/components/DietasPlanificacion.vue'
 import CalendarioActividades, { type VistaCalendario } from '@/components/planificacion/CalendarioActividades.vue'
@@ -35,6 +35,7 @@ type Panel =
   | { modo: 'detalle'; id: number; volver: { clave: string; titulo: string; ids: number[] } | null }
   | { modo: 'lista'; clave: string; titulo: string; ids: number[] }
   | { modo: 'crear'; fecha: string; hora: string }
+  | { modo: 'editar'; id: number }
 
 const auth = useAuthStore()
 const { hoy, hora: ahora } = useAhora()
@@ -160,19 +161,47 @@ const conteo = computed(() => {
   return c
 })
 
+const tiposVisibles = computed(() => TIPOS_ACTIVIDAD.filter((t) => tipos[t]).length)
+
+// El menú de tipos se cierra al hacer clic fuera de él o con Escape
+const menuTipos = ref<HTMLDetailsElement | null>(null)
+function cerrarMenuTipos(evento?: MouseEvent) {
+  const menu = menuTipos.value
+  if (menu?.open && (!evento || !menu.contains(evento.target as Node))) menu.open = false
+}
+onMounted(() => document.addEventListener('click', cerrarMenuTipos))
+onBeforeUnmount(() => document.removeEventListener('click', cerrarMenuTipos))
+
 const tituloMes = computed(() => {
   const texto = `${nombreMes(ancla.value)} ${deIso(ancla.value).getFullYear()}`
   return texto.charAt(0).toUpperCase() + texto.slice(1)
 })
+// Corto, para que la cabecera quepa en una fila: el mes ya está en el título
 const subtitulo = computed(() => {
-  if (vista.value === 'dia') return diaLargo(ancla.value)
+  if (vista.value === 'dia') {
+    const dia = deIso(ancla.value)
+    const nombre = dia.toLocaleDateString('es-EC', { weekday: 'long' })
+    return `${nombre.charAt(0).toUpperCase()}${nombre.slice(1)} ${dia.getDate()}`
+  }
   if (vista.value === 'mes') return ''
   const a = deIso(rango.value.desde)
   const b = deIso(rango.value.hasta)
   return a.getMonth() === b.getMonth()
-    ? `Semana del ${a.getDate()} al ${b.getDate()} de ${nombreMes(rango.value.hasta)}`
-    : `Semana del ${a.getDate()} de ${nombreMes(rango.value.desde)} al ${b.getDate()} de ${nombreMes(rango.value.hasta)}`
+    ? `Semana del ${a.getDate()} al ${b.getDate()}`
+    : `Semana del ${a.getDate()} ${nombreMes(rango.value.desde).slice(0, 3)} al ${b.getDate()} ${nombreMes(rango.value.hasta).slice(0, 3)}`
 })
+
+// Toda la información de fechas va en la cabecera del calendario: el rango que se ve y hoy con la hora
+const textoHoy = computed(() => {
+  const fecha = deIso(hoy.value)
+  return `Hoy ${fecha.toLocaleDateString('es-EC', { weekday: 'long' })} ${fecha.getDate()} · ${ahora.value}`
+})
+const lineaFechas = computed(() =>
+  // En la vista de día de hoy, el día ya está en "Hoy …": no se repite
+  vista.value === 'dia' && ancla.value === hoy.value
+    ? textoHoy.value
+    : [subtitulo.value, textoHoy.value].filter(Boolean).join(' · '),
+)
 
 const porId = (id: number) => actividades.value.find((a) => a.id_actividad === id) ?? null
 const actividadPanel = computed(() => (panel.value?.modo === 'detalle' ? porId(panel.value.id) : null))
@@ -311,6 +340,10 @@ function reemplazar(actualizada: Actividad) {
 
 async function completar(actividad: Actividad) {
   if (actividad.completada || actualizandoId.value !== null) return
+  if (actividad.fecha_programada > hoy.value) {
+    avisar('Solo se pueden completar actividades de hoy o de días anteriores')
+    return
+  }
   const original = { ...actividad }
   actualizandoId.value = actividad.id_actividad
   errorActividades.value = ''
@@ -366,15 +399,49 @@ function cerrarPanel() {
   borrador.value = null
 }
 
-async function actividadCreada(actividad: Actividad) {
+async function actividadCreada(actividad: Actividad, cantidad = 1) {
   borrador.value = null
+  // Lleva al día y a la hora de la actividad creada: el mes no tiene horas, así que se pasa a la semana
+  if (vista.value === 'mes') vista.value = 'semana'
   ancla.value = actividad.fecha_programada
   estado.value = 'todas'
   actividadEnfoque.value = actividad.id_actividad
   tipos[actividad.tipo_actividad] = true
   await cargarActividades()
   abrirDetalle(porId(actividad.id_actividad) ?? actividad)
-  avisar(`${TIPO_LABEL[actividad.tipo_actividad]} creada para el ${diaLargo(actividad.fecha_programada).toLowerCase()}`)
+  avisar(
+    cantidad > 1
+      ? `${cantidad} actividades de ${TIPO_LABEL[actividad.tipo_actividad].toLowerCase()} creadas desde el ${diaLargo(actividad.fecha_programada).toLowerCase()}`
+      : `${TIPO_LABEL[actividad.tipo_actividad]} creada para el ${diaLargo(actividad.fecha_programada).toLowerCase()}`,
+  )
+}
+
+// Al guardar cambios se va al día y la hora nuevos de la actividad, como al crearla
+async function actividadEditada(actividad: Actividad) {
+  borrador.value = null
+  if (vista.value === 'mes') vista.value = 'semana'
+  ancla.value = actividad.fecha_programada
+  actividadEnfoque.value = actividad.id_actividad
+  await cargarActividades()
+  abrirDetalle(porId(actividad.id_actividad) ?? actividad)
+  avisar('Cambios guardados')
+}
+
+async function eliminarActividad(actividad: Actividad) {
+  const titulo = d.value.titulo(actividad)
+  if (!window.confirm(`¿Eliminar "${titulo}" del ${diaLargo(actividad.fecha_programada).toLowerCase()}? También se borran sus observaciones. No se puede deshacer.`)) return
+  actualizandoId.value = actividad.id_actividad
+  try {
+    await actividadesApi.eliminar(actividad.id_actividad)
+    actividades.value = actividades.value.filter((a) => a.id_actividad !== actividad.id_actividad)
+    guardarRangoEnCache()
+    cerrarPanel()
+    avisar(`${titulo} eliminada`)
+  } catch (error) {
+    errorActividades.value = mensajeError(error, 'No se pudo eliminar la actividad.')
+  } finally {
+    actualizandoId.value = null
+  }
 }
 
 function observar(actividad: Actividad) {
@@ -422,6 +489,28 @@ function mover(paso: number) {
 function verDia(fecha: string) {
   ancla.value = fecha
   vista.value = 'dia'
+}
+
+async function finalizarDieta(dieta: Dieta) {
+  try {
+    await actividadesApi.finalizarDieta(dieta.id_dieta)
+    avisar('Dieta finalizada')
+  } catch (error) {
+    errorDietas.value = mensajeError(error, 'No se pudo finalizar la dieta.')
+  }
+  await cargarDietas()
+  void cargarActividades({ fresco: true, silencioso: true })
+}
+
+async function cambiarFinDieta(dieta: Dieta, fechaFin: string | null) {
+  try {
+    await actividadesApi.cambiarFinDieta(dieta.id_dieta, fechaFin)
+    avisar(fechaFin ? 'Fecha de fin guardada' : 'La dieta ya no tiene fecha de fin')
+  } catch (error) {
+    errorDietas.value = mensajeError(error, 'No se pudo cambiar la fecha de fin.')
+  }
+  await cargarDietas()
+  void cargarActividades({ fresco: true, silencioso: true })
 }
 
 async function guardarDieta(dieta: Dieta, extras: { unidades: ('g' | 'kg' | 'unidad')[]; restriccion: boolean }) {
@@ -476,75 +565,73 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="planning-page">
+  <main class="planning-page" :class="{ 'pagina-calendario': pestana === 'actividades' }">
     <p v-if="errorReferencias" class="alert-error" role="alert">{{ errorReferencias }}</p>
 
     <section v-if="pestana === 'actividades'" role="tabpanel" class="actividades">
       <p v-if="errorActividades" class="alert-error" role="alert">{{ errorActividades }}</p>
 
-      <nav class="planning-tabs" role="tablist" aria-label="Secciones de planificación">
-        <button
-          v-for="tab in pestañas"
-          :key="tab.id"
-          class="planning-tab"
-          :class="{ active: pestana === tab.id }"
-          type="button"
-          role="tab"
-          :aria-selected="pestana === tab.id"
-          @click="cambiarPestana(tab.id)"
-        >
-          {{ tab.texto }}
-        </button>
-      </nav>
-
       <div class="actividades-layout">
-        <IndicadoresDia
-          class="indicadores-compactos"
-          :fecha="ancla"
-          :actividades="delDia"
-          :ctx="ctx"
-          :hoy="hoy"
-          :ahora="ahora"
-          :obs-por-actividad="obsPorActividad"
-          :actualizando-id="actualizandoId"
-          @completar="completar"
-          @observar="observar"
-          @abrir="(a) => abrirDetalle(a)"
-        />
+        <!-- Columna izquierda: pestañas arriba y el resumen de hoy debajo; así el calendario
+             empieza a la misma altura que las pestañas -->
+        <div class="columna-izquierda">
+          <nav class="planning-tabs" role="tablist" aria-label="Secciones de planificación">
+            <button
+              v-for="tab in pestañas"
+              :key="tab.id"
+              class="planning-tab"
+              :class="{ active: pestana === tab.id }"
+              type="button"
+              role="tab"
+              :aria-selected="pestana === tab.id"
+              @click="cambiarPestana(tab.id)"
+            >
+              {{ tab.texto }}
+            </button>
+          </nav>
+
+          <IndicadoresDia
+            class="indicadores-compactos"
+            :fecha="ancla"
+            :actividades="delDia"
+            :ctx="ctx"
+            :hoy="hoy"
+            :ahora="ahora"
+            :obs-por-actividad="obsPorActividad"
+            :actualizando-id="actualizandoId"
+            @completar="completar"
+            @observar="observar"
+            @abrir="(a) => abrirDetalle(a)"
+          />
+        </div>
 
         <section class="cal" aria-label="Calendario de actividades">
         <header class="cal-top">
           <div class="cal-tit">
             <h2>{{ tituloMes }}</h2>
-            <span v-if="subtitulo">{{ subtitulo }}</span>
+            <span>{{ lineaFechas }}</span>
           </div>
+          <!-- Todo en una sola fila: tipos (también filtran), filtros y navegación -->
+          <!-- El espacio libre va después del título: filtros y navegación quedan juntos a la derecha -->
           <span class="grow" />
-          <span v-if="cargandoActividades" class="cargando" role="status">Cargando…</span>
-          <button class="pill" type="button" @click="ancla = hoy">Hoy</button>
-          <div class="nav">
-            <button type="button" aria-label="Anterior" @click="mover(-1)">‹</button>
-            <button type="button" aria-label="Siguiente" @click="mover(1)">›</button>
-          </div>
-          <div class="seg" role="group" aria-label="Vista del calendario">
-            <button v-for="v in VISTAS" :key="v.id" type="button" :class="{ on: vista === v.id }" @click="vista = v.id">{{ v.texto }}</button>
-          </div>
-          <button class="btn btn-primary crear" type="button" @click="abrirCrear(ancla, '')">+ Crear actividad</button>
-        </header>
-
-        <div class="leyenda">
-          <div class="leyenda-tipos" aria-label="Filtrar por tipo de actividad">
-            <button
-              v-for="t in TIPOS_ACTIVIDAD"
-              :key="t"
-              type="button"
-              class="ley"
-              :class="[`t-${t}`, { off: !tipos[t] }]"
-              :aria-pressed="tipos[t]"
-              @click="tipos[t] = !tipos[t]"
-            >
-              <span class="dot" />{{ TIPO_LABEL[t] }} <span class="cnt">{{ conteo[t] }}</span>
-            </button>
-          </div>
+          <!-- Tipos de actividad: lista con casillas para mostrar u ocultar cada tipo -->
+          <details ref="menuTipos" class="tipos-menu" @keydown.esc="cerrarMenuTipos()">
+            <summary class="tipos-boton" aria-label="Filtrar por tipo de actividad">
+              <span class="tipos-puntos" aria-hidden="true">
+                <span v-for="t in TIPOS_ACTIVIDAD" :key="t" class="dot" :class="[`t-${t}`, { off: !tipos[t] }]" />
+              </span>
+              Tipos
+              <span class="cnt">{{ tiposVisibles }}/{{ TIPOS_ACTIVIDAD.length }}</span>
+            </summary>
+            <div class="tipos-lista" role="group" aria-label="Tipos de actividad visibles">
+              <label v-for="t in TIPOS_ACTIVIDAD" :key="t" class="tipo-opcion" :class="`t-${t}`">
+                <input v-model="tipos[t]" type="checkbox" />
+                <span class="dot" />
+                <span class="tipo-nombre">{{ TIPO_LABEL[t] }}</span>
+                <span class="cnt">{{ conteo[t] }}</span>
+              </label>
+            </div>
+          </details>
           <div class="filtros-calendario">
             <select v-model.number="idAnimal" aria-label="Filtrar por ejemplar">
               <option :value="0">Todos los ejemplares</option>
@@ -558,7 +645,17 @@ onMounted(() => {
               <option value="hechas">Hechas</option>
             </select>
           </div>
-        </div>
+          <span v-if="cargandoActividades" class="cargando" role="status">Cargando…</span>
+          <button class="pill" type="button" @click="ancla = hoy">Hoy</button>
+          <div class="nav">
+            <button type="button" aria-label="Anterior" @click="mover(-1)">‹</button>
+            <button type="button" aria-label="Siguiente" @click="mover(1)">›</button>
+          </div>
+          <div class="seg" role="group" aria-label="Vista del calendario">
+            <button v-for="v in VISTAS" :key="v.id" type="button" :class="{ on: vista === v.id }" @click="vista = v.id">{{ v.texto }}</button>
+          </div>
+          <button class="btn btn-primary crear" type="button" aria-label="Crear actividad" title="Crear actividad" @click="abrirCrear(ancla, '')">+ Crear</button>
+        </header>
 
         <div class="cal-cuerpo" :class="{ 'con-panel': panel }">
           <CalendarioActividades
@@ -572,7 +669,7 @@ onMounted(() => {
             :seleccion="seleccion"
             :enfoque="actividadEnfoque"
             :actualizando-id="actualizandoId"
-            :fantasma="panel?.modo === 'crear' ? borrador : null"
+            :fantasma="panel?.modo === 'crear' || panel?.modo === 'editar' ? borrador : null"
             @abrir="(a) => abrirDetalle(a)"
             @lista="abrirLista"
             @crear="abrirCrear"
@@ -583,14 +680,16 @@ onMounted(() => {
           />
 
           <PanelCrearActividad
-            v-if="panel?.modo === 'crear'"
+            v-if="panel?.modo === 'crear' || panel?.modo === 'editar'"
             :animales="animales"
             :recintos="recintos"
-            :fecha="panel.fecha"
-            :hora="panel.hora"
+            :fecha="panel.modo === 'crear' ? panel.fecha : ''"
+            :hora="panel.modo === 'crear' ? panel.hora : ''"
             :id-animal="idAnimal || undefined"
+            :actividad="panel.modo === 'editar' ? porId(panel.id) : null"
             @close="cerrarPanel"
             @creada="actividadCreada"
+            @editada="actividadEditada"
             @borrador="(b) => (borrador = b)"
           />
           <PanelActividad
@@ -613,6 +712,8 @@ onMounted(() => {
             @completar="completar"
             @reabrir="reabrir"
             @observar="observar"
+            @editar="(a) => (panel = { modo: 'editar', id: a.id_actividad })"
+            @eliminar="eliminarActividad"
           />
         </div>
         </section>
@@ -650,6 +751,8 @@ onMounted(() => {
         :cargando="cargandoDietas"
         :error="errorDietas"
         @registrar="formularioDietaAbierto = true"
+        @finalizar="finalizarDieta"
+        @cambiar-fin="cambiarFinDieta"
       />
     </section>
 
@@ -717,8 +820,8 @@ onMounted(() => {
   max-width: 100%;
   gap: 4px;
   overflow-x: auto;
-  padding: 4px;
-  margin-bottom: 14px;
+  padding: 3px;
+  margin-bottom: 10px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -727,9 +830,28 @@ onMounted(() => {
 
 .actividades-layout {
   display: grid;
-  grid-template-columns: minmax(210px, 250px) minmax(0, 1fr);
+  grid-template-columns: minmax(200px, 236px) minmax(0, 1fr);
   align-items: start;
-  gap: 14px;
+  gap: 8px;
+}
+
+.columna-izquierda {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Dentro de la columna, las pestañas ocupan todo el ancho */
+.columna-izquierda .planning-tabs {
+  display: flex;
+}
+
+.columna-izquierda .planning-tab {
+  /* Cada pestaña según su texto, sin partirse en dos líneas */
+  flex: 1 1 auto;
+  white-space: nowrap;
+  padding-right: 8px;
+  padding-left: 8px;
 }
 
 .indicadores-compactos {
@@ -743,8 +865,10 @@ onMounted(() => {
 }
 
 .indicadores-compactos :deep(.ind-h) {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
   margin-bottom: 1px;
 }
 
@@ -766,11 +890,11 @@ onMounted(() => {
 .indicadores-compactos :deep(.ind) {
   box-sizing: border-box;
   grid-template-columns: 32px minmax(0, 1fr) 36px;
-  gap: 9px;
+  gap: 7px;
   min-height: 58px;
   min-width: 0;
   width: 100%;
-  padding: 8px 10px;
+  padding: 7px 8px;
   border-radius: var(--radius-md);
 }
 
@@ -912,31 +1036,47 @@ onMounted(() => {
 .cal {
   overflow: hidden;
   border: 1px solid var(--color-border);
-  border-radius: 20px;
+  border-radius: 16px;
   background: #fffefb;
 }
 
+/* Una sola fila siempre: si falta espacio, se angostan los selectores y se recorta el subtítulo
+   (en pantallas angostas sí pasa a varias líneas, ver media query) */
 .cal-top {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 10px;
-  padding: 16px 20px 12px;
+  gap: 8px;
+  padding: 10px 16px 8px;
+}
+
+.cal-top > * {
+  flex-shrink: 0;
+}
+
+.cal-tit {
+  flex-shrink: 1 !important;
+  min-width: 120px;
 }
 
 .cal-tit h2 {
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 
 .cal-tit span {
-  font-size: 13px;
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--color-text-muted);
 }
 
 .grow {
   flex: 1;
+  min-width: 0;
 }
 
 .cargando {
@@ -945,8 +1085,8 @@ onMounted(() => {
 }
 
 .pill {
-  height: 34px;
-  padding: 0 16px;
+  height: 32px;
+  padding: 0 12px;
   border: 1px solid var(--color-border-strong);
   border-radius: 999px;
   background: var(--color-surface);
@@ -964,8 +1104,8 @@ onMounted(() => {
 }
 
 .nav button {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border: 1px solid var(--color-border-strong);
   border-radius: 50%;
   background: var(--color-surface);
@@ -988,7 +1128,7 @@ onMounted(() => {
 }
 
 .seg button {
-  padding: 6px 14px;
+  padding: 5px 10px;
   border: none;
   border-radius: 999px;
   background: none;
@@ -1007,78 +1147,110 @@ onMounted(() => {
   border-radius: 999px;
 }
 
-/* Tipos de actividad a la izquierda y filtros a la derecha, en la misma fila
-   (si no caben, los filtros bajan a la siguiente línea) */
-.leyenda {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px 16px;
-  margin: 0 20px 14px;
-  padding: 6px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
+/* ---- Menú "Tipos": lista con casillas, con el mismo aspecto que los selectores ---- */
+.tipos-menu {
+  position: relative;
 }
 
-.leyenda-tipos {
+.tipos-boton {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  font-size: 13px;
+  list-style: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tipos-boton::-webkit-details-marker {
+  display: none;
+}
+
+.tipos-boton::after {
+  content: '⌄';
+  margin-top: -5px;
+  color: var(--color-text-muted);
+}
+
+.tipos-puntos {
+  display: inline-flex;
   gap: 3px;
 }
 
-.filtros-calendario {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.ley {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 9px;
-  border: none;
-  border-radius: 999px;
-  background: none;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.ley:hover {
-  background: var(--color-surface-alt);
-}
-
-.ley .dot {
+.tipos-menu .dot {
   width: 9px;
   height: 9px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: var(--c);
 }
 
-.ley .cnt {
-  font-size: 11.5px;
-  color: var(--color-text-subtle);
-  font-variant-numeric: tabular-nums;
-}
-
-.ley.off {
-  color: var(--color-text-subtle);
-  text-decoration: line-through;
-}
-
-.ley.off .dot {
+.tipos-menu .dot.off {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px var(--c);
 }
 
-.leyenda select {
+.tipos-menu .cnt {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tipos-lista {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  display: grid;
+  gap: 2px;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.tipo-opcion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tipo-opcion:hover {
+  background: var(--color-surface-alt);
+}
+
+.tipo-opcion input {
+  accent-color: var(--color-primary);
+}
+
+.tipo-nombre {
+  flex: 1;
+}
+
+.filtros-calendario {
+  display: flex;
+  flex-shrink: 1 !important;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filtros-calendario select {
+  flex: 1 1 165px;
   height: 30px;
-  min-width: 180px;
+  min-width: 96px;
+  max-width: 170px;
+  text-overflow: ellipsis;
   padding: 0 10px;
   border: none;
   border-radius: var(--radius-sm);
@@ -1099,6 +1271,77 @@ onMounted(() => {
 
 .cal-cuerpo > :deep(.panel) {
   max-height: calc(66vh + 50px);
+}
+
+/* ---- Pestaña Actividades: la página ocupa exactamente el alto de la ventana ----
+   No hay scroll fuera del calendario: la columna "Hoy" y el calendario se desplazan por dentro.
+   En pantallas angostas (una sola columna) la página vuelve a desplazarse normalmente. */
+@media (min-width: 1051px) {
+  .planning-page.pagina-calendario {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .pagina-calendario > .alert-error {
+    flex-shrink: 0;
+  }
+
+  .pagina-calendario .actividades {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .pagina-calendario .actividades > .alert-error {
+    flex-shrink: 0;
+  }
+
+  .pagina-calendario .actividades-layout {
+    flex: 1;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+    min-height: 0;
+  }
+
+  .pagina-calendario .columna-izquierda {
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  .pagina-calendario .cal {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .pagina-calendario .cal-top {
+    flex-shrink: 0;
+  }
+
+  .pagina-calendario .cal-cuerpo {
+    flex: 1;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .pagina-calendario .cal-cuerpo > :deep(.panel) {
+    max-height: 100%;
+  }
+}
+
+/* Pantallas angostas: el calendario vuelve a tener una altura fija con scroll propio */
+@media (max-width: 1050px) {
+  .cal-cuerpo :deep(.rejilla),
+  .cal-cuerpo :deep(.mes) {
+    height: auto;
+  }
+
+  .cal-cuerpo :deep(.scroll) {
+    max-height: 66vh;
+  }
 }
 
 .aviso {
@@ -1131,6 +1374,10 @@ onMounted(() => {
 }
 
 @media (max-width: 1050px) {
+  .cal-top {
+    flex-wrap: wrap;
+  }
+
   .actividades-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1145,11 +1392,6 @@ onMounted(() => {
     display: flex;
   }
 
-  .leyenda {
-    margin-right: 10px;
-    margin-left: 10px;
-  }
-
   .filtros-calendario {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -1157,8 +1399,9 @@ onMounted(() => {
     margin-left: 0;
   }
 
-  .leyenda select {
+  .filtros-calendario select {
     width: 100%;
+    max-width: none;
   }
 }
 </style>

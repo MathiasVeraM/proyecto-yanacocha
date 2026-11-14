@@ -1,7 +1,11 @@
-import { request } from './http'
+import { ApiError, request } from './http'
 import { alLimpiar } from './cache'
 import type {
   Actividad,
+  ActividadCambios,
+  CruceHorario,
+  LimitesActividades,
+  Repeticion,
   Dieta,
   DietaCreate,
   EventoCalendario,
@@ -25,7 +29,35 @@ function query(params: Record<string, string | number | boolean | undefined>) {
     : ''
 }
 
+// ?permitir_cruce=true cuando la persona ya vio el aviso de cruce de horario y eligió "crear igual"
+const cruce = (permitir?: boolean) => (permitir ? '?permitir_cruce=true' : '')
+
+// Si la API respondió que la actividad se cruza con otras, devuelve esas actividades
+export function crucesDeError(error: unknown): CruceHorario[] | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null
+  const detalle = error.detalle as { codigo?: string; cruces?: CruceHorario[] } | undefined
+  return detalle?.codigo === 'cruce_horario' ? (detalle.cruces ?? []) : null
+}
+
 export const actividadesApi = {
+  // Límites de fechas y duración definidos en el backend
+  limites: () => request<LimitesActividades>('GET', `${URL}/limites`),
+
+  // La misma actividad en varias fechas (todos los días o ciertos días)
+  crearRepetida: (datos: Record<string, unknown> & { tipo_actividad: string; repeticion: Repeticion }, permitirCruce?: boolean) =>
+    request<Actividad[]>('POST', `${URL}/repetidas${cruce(permitirCruce)}`, datos),
+
+  // Solo actividades pendientes; las dosis de tratamiento se cambian desde el tratamiento
+  editar: (id: number, cambios: ActividadCambios, permitirCruce?: boolean) =>
+    request<Actividad>('PUT', `${URL}/${id}${cruce(permitirCruce)}`, cambios),
+
+  eliminar: (id: number) => request<null>('DELETE', `${URL}/${id}`),
+
+  finalizarDieta: (idDieta: number) => request<Dieta>('POST', `${URL}/dietas/${idDieta}/finalizar`),
+
+  cambiarFinDieta: (idDieta: number, fechaFin: string | null) =>
+    request<Dieta>('PATCH', `${URL}/dietas/${idDieta}`, { fecha_fin: fechaFin }),
+
   listar: (filtros: FiltrosActividades = {}) =>
     request<Actividad[]>('GET', `${URL}${query({ ...filtros })}`),
 
@@ -73,8 +105,10 @@ export const actividadesApi = {
     fecha_programada: string
     hora_programada: string
     descripcion_estimulo: string
+    duracion_horas?: number
+    duracion_minutos?: number
     observaciones?: string
-  }) => request<Actividad>('POST', `${URL}/enriquecimientos`, datos),
+  }, permitirCruce?: boolean) => request<Actividad>('POST', `${URL}/enriquecimientos${cruce(permitirCruce)}`, datos),
 
   programarEntrenamiento: (datos: {
     id_animal: number
@@ -85,7 +119,7 @@ export const actividadesApi = {
     objetivo_entrenamiento: string
     tipo_refuerzo: string
     observaciones?: string
-  }) => request<Actividad>('POST', `${URL}/entrenamientos`, datos),
+  }, permitirCruce?: boolean) => request<Actividad>('POST', `${URL}/entrenamientos${cruce(permitirCruce)}`, datos),
 
   programarLimpieza: (datos: {
     id_recinto: number
@@ -94,7 +128,7 @@ export const actividadesApi = {
     duracion_horas: number
     duracion_minutos: number
     observaciones?: string
-  }) => request<Actividad>('POST', `${URL}/limpiezas`, datos),
+  }, permitirCruce?: boolean) => request<Actividad>('POST', `${URL}/limpiezas${cruce(permitirCruce)}`, datos),
 
   crearDieta: (datos: DietaCreate) =>
     request<Dieta>('POST', `${URL}/dietas`, datos),

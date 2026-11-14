@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { iniciales } from '@/config/animales'
+import { hoyIso, iniciales } from '@/config/animales'
 import type { Dieta, UnidadCantidad } from '@/types/actividades'
 import type { Animal } from '@/types/animales'
 
@@ -12,8 +12,34 @@ const props = defineProps<{
   cargando: boolean
   error: string
 }>()
-const emit = defineEmits<{ registrar: [] }>()
+const emit = defineEmits<{
+  registrar: []
+  // Termina la dieta hoy (el sistema guarda la fecha)
+  finalizar: [dieta: Dieta]
+  // Poner, extender o quitar la fecha de fin (null = sin fecha de fin)
+  cambiarFin: [dieta: Dieta, fechaFin: string | null]
+}>()
 const historialAbierto = ref<number | null>(null)
+const hoy = hoyIso()
+// Dieta cuya fecha de fin se está editando
+const editandoFin = ref<number | null>(null)
+const nuevaFin = ref('')
+
+function abrirEditorFin(dieta: Dieta) {
+  editandoFin.value = dieta.id_dieta
+  nuevaFin.value = dieta.fecha_fin ?? ''
+}
+
+function guardarFin(dieta: Dieta, fecha: string | null) {
+  emit('cambiarFin', dieta, fecha)
+  editandoFin.value = null
+}
+
+function finalizar(dieta: Dieta, nombre: string) {
+  if (window.confirm(`¿Finalizar hoy la dieta de ${nombre}? Se guardará la fecha de hoy y se quitarán sus alimentaciones pendientes desde mañana.`)) {
+    emit('finalizar', dieta)
+  }
+}
 
 const filas = computed(() =>
   props.animales
@@ -91,7 +117,10 @@ function toggleHistorial(idAnimal: number) {
               </td>
               <td>{{ alimentos(dieta) }}</td>
               <td>{{ cantidad(dieta) }}</td>
-              <td>{{ frecuencia(dieta) }}</td>
+              <td>
+                {{ frecuencia(dieta) }}
+                <small class="fin">{{ dieta.fecha_fin ? `Hasta ${dieta.fecha_fin}` : 'Sin fecha de fin' }}</small>
+              </td>
               <td>
                 <span v-if="extrasPorDieta[dieta.id_dieta]?.restriccion || dieta.es_restriccion" class="restriction-badge">
                   Indicación veterinaria
@@ -103,15 +132,34 @@ function toggleHistorial(idAnimal: number) {
                   <button class="history-button" type="button" @click="toggleHistorial(animal.id_animal)">
                     {{ historialAbierto === animal.id_animal ? 'Ocultar historial' : 'Historial' }}
                   </button>
+                  <button class="history-button" type="button" @click="abrirEditorFin(dieta)">Fecha de fin</button>
                   <button
                     class="finish-button"
                     type="button"
-                    disabled
-                    title="TODO: el backend aún no tiene endpoint para finalizar una dieta"
+                    @click="finalizar(dieta, animal.nombre ?? animal.taxonomia.nombre_comun)"
                   >
                     Finalizar dieta
                   </button>
                 </div>
+              </td>
+            </tr>
+            <tr v-if="editandoFin === dieta.id_dieta" class="history-row">
+              <td colspan="6">
+                <form class="editor-fin" @submit.prevent="guardarFin(dieta, nuevaFin || null)">
+                  <label :for="`fin-${dieta.id_dieta}`">Fecha de fin de la dieta</label>
+                  <input
+                    :id="`fin-${dieta.id_dieta}`"
+                    v-model="nuevaFin"
+                    class="input"
+                    type="date"
+                    :min="dieta.fecha_inicio > hoy ? dieta.fecha_inicio : hoy"
+                  />
+                  <button class="btn btn-primary" type="submit" :disabled="!nuevaFin">Guardar</button>
+                  <button v-if="dieta.fecha_fin" class="btn btn-secondary" type="button" @click="guardarFin(dieta, null)">
+                    Quitar fecha de fin
+                  </button>
+                  <button class="btn btn-secondary" type="button" @click="editandoFin = null">Cancelar</button>
+                </form>
               </td>
             </tr>
             <tr v-if="historialAbierto === animal.id_animal" class="history-row">
@@ -135,12 +183,29 @@ function toggleHistorial(idAnimal: number) {
       </table>
     </div>
     <p class="backend-note">
-      El servicio aún no persiste unidad de cantidad ni indicador de restricción; Finalizar dieta está deshabilitado hasta que exista endpoint.
+      El servicio aún no persiste unidad de cantidad ni indicador de restricción.
     </p>
   </section>
 </template>
 
 <style scoped>
+.fin {
+  display: block;
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+}
+
+.editor-fin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-fin .input {
+  width: auto;
+}
+
 .diet-heading {
   display: flex;
   justify-content: space-between;

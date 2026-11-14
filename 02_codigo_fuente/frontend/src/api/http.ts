@@ -8,6 +8,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    // El "detail" tal como lo envió la API (por ejemplo, la lista de cruces de horario)
+    public detalle?: unknown,
   ) {
     super(message)
   }
@@ -30,6 +32,9 @@ export function servicioDeRuta(path: string) {
 function extraerMensaje(data: unknown, status: number): string {
   const detail = (data as { detail?: unknown } | null)?.detail
   if (typeof detail === 'string') return detail
+  // Errores con más datos, por ejemplo { codigo: 'cruce_horario', mensaje, cruces }
+  const mensaje = (detail as { mensaje?: unknown } | null)?.mensaje
+  if (typeof mensaje === 'string') return mensaje
   if (Array.isArray(detail) && detail.length > 0) {
     return detail.map((e: { msg?: string }) => e.msg).join('. ')
   }
@@ -66,7 +71,7 @@ export async function request<T>(
       auth.logout()
       router.push({ name: 'login' })
     }
-    throw new ApiError(response.status, extraerMensaje(data, response.status))
+    throw new ApiError(response.status, extraerMensaje(data, response.status), (data as { detail?: unknown } | null)?.detail)
   }
 
   // Algo cambió en el servidor: lo guardado de ese servicio deja de ser válido

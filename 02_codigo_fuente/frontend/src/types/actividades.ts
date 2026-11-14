@@ -119,3 +119,44 @@ export interface ObservacionCreate {
   severidad: SeveridadObservacion
   detalle: string
 }
+
+// Límites que define el backend (config.py); se usan como min y max de los campos
+export interface LimitesActividades {
+  hoy: string
+  hora_actual: string
+  fecha_min: string
+  fecha_max: string
+  duracion_max_minutos: number
+  duracion_enriquecimiento_minutos: number
+  repeticion_meses_max: number
+  dieta_inicio_fecha_max: string
+}
+
+// Cómo se repite una actividad. dias_semana: 0 = lunes … 6 = domingo; null = todos los días
+export interface Repeticion {
+  dias_semana: number[] | null
+  fecha_fin?: string
+  meses?: number
+}
+
+// Actividad con la que se cruza en horario la que se quiere crear o mover (409 "cruce_horario")
+export interface CruceHorario {
+  id_actividad: number
+  tipo_actividad: TipoActividad
+  fecha_programada: string
+  hora_programada: string | null
+  duracion_minutos: number
+}
+
+// Lo que se puede cambiar de una actividad pendiente
+export interface ActividadCambios {
+  fecha_programada?: string
+  hora_programada?: string
+  duracion_horas?: number
+  duracion_minutos?: number
+  observaciones?: string | null
+  tipo_enriquecimiento?: TipoEnriquecimiento
+  descripcion_estimulo?: string
+  objetivo_entrenamiento?: string
+  tipo_refuerzo?: string
+}

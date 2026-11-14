@@ -39,7 +39,14 @@ const emit = defineEmits<{
   completar: [a: Actividad]
   reabrir: [a: Actividad]
   observar: [a: Actividad]
+  editar: [a: Actividad]
+  eliminar: [a: Actividad]
 }>()
+
+// Se puede editar o eliminar mientras esté pendiente; las dosis se manejan desde el tratamiento
+const modificable = (a: Actividad) => !a.completada && a.tipo_actividad !== 'tratamiento'
+// Solo se completan actividades de hoy o de días anteriores
+const esFutura = (a: Actividad) => a.fecha_programada > props.hoy
 
 const d = computed(() => describirActividades(props.ctx))
 const tarde = (a: Actividad) => estaAtrasada(a, props.hoy, props.ahora)
@@ -124,6 +131,10 @@ const capitalizar = (texto: string) => texto.charAt(0).toUpperCase() + texto.sli
       </div>
 
       <footer class="p-f">
+        <div v-if="modificable(a)" class="p-f-gestion">
+          <button class="btn btn-secondary" type="button" @click="emit('editar', a)">Editar</button>
+          <button class="btn btn-peligro" type="button" @click="emit('eliminar', a)">Eliminar</button>
+        </div>
         <button class="btn btn-secondary" type="button" @click="emit('observar', a)">
           <svg class="ico-btn" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16Z" /><path d="m13.5 6.5 4 4" /></svg>
           Agregar observación
@@ -141,7 +152,8 @@ const capitalizar = (texto: string) => texto.charAt(0).toUpperCase() + texto.sli
           v-else
           class="btn btn-primary"
           type="button"
-          :disabled="actualizandoId === a.id_actividad"
+          :disabled="actualizandoId === a.id_actividad || esFutura(a)"
+          :title="esFutura(a) ? 'Solo se pueden completar actividades de hoy o de días anteriores' : undefined"
           @click="emit('completar', a)"
         >
           <svg class="ico-btn" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
@@ -273,6 +285,23 @@ const capitalizar = (texto: string) => texto.charAt(0).toUpperCase() + texto.sli
   flex: 1;
   padding: 9px 10px;
   font-size: 13px;
+}
+
+/* Editar y eliminar ocupan su propia fila arriba de las acciones del día */
+.p-f-gestion {
+  display: flex;
+  flex: 1 1 100%;
+  gap: 8px;
+}
+
+.btn-peligro {
+  border: 1px solid #e6b8b2;
+  background: var(--color-surface);
+  color: var(--color-danger);
+}
+
+.btn-peligro:hover {
+  background: var(--color-danger-soft);
 }
 
 .ico-btn {

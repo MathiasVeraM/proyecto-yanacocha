@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { actividadesApi } from '@/api/actividades'
+import { consultas } from '@/api/consultas'
+import { sumarDias } from '@/config/actividades'
 import { ApiError } from '@/api/http'
 import { hoyIso, iniciales } from '@/config/animales'
 import type { Animal } from '@/types/animales'
@@ -27,6 +29,17 @@ const guardando = ref(false)
 const error = ref('')
 const animalId = ref(0)
 const fechaInicio = ref(hoyIso())
+// Opcional: si no se indica, la dieta sigue hasta que se finalice o se reemplace
+const fechaFin = ref('')
+// Límite hacia el futuro definido en el backend (30 días por defecto)
+const inicioMax = ref(sumarDias(hoyIso(), 30))
+onMounted(async () => {
+  try {
+    inicioMax.value = (await consultas.limitesActividades()).dieta_inicio_fecha_max
+  } catch {
+    // Se usa el valor por defecto; el backend valida igual
+  }
+})
 const frecuenciaValor = ref(1)
 const frecuenciaUnidad = ref<UnidadFrecuencia>('dias')
 const restriccion = ref(false)
@@ -38,6 +51,8 @@ function nuevoAlimento(): AlimentoForm {
 
 const animalSeleccionado = computed(() => props.animales.find((animal) => animal.id_animal === animalId.value))
 const dietaAnterior = computed(() => props.dietasVigentes[animalId.value])
+// La dieta nueva debe empezar después del inicio de la vigente
+const inicioMin = computed(() => (dietaAnterior.value ? sumarDias(dietaAnterior.value.fecha_inicio, 1) : undefined))
 const nombreAnimal = computed(
   () => animalSeleccionado.value?.nombre ?? animalSeleccionado.value?.taxonomia.nombre_comun ?? 'el ejemplar',
 )
@@ -49,6 +64,7 @@ watch(
     error.value = ''
     animalId.value = props.animales[0]?.id_animal ?? 0
     fechaInicio.value = hoyIso()
+    fechaFin.value = ''
     frecuenciaValor.value = 1
     frecuenciaUnidad.value = 'dias'
     restriccion.value = false
@@ -67,6 +83,11 @@ function quitarAlimento(indice: number) {
 function validar(): string {
   if (!animalId.value) return 'Selecciona un ejemplar.'
   if (!fechaInicio.value) return 'Indica la fecha de inicio de la dieta.'
+  if (fechaInicio.value > inicioMax.value) return 'La dieta puede empezar como máximo 30 días hacia adelante.'
+  if (inicioMin.value && fechaInicio.value < inicioMin.value) {
+    return `La dieta nueva debe empezar después del inicio de la dieta vigente (${dietaAnterior.value!.fecha_inicio}).`
+  }
+  if (fechaFin.value && fechaFin.value < fechaInicio.value) return 'La fecha de fin no puede ser anterior a la de inicio.'
   if (!Number.isInteger(frecuenciaValor.value) || frecuenciaValor.value <= 0) {
     return 'La frecuencia debe ser un número entero mayor que cero.'
   }
@@ -102,6 +123,7 @@ async function guardar() {
   const datos: DietaCreate = {
     id_animal: animalId.value,
     fecha_inicio: fechaInicio.value,
+    ...(fechaFin.value ? { fecha_fin: fechaFin.value } : {}),
     frecuencia_valor: frecuenciaValor.value,
     frecuencia_unidad: frecuenciaUnidad.value,
     es_restriccion: restriccion.value,
@@ -200,7 +222,11 @@ async function guardar() {
       <div class="form-grid">
         <div class="field">
           <label for="fecha-inicio">Fecha de inicio</label>
-          <input id="fecha-inicio" v-model="fechaInicio" class="input" type="date" required />
+          <input id="fecha-inicio" v-model="fechaInicio" class="input" type="date" :min="inicioMin" :max="inicioMax" required />
+        </div>
+        <div class="field">
+          <label for="fecha-fin">Fecha de fin <span class="opcional">(opcional)</span></label>
+          <input id="fecha-fin" v-model="fechaFin" class="input" type="date" :min="fechaInicio" />
         </div>
         <div class="field">
           <label for="frecuencia">Frecuencia</label>
@@ -240,6 +266,11 @@ async function guardar() {
 </template>
 
 <style scoped>
+.opcional {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
 .form-backdrop {
   position: fixed;
   z-index: 1000;

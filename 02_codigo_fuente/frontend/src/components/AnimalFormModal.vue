@@ -604,7 +604,7 @@ async function guardar() {
           <div class="row tres">
             <div class="field">
               <label for="fecha">Fecha de ingreso</label>
-              <input id="fecha" v-model="form.fecha_ingreso" type="date" class="input" required />
+              <input id="fecha" v-model="form.fecha_ingreso" type="date" class="input" :max="hoyIso()" required />
             </div>
             <div v-if="!yaSalio" class="field">
               <label for="estado">Estado</label>

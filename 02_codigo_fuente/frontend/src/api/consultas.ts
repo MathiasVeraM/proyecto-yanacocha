@@ -12,7 +12,14 @@ import { actividadesApi, planificacionReferenciasApi } from './actividades'
 import { ApiError } from './http'
 import { veterinariaApi } from './veterinaria'
 import type { Animal, FiltrosAnimales, Recinto, Taxonomia } from '@/types/animales'
-import type { Actividad, Dieta, FiltrosActividades, Observacion, UsuarioActividad } from '@/types/actividades'
+import type {
+  Actividad,
+  Dieta,
+  FiltrosActividades,
+  LimitesActividades,
+  Observacion,
+  UsuarioActividad,
+} from '@/types/actividades'
 import type { Diagnostico, SignosVitalesHistorial, Tratamiento } from '@/types/veterinaria'
 
 // El primer tramo es el servicio: http.ts invalida por servicio cuando algo se modifica
@@ -40,6 +47,10 @@ export const consultas = {
   // Solo para mostrar quién programó o completó una actividad
   usuariosAuditoria: (op?: OpcionesConsulta<UsuarioActividad[]>) =>
     consultar(clave('auth', 'usuarios'), () => planificacionReferenciasApi.usuariosAuditoria(), porSesion(op)),
+
+  // Límites de fechas y duración: cambian solo con el día, se revisan cada 5 minutos
+  limitesActividades: (op?: OpcionesConsulta<LimitesActividades>) =>
+    consultar(clave('actividades', 'limites'), () => actividadesApi.limites(), { maxEdad: 5 * 60 * 1000, ...op }),
 
   // ---- Gestión animal ----
   animales: (filtros: FiltrosAnimales = {}, op?: OpcionesConsulta<Animal[]>) =>

@@ -30,6 +30,8 @@ const props = defineProps<{
   diagnosticos: Diagnostico[]
   registro?: RegistroExistente | null
   tipoInicial?: 'diagnostico' | 'tratamiento'
+  // Fecha de ingreso del animal: un tratamiento no puede empezar antes
+  fechaIngreso?: string
 }>()
 
 const emit = defineEmits<{ close: []; saved: [] }>()
@@ -87,6 +89,13 @@ const editando = computed(() => !!props.registro)
 const tratamientoLegado = computed(() =>
   props.registro?.tipo === 'tratamiento' ? props.registro.datos : null,
 )
+// Primer día posible del tratamiento: el ingreso del animal o el día del diagnóstico, el que sea más tarde
+const inicioMinTratamiento = computed(() => {
+  const diagnostico = props.diagnosticos.find((d) => d.id_diagnostico === formTratamiento.id_diagnostico)
+  const candidatos = [props.fechaIngreso, diagnostico?.fecha_registro.slice(0, 10)].filter((f): f is string => !!f)
+  return candidatos.length ? candidatos.sort().at(-1) : undefined
+})
+
 const diagnosticosOrdenados = computed(() =>
   [...props.diagnosticos].sort(
     (a, b) => new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime(),
@@ -309,6 +318,11 @@ async function guardar() {
       if (!formTratamiento.fecha_inicio) {
         pestanaTratamiento.value = 'datos'
         error.value = 'Ingresa la fecha de inicio del tratamiento.'
+        return
+      }
+      if (inicioMinTratamiento.value && formTratamiento.fecha_inicio < inicioMinTratamiento.value) {
+        pestanaTratamiento.value = 'datos'
+        error.value = `El tratamiento no puede empezar antes del ${inicioMinTratamiento.value} (ingreso del animal o fecha del diagnóstico).`
         return
       }
       if (formTratamiento.fecha_fin && formTratamiento.fecha_fin < formTratamiento.fecha_inicio) {
@@ -638,7 +652,7 @@ async function guardar() {
             </div>
             <div class="field">
               <label for="fecha-inicio">Fecha de inicio</label>
-              <input id="fecha-inicio" v-model="formTratamiento.fecha_inicio" class="input" type="date" required />
+              <input id="fecha-inicio" v-model="formTratamiento.fecha_inicio" class="input" type="date" :min="inicioMinTratamiento" required />
             </div>
             <div class="field">
               <label for="fecha-fin">Fecha de fin</label>
