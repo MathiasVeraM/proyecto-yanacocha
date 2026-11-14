@@ -12,6 +12,7 @@ import jwt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import (
+    Boolean,
     Column,
     Date,
     ForeignKey,
@@ -44,6 +45,20 @@ Table(
     Base.metadata,
     Column("id_animal", Integer, primary_key=True),
     Column("estado_actual", String(30), nullable=False, server_default="en_centro"),
+    # Para las listas de referencia de Planificación (GET /api/actividades/referencias)
+    Column("codigo_animal", String(30)),
+    Column("nombre", String(100)),
+    Column("id_taxonomia", Integer),
+    Column("id_recinto", Integer),
+    schema="gestion_animal",
+)
+Table(
+    "taxonomia",
+    Base.metadata,
+    Column("id_taxonomia", Integer, primary_key=True),
+    Column("nombre_comun", String(100)),
+    Column("especie", String(150)),
+    Column("clase", String(100)),
     schema="gestion_animal",
 )
 Table(
@@ -81,12 +96,19 @@ Table(
     "recinto",
     Base.metadata,
     Column("id_recinto", Integer, primary_key=True),
+    Column("nombre_recinto", String(100)),
+    Column("tipo", String(50)),
+    Column("capacidad", Integer),
+    Column("estado", String(20)),
     schema="gestion_animal",
 )
 Table(
     "usuario",
     Base.metadata,
     Column("id_usuario", Integer, primary_key=True),
+    Column("nombre", String(100)),
+    Column("apellido", String(100)),
+    Column("activo", Boolean),
     schema="public",
 )
 

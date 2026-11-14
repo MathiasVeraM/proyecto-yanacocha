@@ -58,6 +58,7 @@ La documentación interactiva queda disponible en `http://localhost:8004/docs`.
 | POST / GET | `/api/actividades` | Programa una actividad genérica o lista con filtros |
 | GET | `/api/actividades/{id_actividad}` | Consulta una actividad |
 | GET | `/api/actividades/calendario` | Consulta eventos para visualización |
+| GET | `/api/actividades/referencias` | Ejemplares, recintos y usuarios (solo nombres) para los selectores y textos de Planificación, en una sola consulta. Cualquier rol con el módulo la puede usar, sin permisos sobre Fichas ni Accesos |
 | PATCH | `/api/actividades/{id_actividad}/completar` | Completa una actividad |
 
 El servicio valida JWT y obtiene el identificador de usuario desde el token. El permiso de módulo

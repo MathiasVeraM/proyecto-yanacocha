@@ -45,6 +45,7 @@ ESCRITURAS_MANEJO_Y_VOLUNTARIOS = [
 LECTURAS = [
     ("GET", "/api/actividades"),
     ("GET", "/api/actividades/calendario"),
+    ("GET", "/api/actividades/referencias"),
     ("GET", "/api/actividades/7/observaciones"),
     ("GET", "/api/animales/5/diagnosticos"),
     ("GET", "/api/animales/5/tratamientos"),
