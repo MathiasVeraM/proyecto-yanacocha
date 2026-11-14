@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, Integer, String, Table, Text, Time
+from sqlalchemy import Column, Date, Integer, Numeric, String, Table, Text, Time
 
 from src.database import Base
 
@@ -51,5 +51,17 @@ if "gestion_animal.tratamiento" not in Base.metadata.tables:
         Column("frecuencia_unidad", String(10)),
         Column("hora_inicio", Time),
         Column("estado", String(20), nullable=False),
+        schema="gestion_animal",
+    )
+
+# Medicamentos de cada tratamiento, para mostrarlos con sus dosis en Planificación
+if "gestion_animal.tratamiento_medicamento" not in Base.metadata.tables:
+    Table(
+        "tratamiento_medicamento",
+        Base.metadata,
+        Column("id_tratamiento_medicamento", Integer, primary_key=True),
+        Column("id_tratamiento", Integer, nullable=False),
+        Column("nombre_medicamento", String(150), nullable=False),
+        Column("dosis_ml", Numeric(8, 2), nullable=False),
         schema="gestion_animal",
     )

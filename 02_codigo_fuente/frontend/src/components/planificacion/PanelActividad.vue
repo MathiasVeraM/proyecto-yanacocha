@@ -11,6 +11,7 @@ import {
   estaAtrasada,
   horaCorta,
   horaFin,
+  textoDosis,
   textoDuracion,
   type ContextoActividades,
 } from '@/config/actividades'
@@ -106,7 +107,18 @@ const capitalizar = (texto: string) => texto.charAt(0).toUpperCase() + texto.sli
           </div>
           <div v-if="a.tipo_actividad === 'tratamiento'">
             <dt>Tratamiento</dt>
-            <dd>{{ d.detalle(a) }} <small class="tenue">· en curso, indicado por Veterinaria</small></dd>
+            <dd>{{ a.descripcion_tratamiento || 'Dosis de tratamiento' }} <small class="tenue">· en curso, indicado por Veterinaria</small></dd>
+          </div>
+          <div v-if="a.tipo_actividad === 'tratamiento'">
+            <dt>Medicamentos</dt>
+            <dd>
+              <template v-if="a.medicamentos_tratamiento?.length">
+                <span v-for="m in a.medicamentos_tratamiento" :key="m.nombre_medicamento" class="alimento">
+                  {{ textoDosis(m) }}
+                </span>
+              </template>
+              <template v-else>Sin medicamentos registrados</template>
+            </dd>
           </div>
           <div v-if="a.tipo_enriquecimiento"><dt>Tipo</dt><dd>{{ TIPOS_ENRIQUECIMIENTO[a.tipo_enriquecimiento] }}</dd></div>
           <div v-if="a.descripcion_estimulo"><dt>Estímulo</dt><dd>{{ a.descripcion_estimulo }}</dd></div>

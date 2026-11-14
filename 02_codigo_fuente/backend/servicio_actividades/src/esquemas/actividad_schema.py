@@ -72,6 +72,13 @@ class AlimentacionCreate(BaseModel):
     observaciones: str | None = None
 
 
+class MedicamentoDosis(BaseModel):
+    """Medicamento que se administra en una dosis de tratamiento."""
+
+    nombre_medicamento: str
+    dosis_ml: float
+
+
 class ActividadResponse(BaseModel):
     id_actividad: int
     tipo_actividad: str
@@ -95,6 +102,7 @@ class ActividadResponse(BaseModel):
     id_tratamiento: int | None = None
     # Qué se aplica en una dosis de tratamiento (solo en actividades de tipo tratamiento)
     descripcion_tratamiento: str | None = None
+    medicamentos_tratamiento: list[MedicamentoDosis] = Field(default_factory=list)
     cancelada: bool = False
 
     model_config = ConfigDict(from_attributes=True)

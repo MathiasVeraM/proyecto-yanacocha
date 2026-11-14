@@ -479,12 +479,11 @@ watch(paginasHistorial, (total) => {
               <button class="btn btn-secondary" type="button" :disabled="!auth.permisos.generarPdfVeterinaria">
                 Generar PDF
               </button>
-              <!-- Solo Veterinaria registra; los demás roles lo ven deshabilitado -->
+              <!-- Solo Veterinaria registra; para los demás roles el botón no aparece -->
               <button
+                v-if="auth.permisos.registrarVeterinaria"
                 class="btn btn-primary"
                 type="button"
-                :disabled="!auth.permisos.registrarVeterinaria"
-                :title="auth.permisos.registrarVeterinaria ? undefined : 'Solo el rol de Veterinaria puede registrar diagnósticos y tratamientos'"
                 @click="nuevoDiagnostico"
               >
                 + Nuevo registro

@@ -32,6 +32,11 @@ export interface Dieta {
   es_restriccion?: boolean
 }
 
+export interface MedicamentoDosis {
+  nombre_medicamento: string
+  dosis_ml: number
+}
+
 export interface Actividad {
   id_actividad: number
   tipo_actividad: TipoActividad
@@ -55,6 +60,8 @@ export interface Actividad {
   id_tratamiento: number | null
   // Qué se aplica en una dosis (solo en actividades de tipo tratamiento)
   descripcion_tratamiento?: string | null
+  // Medicamentos y dosis a administrar (solo en actividades de tipo tratamiento)
+  medicamentos_tratamiento?: MedicamentoDosis[]
   cancelada: boolean
   animal?: Animal
   recinto?: Recinto

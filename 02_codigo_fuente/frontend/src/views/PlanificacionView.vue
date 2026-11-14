@@ -808,11 +808,12 @@ onMounted(() => {
   --cd: #c8cdea;
 }
 
-/* Dosis de tratamientos en curso: rojo clínico, distinto de los demás tipos */
+/* Dosis de tratamientos en curso: magenta, distinto de los demás tipos y del rojo de "atrasada".
+   Mismo tono que la alerta de tratamiento de las fichas (AnimalCard) */
 .t-tratamiento {
-  --c: #b0303f;
-  --cb: #fbe6e8;
-  --cd: #f0bcc2;
+  --c: #9b2c7f;
+  --cb: #f7e4f1;
+  --cd: #e7bcdb;
 }
 
 .planning-page {

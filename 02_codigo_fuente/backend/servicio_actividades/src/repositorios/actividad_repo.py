@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 from src.database import Base
 from src.modelos.actividad_model import ActividadModel
 from src.modelos.actividad_alimentacion_model import ActividadAlimentacionModel
-from src.modelos.actividad_tratamiento_model import ActividadTratamientoModel
+from src.modelos.actividad_tratamiento_model import (
+    SEPARADOR_DOSIS,
+    SEPARADOR_MEDICAMENTOS,
+    ActividadTratamientoModel,
+)
 from src.modelos.observacion_actividad_model import ObservacionActividadModel
 from src.modelos.referencias_model import ESTADOS_EN_CENTRO
 
@@ -33,6 +37,17 @@ def _dosis_visible():
         ActividadModel.completada.is_(True),
         dosis_vigente,
     )
+
+
+def medicamentos_de_texto(texto: str | None) -> list[dict]:
+    """Convierte los medicamentos agregados por la base en una lista ordenada por nombre."""
+    if not texto:
+        return []
+    medicamentos = []
+    for item in texto.split(SEPARADOR_MEDICAMENTOS):
+        nombre, _, dosis = item.partition(SEPARADOR_DOSIS)
+        medicamentos.append({"nombre_medicamento": nombre, "dosis_ml": float(dosis)})
+    return sorted(medicamentos, key=lambda medicamento: medicamento["nombre_medicamento"].lower())
 
 
 class ActividadRepository:
@@ -348,6 +363,7 @@ def actividad_a_dict(actividad: ActividadModel) -> dict:
         "tipo_refuerzo": None,
         "id_tratamiento": None,
         "descripcion_tratamiento": None,
+        "medicamentos_tratamiento": [],
         "cancelada": False,
     }
     if actividad.alimentacion is not None:
@@ -361,4 +377,7 @@ def actividad_a_dict(actividad: ActividadModel) -> dict:
     if actividad.tratamiento is not None:
         resultado["id_tratamiento"] = actividad.tratamiento.id_tratamiento
         resultado["descripcion_tratamiento"] = actividad.tratamiento.descripcion_tratamiento
+        resultado["medicamentos_tratamiento"] = medicamentos_de_texto(
+            actividad.tratamiento.medicamentos_texto
+        )
     return resultado

@@ -69,7 +69,8 @@ disparar cualquier rol (ocurre al abrir Planificación).
 
 El listado y el calendario solo muestran las dosis de tratamiento pendientes si el tratamiento sigue
 `en_curso` y el animal sigue en el centro; las completadas se conservan como historial. Cada dosis
-trae `descripcion_tratamiento`, leída en la misma consulta.
+trae `descripcion_tratamiento` y `medicamentos_tratamiento` (nombre y dosis en ml), leídos en la
+misma consulta.
 
 ## Pruebas
 

@@ -99,6 +99,8 @@ defineProps<{ animal: Animal }>()
   background: #4a538f;
 }
 
+/* Mismo color que las dosis de tratamiento en Planificación (.t-tratamiento); el borde blanco
+   y la sombra la separan de cualquier foto, también de las de fondo claro */
 .alerta-tratamiento {
   position: absolute;
   top: 10px;
@@ -107,15 +109,16 @@ defineProps<{ animal: Animal }>()
   place-items: center;
   width: 26px;
   height: 26px;
+  border: 2px solid #fff;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(35, 40, 31, 0.3);
-  color: #b0303f;
+  background: #9b2c7f;
+  box-shadow: 0 1px 4px rgba(35, 40, 31, 0.45);
+  color: #fff;
 }
 
 .alerta-tratamiento svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   fill: currentColor;
 }
 

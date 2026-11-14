@@ -286,6 +286,7 @@ watch(
               :class="[`t-${b.items[0]!.tipo_actividad}`, { hecha: b.items[0]!.completada, tarde: tarde(b.items[0]!), sel: seleccion === b.id, corta: altoBloque(b) < 52, 'con-botones': conBotones(b) }]"
               :style="estiloBloque(b)"
               :aria-label="`${d.titulo(b.items[0]!)}, ${b.hora}`"
+              :title="b.items[0]!.tipo_actividad === 'tratamiento' ? d.detalle(b.items[0]!) : undefined"
               @click="emit('abrir', b.items[0]!)"
               @keydown.enter.self="emit('abrir', b.items[0]!)"
             >

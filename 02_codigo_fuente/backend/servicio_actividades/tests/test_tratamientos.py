@@ -279,3 +279,40 @@ def test_el_filtro_de_dosis_no_oculta_otras_actividades(
     ids = [a["id_actividad"] for a in client.get("/api/actividades").json()]
 
     assert ids == [actividad_entrenamiento["id_actividad"]]
+
+
+def test_las_dosis_traen_los_medicamentos_del_tratamiento(client, db, animal_prueba, ahora_fija):
+    id_tratamiento = _crear_tratamiento(db, animal_prueba["id_animal"])
+    otro = _crear_tratamiento(db, animal_prueba["id_animal"], id_tratamiento=602)
+    medicamentos = Base.metadata.tables["gestion_animal.tratamiento_medicamento"]
+    db.execute(
+        medicamentos.insert(),
+        [
+            {"id_tratamiento": id_tratamiento, "nombre_medicamento": "Meloxicam", "dosis_ml": 0.5},
+            {"id_tratamiento": id_tratamiento, "nombre_medicamento": "Amoxicilina", "dosis_ml": 2.25},
+            {"id_tratamiento": otro, "nombre_medicamento": "De otro tratamiento", "dosis_ml": 1},
+        ],
+    )
+    db.commit()
+
+    generadas = client.post(f"/api/actividades/tratamientos/{id_tratamiento}/generar").json()
+    listada = next(
+        dosis for dosis in _dosis_listadas(client) if dosis["id_tratamiento"] == id_tratamiento
+    )
+
+    esperado = [
+        {"nombre_medicamento": "Amoxicilina", "dosis_ml": 2.25},
+        {"nombre_medicamento": "Meloxicam", "dosis_ml": 0.5},
+    ]
+    assert generadas[0]["medicamentos_tratamiento"] == esperado
+    assert listada["medicamentos_tratamiento"] == esperado
+
+
+def test_dosis_sin_medicamentos_y_otras_actividades_traen_lista_vacia(
+    client, db, animal_prueba, ahora_fija, actividad_limpieza
+):
+    id_tratamiento = _crear_tratamiento(db, animal_prueba["id_animal"])
+    generadas = client.post(f"/api/actividades/tratamientos/{id_tratamiento}/generar").json()
+
+    assert generadas[0]["medicamentos_tratamiento"] == []
+    assert actividad_limpieza["medicamentos_tratamiento"] == []

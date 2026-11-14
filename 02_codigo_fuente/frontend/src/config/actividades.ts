@@ -2,6 +2,7 @@ import type {
   Actividad,
   CategoriaObservacion,
   Dieta,
+  MedicamentoDosis,
   SeveridadObservacion,
   TipoActividad,
   UsuarioActividad,
@@ -138,6 +139,20 @@ export function estaAtrasada(actividad: Actividad, hoy: string, ahora: string) {
   return aMinutos(horaCorta(actividad)) + duracionMinutos(actividad) < aMinutos(ahora)
 }
 
+// ---- Dosis de tratamiento ----
+
+const formatoMl = new Intl.NumberFormat('es-EC', { maximumFractionDigits: 2 })
+
+// "Amoxicilina 2,25 ml"
+export function textoDosis(medicamento: MedicamentoDosis) {
+  return `${medicamento.nombre_medicamento} ${formatoMl.format(medicamento.dosis_ml)} ml`
+}
+
+// "Amoxicilina 2,25 ml, Meloxicam 0,5 ml" (vacío si la dosis no tiene medicamentos)
+export function textoMedicamentos(actividad: Actividad) {
+  return (actividad.medicamentos_tratamiento ?? []).map(textoDosis).join(', ')
+}
+
 // ---- Textos que dependen de ejemplares, recintos, dietas y usuarios ----
 
 export interface ContextoActividades {
@@ -185,7 +200,10 @@ export function describirActividades(ctx: ContextoActividades) {
     if (a.tipo_actividad === 'alimentacion') return alimentos(a)
     if (a.tipo_actividad === 'enriquecimiento') return a.descripcion_estimulo ?? 'Enriquecimiento'
     if (a.tipo_actividad === 'entrenamiento') return a.objetivo_entrenamiento ?? 'Entrenamiento'
-    if (a.tipo_actividad === 'tratamiento') return a.descripcion_tratamiento || 'Dosis de tratamiento'
+    if (a.tipo_actividad === 'tratamiento') {
+      const medicamentos = textoMedicamentos(a)
+      return [a.descripcion_tratamiento || 'Dosis de tratamiento', medicamentos].filter(Boolean).join(' · ')
+    }
     return a.observaciones || recinto(a.id_recinto)?.tipo || 'Limpieza del recinto'
   }
 
