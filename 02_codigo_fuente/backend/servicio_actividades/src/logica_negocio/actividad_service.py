@@ -277,9 +277,16 @@ class ActividadService:
             dieta.frecuencia_valor,
             dieta.frecuencia_unidad,
         )
+        # Las tomas que ya existen se traen de una vez y se buscan en memoria
+        existentes = {
+            (toma.fecha_programada, toma.hora_programada): toma
+            for toma in ActividadRepository.listar_tomas_rango(
+                db, dieta.id_dieta, fecha_inicio, fecha_limite
+            )
+        }
         resultado = []
         for fecha, hora in horarios:
-            toma = ActividadRepository.obtener_toma(db, dieta.id_dieta, fecha, hora)
+            toma = existentes.get((fecha, hora))
             if toma is None:
                 toma = ActividadService.crear(
                     db,
@@ -370,6 +377,8 @@ class ActividadService:
         existentes = ActividadRepository.obtener_actividades_tratamiento(
             db, id_tratamiento
         )
+        # Las dosis que se conservan se buscan en memoria, sin una consulta por horario
+        conservadas = {}
         for actividad in existentes:
             detalle = actividad.tratamiento
             programacion = (
@@ -383,12 +392,12 @@ class ActividadService:
                 and programacion not in horarios_esperados
             ):
                 ActividadRepository.eliminar_actividad_tratamiento(db, actividad)
+            else:
+                conservadas[programacion] = actividad
 
         resultado = []
         for fecha, hora in horarios:
-            actividad = ActividadRepository.obtener_actividad_tratamiento(
-                db, id_tratamiento, fecha, hora
-            )
+            actividad = conservadas.get((fecha, hora))
             if actividad is None:
                 try:
                     actividad = ActividadRepository.crear(

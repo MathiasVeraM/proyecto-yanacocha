@@ -88,6 +88,33 @@ class ActividadRepository:
         )
 
     @staticmethod
+    def listar_tomas_rango(
+        db: Session,
+        id_dieta: int,
+        fecha_desde: date,
+        fecha_hasta: date,
+    ) -> list[ActividadModel]:
+        """Todas las tomas de una dieta en el rango, en una sola consulta.
+
+        Evita consultar toma por toma: con la base remota cada ida y vuelta cuesta
+        ~200 ms (más las cargas de relaciones) y la renovación excedía el tiempo
+        de espera del gateway.
+        """
+        return (
+            db.query(ActividadModel)
+            .join(
+                ActividadAlimentacionModel,
+                ActividadAlimentacionModel.id_actividad == ActividadModel.id_actividad,
+            )
+            .filter(
+                ActividadAlimentacionModel.id_dieta == id_dieta,
+                ActividadModel.fecha_programada >= fecha_desde,
+                ActividadModel.fecha_programada <= fecha_hasta,
+            )
+            .all()
+        )
+
+    @staticmethod
     def obtener_actividad_tratamiento(
         db: Session,
         id_tratamiento: int,
