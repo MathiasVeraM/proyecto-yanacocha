@@ -180,13 +180,14 @@ async function cargarDiagnosticos({ maxEdad, silencioso }: Pasada) {
     errorDiagnosticos.value = ''
   }
   try {
-    const registros = await consultas.diagnosticos(idAnimal, { maxEdad })
-    const listas = await Promise.all(
-      registros.map((diagnostico) => consultas.tratamientos(diagnostico.id_diagnostico, { maxEdad })),
-    )
+    // Diagnósticos y tratamientos a la vez: 2 peticiones sin importar cuántos diagnósticos haya
+    const [registros, delAnimal] = await Promise.all([
+      consultas.diagnosticos(idAnimal, { maxEdad }),
+      consultas.tratamientosDelAnimal(idAnimal, { maxEdad }),
+    ])
     if (idAnimal !== Number(props.id)) return
     diagnosticos.value = registros
-    tratamientos.value = listas.flat()
+    tratamientos.value = delAnimal
   } catch (e) {
     if (idAnimal === Number(props.id) && !silencioso) {
       errorDiagnosticos.value =

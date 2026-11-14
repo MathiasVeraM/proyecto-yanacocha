@@ -209,35 +209,23 @@ async function cargarReferencias() {
   errorReferencias.value = errores.length ? `No se pudieron cargar algunos datos de referencia (${errores.join('; ')}).` : ''
 }
 
+// El historial de dietas de todos los animales llega en una sola petición (antes, una por animal)
 async function cargarDietas({ maxEdad, silencioso }: Pasada = { maxEdad: 0, silencioso: false }) {
-  const lista = animales.value
-  if (!lista.length) {
-    dietasPorAnimal.value = {}
-    return
-  }
   if (!silencioso) {
     cargandoDietas.value = true
     errorDietas.value = ''
   }
-  const resultados = await Promise.allSettled(
-    lista.map(async (animal) => ({ id: animal.id_animal, dietas: await consultas.dietasPorAnimal(animal.id_animal, { maxEdad }) })),
-  )
-  const siguientes: Record<number, Dieta[]> = {}
-  const errores: string[] = []
-  resultados.forEach((r, i) => {
-    const animal = lista[i]
-    if (r.status === 'fulfilled') siguientes[r.value.id] = r.value.dietas
-    else if (silencioso && animal && dietasPorAnimal.value[animal.id_animal]) {
-      // En la revalidación por detrás, si falla se conserva lo que ya se mostraba
-      siguientes[animal.id_animal] = dietasPorAnimal.value[animal.id_animal]!
-    } else {
-      errores.push(`${animal?.nombre ?? animal?.taxonomia.nombre_comun ?? 'un ejemplar'}: ${mensajeError(r.reason, 'no se pudo cargar su historial')}`)
-    }
-  })
-  dietasPorAnimal.value = siguientes
-  if (!silencioso) {
-    errorDietas.value = errores.length ? `No se pudieron cargar todos los historiales de dieta (${errores.join('; ')}).` : ''
-    cargandoDietas.value = false
+  try {
+    const todas = await consultas.todasLasDietas({ maxEdad })
+    const siguientes: Record<number, Dieta[]> = {}
+    // Llegan ordenadas por animal y de la más reciente a la más antigua
+    for (const dieta of todas) (siguientes[dieta.id_animal] ??= []).push(dieta)
+    dietasPorAnimal.value = siguientes
+  } catch (error) {
+    // En la revalidación por detrás, si falla se conserva lo que ya se mostraba
+    if (!silencioso) errorDietas.value = `No se pudieron cargar los historiales de dieta: ${mensajeError(error, 'error desconocido')}`
+  } finally {
+    if (!silencioso) cargandoDietas.value = false
   }
 }
 
@@ -481,7 +469,8 @@ async function renovarHorizonte() {
 // a los datos de referencia, a las dietas ni a la renovación
 onMounted(() => {
   void cargarActividades()
-  void cargarReferencias().then(() => cargarEnDosPasadas(cargarDietas))
+  void cargarReferencias()
+  void cargarEnDosPasadas(cargarDietas)
   void renovarHorizonte()
 })
 </script>

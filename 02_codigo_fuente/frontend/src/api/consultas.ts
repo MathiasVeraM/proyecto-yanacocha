@@ -58,10 +58,11 @@ export const consultas = {
   diagnosticos: (idAnimal: number, op?: OpcionesConsulta<Diagnostico[]>) =>
     consultar(clave('animales', 'diagnosticos', idAnimal), () => veterinariaApi.listarDiagnosticos(idAnimal), op),
 
-  tratamientos: (idDiagnostico: number, op?: OpcionesConsulta<Tratamiento[]>) =>
+  // Todos los tratamientos del animal en una sola petición (antes, una por diagnóstico)
+  tratamientosDelAnimal: (idAnimal: number, op?: OpcionesConsulta<Tratamiento[]>) =>
     consultar(
-      clave('animales', 'tratamientos', idDiagnostico),
-      () => veterinariaApi.listarTratamientos(idDiagnostico),
+      clave('animales', 'tratamientos-animal', idAnimal),
+      () => veterinariaApi.listarTratamientosDelAnimal(idAnimal),
       op,
     ),
 
@@ -78,6 +79,10 @@ export const consultas = {
       () => actividadesApi.observacionesEnRango(desde, hasta),
       op,
     ),
+
+  // Historial de dietas de todos los animales en una sola petición (Planificación)
+  todasLasDietas: (op?: OpcionesConsulta<Dieta[]>) =>
+    consultar(clave('actividades', 'dietas-todas'), () => actividadesApi.listarDietas(), op),
 
   dietasPorAnimal: (idAnimal: number, op?: OpcionesConsulta<Dieta[]>) =>
     consultar(clave('actividades', 'dietas', idAnimal), () => actividadesApi.dietasPorAnimal(idAnimal), op),

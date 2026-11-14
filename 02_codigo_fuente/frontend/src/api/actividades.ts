@@ -99,6 +99,9 @@ export const actividadesApi = {
   crearDieta: (datos: DietaCreate) =>
     request<Dieta>('POST', `${URL}/dietas`, datos),
 
+  // Historial de dietas de todos los animales en una sola petición
+  listarDietas: () => request<Dieta[]>('GET', `${URL}/dietas`),
+
   dietasPorAnimal: (idAnimal: number) =>
     request<Dieta[]>('GET', `${URL}/animales/${idAnimal}/dietas`),
 

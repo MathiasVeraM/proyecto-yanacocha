@@ -28,6 +28,10 @@ export const veterinariaApi = {
   actualizarDiagnostico: (id: number, datos: DiagnosticoUpdate) =>
     request<Diagnostico>('PUT', `${URL}/diagnosticos/${id}`, datos),
 
+  // Todos los tratamientos del animal (de todos sus diagnósticos) en una sola petición
+  listarTratamientosDelAnimal: (idAnimal: number) =>
+    request<Tratamiento[]>('GET', `${URL}/${idAnimal}/tratamientos`),
+
   listarTratamientos: (idDiagnostico: number) =>
     request<Tratamiento[]>('GET', `${URL}/diagnosticos/${idDiagnostico}/tratamientos`),
 

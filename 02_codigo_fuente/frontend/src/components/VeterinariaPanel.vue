@@ -262,25 +262,27 @@ async function cargar({ maxEdad, silencioso }: Pasada = { maxEdad: 0, silencioso
     error.value = ''
   }
   try {
-    const registros = await consultas.diagnosticos(idAnimal, { maxEdad })
-    const [pares, signos] = await Promise.all([
-      Promise.all(
-        registros.map(async (diagnostico) => [
-          diagnostico.id_diagnostico,
-          await consultas.tratamientos(diagnostico.id_diagnostico, { maxEdad }),
-        ] as const),
-      ),
-      // Si el historial de signos falla, se arma con los signos que ya traen los diagnósticos
-      consultas.signosVitales(idAnimal, { maxEdad }).catch(() =>
-        registros.flatMap((d) =>
-          d.signos_vitales ? [{ ...d.signos_vitales, fecha_diagnostico: d.fecha_registro }] : [],
-        ),
-      ),
+    // Las 3 consultas a la vez: 3 peticiones sin importar cuántos diagnósticos haya
+    const [registros, delAnimal, signos] = await Promise.all([
+      consultas.diagnosticos(idAnimal, { maxEdad }),
+      consultas.tratamientosDelAnimal(idAnimal, { maxEdad }),
+      // null = el historial de signos falló (se arma abajo con los signos de los diagnósticos)
+      consultas.signosVitales(idAnimal, { maxEdad }).catch(() => null),
     ])
     if (idAnimal !== props.idAnimal) return
+    // Tratamientos agrupados por diagnóstico, como los usa el historial
+    const porDiagnostico: Record<number, Tratamiento[]> = {}
+    for (const diagnostico of registros) porDiagnostico[diagnostico.id_diagnostico] = []
+    for (const tratamiento of delAnimal) {
+      ;(porDiagnostico[tratamiento.id_diagnostico] ??= []).push(tratamiento)
+    }
     diagnosticos.value = registros
-    tratamientos.value = Object.fromEntries(pares)
-    historialSignos.value = signos
+    tratamientos.value = porDiagnostico
+    historialSignos.value =
+      signos ??
+      registros.flatMap((d) =>
+        d.signos_vitales ? [{ ...d.signos_vitales, fecha_diagnostico: d.fecha_registro }] : [],
+      )
     if (diagnosticoSeleccionado.value) {
       diagnosticoSeleccionado.value =
         registros.find((d) => d.id_diagnostico === diagnosticoSeleccionado.value?.id_diagnostico) ?? null
