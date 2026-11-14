@@ -21,7 +21,9 @@ DB_SCHEMA = "gestion_animal"
 
 # Debe coincidir con la columna codigo_servicio de la tabla modulo
 CODIGO_MODULO = "servicio-gestion-animal"
+# Deben coincidir con los id_rol de la tabla rol del servicio de accesos
 ID_ROL_ADMIN = 1
+ID_ROL_VETERINARIA = 2
 
 # El servidor de la base de datos está en UTC; las fechas se calculan en hora del centro
 ZONA_HORARIA = ZoneInfo("America/Guayaquil")

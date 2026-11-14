@@ -9,12 +9,18 @@ from sqlalchemy import (
     String,
     Text,
     Time,
+    and_,
+    bindparam,
+    exists,
+    or_,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import column_property, relationship
 from sqlalchemy.sql import func
 
 from src.config import DB_SCHEMA
 from src.database import Base
+from src.modelos.animal_model import AnimalModel
+from src.modelos.diagnostico_model import DiagnosticoModel
 from src.modelos.fechas import hoy_local
 
 
@@ -88,3 +94,37 @@ class TratamientoMedicamentoModel(Base):
     dosis_ml = Column(Numeric(8, 2), nullable=False)
 
     tratamiento = relationship("TratamientoModel", back_populates="medicamentos")
+
+
+# Estados del animal que significan que sigue en el centro
+ESTADOS_EN_CENTRO = ("en_centro", "en_tratamiento")
+
+
+def condiciones_tratamiento_vigente(hoy):
+    """Un tratamiento está en curso si su estado lo dice y hoy está dentro de sus fechas.
+
+    Uno cuya fecha de fin ya pasó no cuenta aunque nadie lo haya marcado como finalizado.
+    `hoy` puede ser una fecha o un parámetro de la consulta.
+    """
+    return (
+        TratamientoModel.estado == "en_curso",
+        TratamientoModel.fecha_inicio <= hoy,
+        or_(TratamientoModel.fecha_fin.is_(None), TratamientoModel.fecha_fin >= hoy),
+    )
+
+
+# Alerta de tratamiento en curso para las tarjetas del listado. Es una subconsulta EXISTS dentro de
+# la misma consulta del animal (usa los índices de diagnostico.id_animal y tratamiento.id_diagnostico):
+# no agrega peticiones ni consultas aparte. La fecha se calcula al ejecutar, en hora del centro.
+AnimalModel.tiene_tratamiento_en_curso = column_property(
+    and_(
+        AnimalModel.estado_actual.in_(ESTADOS_EN_CENTRO),
+        exists().where(
+            DiagnosticoModel.id_animal == AnimalModel.id_animal,
+            TratamientoModel.id_diagnostico == DiagnosticoModel.id_diagnostico,
+            *condiciones_tratamiento_vigente(
+                bindparam("hoy_tratamiento", callable_=hoy_local, type_=Date)
+            ),
+        ),
+    )
+)

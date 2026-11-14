@@ -1,8 +1,11 @@
-from sqlalchemy import Column, Date, ForeignKey, Index, Integer, Time
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Date, ForeignKey, Index, Integer, Time, select
+from sqlalchemy.orm import column_property, relationship
 
 from src.config import DB_SCHEMA
 from src.database import Base
+from src.modelos import referencias_model  # noqa: F401  (registra gestion_animal.tratamiento)
+
+_TRATAMIENTO = Base.metadata.tables["gestion_animal.tratamiento"]
 
 
 class ActividadTratamientoModel(Base):
@@ -30,5 +33,14 @@ class ActividadTratamientoModel(Base):
     )
     fecha_programada = Column(Date, nullable=False)
     hora_programada = Column(Time, nullable=False)
+
+    # Qué se aplica en la dosis, para mostrarlo en el calendario y las tarjetas. Es una subconsulta
+    # por clave primaria dentro de la misma consulta de la actividad (el detalle se carga con JOIN):
+    # no agrega consultas ni peticiones al servicio de gestión animal.
+    descripcion_tratamiento = column_property(
+        select(_TRATAMIENTO.c.descripcion)
+        .where(_TRATAMIENTO.c.id_tratamiento == id_tratamiento)
+        .scalar_subquery()
+    )
 
     actividad = relationship("ActividadModel", back_populates="tratamiento")

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from src.database import get_db
 from src.esquemas.observacion_schema import ObservacionCreate, ObservacionResponse
-from src.logica_negocio.auth import verificar_token_access
+from src.logica_negocio.auth import manejo_o_voluntario, verificar_token_access
 from src.logica_negocio.observacion_service import ObservacionService
 
 router = APIRouter(
@@ -36,7 +36,7 @@ def registrar_observacion(
     id_actividad: int,
     observacion_in: ObservacionCreate,
     db: Session = Depends(get_db),
-    usuario: dict = Depends(verificar_token_access),
+    usuario: dict = Depends(manejo_o_voluntario),
 ):
     return ObservacionService.crear(
         db,

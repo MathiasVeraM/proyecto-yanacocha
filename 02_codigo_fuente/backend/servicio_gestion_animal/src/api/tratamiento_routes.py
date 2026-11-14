@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from src.database import get_db
 from src.esquemas.tratamiento_schema import TratamientoCreate, TratamientoResponse, TratamientoUpdate
-from src.logica_negocio.auth import verificar_acceso_modulo
+from src.logica_negocio.auth import requiere_veterinaria, verificar_acceso_modulo
 from src.logica_negocio import actividades_client
 from src.logica_negocio.tratamiento_service import TratamientoService
 
@@ -37,6 +37,7 @@ def listar_tratamientos(id_diagnostico: int, db: Session = Depends(get_db)):
     "/diagnosticos/{id_diagnostico}/tratamientos",
     response_model=TratamientoResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(requiere_veterinaria)],
 )
 def crear_tratamiento(
     id_diagnostico: int,
@@ -46,7 +47,11 @@ def crear_tratamiento(
     return TratamientoService.crear_tratamiento(db, id_diagnostico, tratamiento_in)
 
 
-@router.put("/tratamientos/{id_tratamiento}", response_model=TratamientoResponse)
+@router.put(
+    "/tratamientos/{id_tratamiento}",
+    response_model=TratamientoResponse,
+    dependencies=[Depends(requiere_veterinaria)],
+)
 def actualizar_tratamiento(
     id_tratamiento: int,
     tratamiento_in: TratamientoUpdate,
@@ -55,7 +60,10 @@ def actualizar_tratamiento(
     return TratamientoService.actualizar_tratamiento(db, id_tratamiento, tratamiento_in)
 
 
-@router.post("/tratamientos/{id_tratamiento}/generar-actividades")
+@router.post(
+    "/tratamientos/{id_tratamiento}/generar-actividades",
+    dependencies=[Depends(requiere_veterinaria)],
+)
 def generar_actividades_tratamiento(
     id_tratamiento: int,
     request: Request,

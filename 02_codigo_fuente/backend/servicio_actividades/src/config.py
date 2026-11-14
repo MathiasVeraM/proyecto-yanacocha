@@ -15,6 +15,11 @@ if not SECRET_KEY:
 
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 DB_SCHEMA = "actividades"
+
+# Deben coincidir con los id_rol de la tabla rol del servicio de accesos
+ID_ROL_VETERINARIA = 2
+ID_ROL_MANEJO_ANIMAL = 3
+ID_ROL_VOLUNTARIO = 4
 ZONA_HORARIA = ZoneInfo("America/Guayaquil")
 HORIZONTE_TOMAS_DIAS = int(os.getenv("HORIZONTE_TOMAS_DIAS", "30"))
 if HORIZONTE_TOMAS_DIAS < 1:

@@ -8,7 +8,7 @@ from src.database import get_db
 from src.esquemas.actividad_schema import ActividadResponse
 from src.esquemas.enriquecimiento_schema import EnriquecimientoCreate
 from src.logica_negocio.actividad_service import ActividadService
-from src.logica_negocio.auth import verificar_token_access
+from src.logica_negocio.auth import solo_manejo_animal, verificar_token_access
 from src.repositorios.actividad_repo import actividad_a_dict
 from src.repositorios.referencias_repo import ReferenciasRepository
 
@@ -24,7 +24,7 @@ router = APIRouter(
 def programar_enriquecimiento(
     actividad_in: EnriquecimientoCreate,
     db: Session = Depends(get_db),
-    usuario: dict = Depends(verificar_token_access),
+    usuario: dict = Depends(solo_manejo_animal),
     # true cuando la persona ya vio el aviso de cruce de horario y eligió "crear igual"
     permitir_cruce: bool = Query(False),
 ):

@@ -186,3 +186,96 @@ def test_generar_actividades_de_tratamiento_inexistente_devuelve_404(client):
     respuesta = client.post("/api/actividades/tratamientos/999/generar")
     assert respuesta.status_code == 404
 
+
+
+# ---- Dosis en el calendario y en las tarjetas del día ----
+
+def _dosis_listadas(client):
+    return client.get("/api/actividades", params={"tipo_actividad": "tratamiento"}).json()
+
+
+def _cambiar(db, tabla, columna_id, valor_id, **valores):
+    tabla = Base.metadata.tables[tabla]
+    db.execute(tabla.update().where(tabla.c[columna_id] == valor_id).values(**valores))
+    db.commit()
+
+
+def test_las_dosis_traen_la_descripcion_del_tratamiento(client, db, animal_prueba, ahora_fija):
+    id_tratamiento = _crear_tratamiento(db, animal_prueba["id_animal"])
+    _cambiar(db, "gestion_animal.tratamiento", "id_tratamiento", id_tratamiento, descripcion="Amoxicilina oral")
+
+    generadas = client.post(f"/api/actividades/tratamientos/{id_tratamiento}/generar").json()
+    listadas = _dosis_listadas(client)
+
+    assert {dosis["descripcion_tratamiento"] for dosis in generadas} == {"Amoxicilina oral"}
+    assert {dosis["descripcion_tratamiento"] for dosis in listadas} == {"Amoxicilina oral"}
+
+
+def test_otras_actividades_no_traen_descripcion_de_tratamiento(client, actividad_limpieza):
+    assert actividad_limpieza["descripcion_tratamiento"] is None
+
+
+def test_dosis_del_calendario_tienen_su_tipo(client, db, animal_prueba, ahora_fija):
+    id_tratamiento = _crear_tratamiento(db, animal_prueba["id_animal"])
+    client.post(f"/api/actividades/tratamientos/{id_tratamiento}/generar")
+
+    eventos = client.get(
+        "/api/actividades/calendario",
+        params={"fecha_desde": "2026-01-01", "fecha_hasta": "2026-01-07"},
+    ).json()
+
+    assert [evento["tipo"] for evento in eventos] == ["tratamiento"] * 7
+
+
+@pytest.mark.parametrize("estado", ["suspendido", "finalizado"])
+def test_tratamiento_que_ya_no_esta_en_curso_oculta_sus_dosis_pendientes(
+    client, db, animal_prueba, ahora_fija, estado
+):
+    id_tratamiento = _crear_tratamiento(db, animal_prueba["id_animal"])
+    dosis = client.post(f"/api/actividades/tratamientos/{id_tratamiento}/generar").json()
+    completada = client.post(f"/api/actividades/{dosis[0]['id_actividad']}/completar", json={}).json()
+
+    # Sin volver a generar: el listado ya no muestra las pendientes
+    _cambiar(db, "gestion_animal.tratamiento", "id_tratamiento", id_tratamiento, estado=estado)
+    listadas = _dosis_listadas(client)
+    eventos = client.get(
+        "/api/actividades/calendario",
+        params={"fecha_desde": "2026-01-01", "fecha_hasta": "2026-01-07"},
+    ).json()
+
+    # La dosis completada se conserva como historial
+    assert [d["id_actividad"] for d in listadas] == [completada["id_actividad"]]
+    assert [e["id_actividad"] for e in eventos] == [completada["id_actividad"]]
+
+
+@pytest.mark.parametrize("estado_animal", ["liberado", "trasladado", "fallecido"])
+def test_animal_que_salio_del_centro_oculta_sus_dosis_pendientes(
+    client, db, animal_prueba, ahora_fija, estado_animal
+):
+    id_tratamiento = _crear_tratamiento(db, animal_prueba["id_animal"])
+    client.post(f"/api/actividades/tratamientos/{id_tratamiento}/generar")
+    assert len(_dosis_listadas(client)) == 7
+
+    _cambiar(db, "gestion_animal.animal", "id_animal", animal_prueba["id_animal"], estado_actual=estado_animal)
+
+    assert _dosis_listadas(client) == []
+
+
+def test_animal_en_tratamiento_sigue_mostrando_sus_dosis(client, db, animal_prueba, ahora_fija):
+    id_tratamiento = _crear_tratamiento(db, animal_prueba["id_animal"])
+    client.post(f"/api/actividades/tratamientos/{id_tratamiento}/generar")
+
+    _cambiar(db, "gestion_animal.animal", "id_animal", animal_prueba["id_animal"], estado_actual="en_tratamiento")
+
+    assert len(_dosis_listadas(client)) == 7
+
+
+def test_el_filtro_de_dosis_no_oculta_otras_actividades(
+    client, db, animal_prueba, ahora_fija, actividad_entrenamiento
+):
+    # Aunque el animal ya no esté en el centro, sus otras actividades siguen como estaban
+    _cambiar(db, "gestion_animal.animal", "id_animal", animal_prueba["id_animal"], estado_actual="liberado")
+
+    ids = [a["id_actividad"] for a in client.get("/api/actividades").json()]
+
+    assert ids == [actividad_entrenamiento["id_actividad"]]

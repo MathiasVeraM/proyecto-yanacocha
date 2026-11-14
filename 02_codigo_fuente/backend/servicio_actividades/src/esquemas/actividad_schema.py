@@ -93,6 +93,8 @@ class ActividadResponse(BaseModel):
     objetivo_entrenamiento: str | None = None
     tipo_refuerzo: str | None = None
     id_tratamiento: int | None = None
+    # Qué se aplica en una dosis de tratamiento (solo en actividades de tipo tratamiento)
+    descripcion_tratamiento: str | None = None
     cancelada: bool = False
 
     model_config = ConfigDict(from_attributes=True)

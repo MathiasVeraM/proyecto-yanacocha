@@ -1,12 +1,38 @@
 from datetime import date, datetime, time
 
+from sqlalchemy import exists, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from src.database import Base
 from src.modelos.actividad_model import ActividadModel
 from src.modelos.actividad_alimentacion_model import ActividadAlimentacionModel
 from src.modelos.actividad_tratamiento_model import ActividadTratamientoModel
 from src.modelos.observacion_actividad_model import ObservacionActividadModel
+from src.modelos.referencias_model import ESTADOS_EN_CENTRO
+
+
+def _dosis_visible():
+    """Condición para mostrar una dosis de tratamiento en el listado y el calendario.
+
+    Las pendientes solo se muestran si su tratamiento sigue en curso y el animal sigue en el
+    centro; las completadas se conservan como historial. Va dentro de la misma consulta del
+    listado (EXISTS por clave primaria), sin consultas aparte.
+    """
+    tratamiento = Base.metadata.tables["gestion_animal.tratamiento"]
+    animal = Base.metadata.tables["gestion_animal.animal"]
+    dosis_vigente = exists().where(
+        ActividadTratamientoModel.id_actividad == ActividadModel.id_actividad,
+        tratamiento.c.id_tratamiento == ActividadTratamientoModel.id_tratamiento,
+        tratamiento.c.estado == "en_curso",
+        animal.c.id_animal == ActividadModel.id_animal,
+        animal.c.estado_actual.in_(ESTADOS_EN_CENTRO),
+    )
+    return or_(
+        ActividadModel.tipo_actividad != "tratamiento",
+        ActividadModel.completada.is_(True),
+        dosis_vigente,
+    )
 
 
 class ActividadRepository:
@@ -28,7 +54,7 @@ class ActividadRepository:
         fecha_desde: date | None = None,
         fecha_hasta: date | None = None,
     ) -> list[ActividadModel]:
-        consulta = db.query(ActividadModel)
+        consulta = db.query(ActividadModel).filter(_dosis_visible())
         if id_animal is not None:
             consulta = consulta.filter(ActividadModel.id_animal == id_animal)
         if id_recinto is not None:
@@ -321,6 +347,7 @@ def actividad_a_dict(actividad: ActividadModel) -> dict:
         "objetivo_entrenamiento": None,
         "tipo_refuerzo": None,
         "id_tratamiento": None,
+        "descripcion_tratamiento": None,
         "cancelada": False,
     }
     if actividad.alimentacion is not None:
@@ -333,4 +360,5 @@ def actividad_a_dict(actividad: ActividadModel) -> dict:
         resultado["tipo_refuerzo"] = actividad.entrenamiento.tipo_refuerzo
     if actividad.tratamiento is not None:
         resultado["id_tratamiento"] = actividad.tratamiento.id_tratamiento
+        resultado["descripcion_tratamiento"] = actividad.tratamiento.descripcion_tratamiento
     return resultado

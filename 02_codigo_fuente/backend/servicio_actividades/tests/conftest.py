@@ -18,6 +18,7 @@ from sqlalchemy import (
     Integer,
     String,
     Table,
+    Text,
     Time,
     create_engine,
     event,
@@ -42,6 +43,7 @@ Table(
     "animal",
     Base.metadata,
     Column("id_animal", Integer, primary_key=True),
+    Column("estado_actual", String(30), nullable=False, server_default="en_centro"),
     schema="gestion_animal",
 )
 Table(
@@ -66,6 +68,7 @@ Table(
         ForeignKey("gestion_animal.diagnostico.id_diagnostico", ondelete="RESTRICT"),
         nullable=False,
     ),
+    Column("descripcion", Text, nullable=False, server_default="Tratamiento de prueba"),
     Column("fecha_inicio", Date, nullable=False),
     Column("fecha_fin", Date),
     Column("frecuencia_valor", Integer),

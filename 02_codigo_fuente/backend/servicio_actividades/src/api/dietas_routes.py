@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from src.database import get_db
 from src.esquemas.dieta_schema import DietaCreate, DietaFin, DietaResponse
-from src.logica_negocio.auth import verificar_token_access
+from src.logica_negocio.auth import solo_manejo_animal, verificar_token_access
 from src.logica_negocio.dieta_service import DietaService
 
 router = APIRouter(
@@ -23,7 +23,7 @@ router = APIRouter(
 def crear_dieta(
     dieta_in: DietaCreate,
     db: Session = Depends(get_db),
-    usuario: dict = Depends(verificar_token_access),
+    usuario: dict = Depends(solo_manejo_animal),
 ):
     return DietaService.crear_dieta(db, usuario["id_usuario"], dieta_in)
 
@@ -51,7 +51,11 @@ def obtener_dieta_vigente(id_animal: int, db: Session = Depends(get_db)):
     return DietaService.vigente_por_animal(db, id_animal)
 
 
-@router.post("/dietas/{id_dieta}/finalizar", response_model=DietaResponse)
+@router.post(
+    "/dietas/{id_dieta}/finalizar",
+    response_model=DietaResponse,
+    dependencies=[Depends(solo_manejo_animal)],
+)
 def finalizar_dieta(id_dieta: int, db: Session = Depends(get_db)):
     # Termina la dieta hoy (el sistema guarda la fecha) y quita las tomas pendientes desde mañana
     return DietaService.finalizar(db, id_dieta)
@@ -62,7 +66,7 @@ def cambiar_fin_de_dieta(
     id_dieta: int,
     cambios: DietaFin,
     db: Session = Depends(get_db),
-    usuario: dict = Depends(verificar_token_access),
+    usuario: dict = Depends(solo_manejo_animal),
 ):
     # Poner, extender o quitar la fecha de fin de la dieta vigente
     return DietaService.cambiar_fin(db, id_dieta, cambios.fecha_fin, usuario["id_usuario"])

@@ -1,18 +1,22 @@
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from src.modelos.animal_model import AnimalModel
 from src.modelos.diagnostico_model import DiagnosticoModel
 from src.modelos.fechas import hoy_local
-from src.modelos.tratamiento_model import TratamientoMedicamentoModel, TratamientoModel
+from src.modelos.tratamiento_model import (
+    ESTADOS_EN_CENTRO,
+    TratamientoMedicamentoModel,
+    TratamientoModel,
+    condiciones_tratamiento_vigente,
+)
 
 
 class TratamientoRepository:
     @staticmethod
     def contar_animales_con_tratamiento_en_curso(db: Session) -> int:
-        # Un tratamiento cuya fecha de fin ya pasó no cuenta aunque nadie lo haya marcado como
-        # finalizado, y tampoco los de animales que ya salieron del centro
-        hoy = hoy_local()
+        # Mismo criterio que la alerta de cada animal (AnimalModel.tiene_tratamiento_en_curso):
+        # no cuentan los vencidos ni los de animales que ya salieron del centro
         return (
             db.query(func.count(func.distinct(DiagnosticoModel.id_animal)))
             .join(
@@ -21,10 +25,8 @@ class TratamientoRepository:
             )
             .join(AnimalModel, AnimalModel.id_animal == DiagnosticoModel.id_animal)
             .filter(
-                TratamientoModel.estado == "en_curso",
-                TratamientoModel.fecha_inicio <= hoy,
-                or_(TratamientoModel.fecha_fin.is_(None), TratamientoModel.fecha_fin >= hoy),
-                AnimalModel.estado_actual.in_(("en_centro", "en_tratamiento")),
+                *condiciones_tratamiento_vigente(hoy_local()),
+                AnimalModel.estado_actual.in_(ESTADOS_EN_CENTRO),
             )
             .scalar()
             or 0

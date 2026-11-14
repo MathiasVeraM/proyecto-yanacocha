@@ -60,8 +60,16 @@ La documentación interactiva queda disponible en `http://localhost:8004/docs`.
 | GET | `/api/actividades/calendario` | Consulta eventos para visualización |
 | PATCH | `/api/actividades/{id_actividad}/completar` | Completa una actividad |
 
-El servicio valida JWT y obtiene el identificador de usuario desde el token. Los roles y permisos
-se aplican en el gateway y el servicio de accesos.
+El servicio valida JWT y obtiene el identificador de usuario desde el token. El permiso de módulo
+se aplica en el gateway; el permiso por rol se revisa en el gateway (`src/permisos_rol.py`) y aquí
+(`requiere_rol` en `src/logica_negocio/auth.py`). Todos los roles con el módulo pueden consultar;
+solo Manejo de Animales crea, edita, elimina, reabre y gestiona dietas y tomas; Manejo de Animales y
+Voluntarios completan actividades y registran observaciones. La renovación de horizontes la puede
+disparar cualquier rol (ocurre al abrir Planificación).
+
+El listado y el calendario solo muestran las dosis de tratamiento pendientes si el tratamiento sigue
+`en_curso` y el animal sigue en el centro; las completadas se conservan como historial. Cada dosis
+trae `descripcion_tratamiento`, leída en la misma consulta.
 
 ## Pruebas
 

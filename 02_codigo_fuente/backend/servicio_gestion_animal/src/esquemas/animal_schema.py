@@ -105,5 +105,7 @@ class AnimalResponse(BaseModel):
     url_imagen: Optional[str]
     taxonomia: TaxonomiaResponse
     recinto: RecintoResponse
+    # Alerta para las tarjetas del listado; se calcula en la misma consulta del animal
+    tiene_tratamiento_en_curso: bool = False
 
     model_config = ConfigDict(from_attributes=True)
