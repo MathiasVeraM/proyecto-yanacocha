@@ -14,14 +14,15 @@ import type {
   TipoActividad,
   TipoEnriquecimiento,
 } from '@/types/actividades'
-import type { Animal, Recinto } from '@/types/animales'
+import type { Recinto } from '@/types/animales'
+import type { AnimalReferencia } from '@/types/actividades'
 
 type TipoCreable = Exclude<TipoActividad, 'alimentacion' | 'tratamiento'>
 
 // Crear (o editar) una actividad desde el panel derecho del calendario.
 // Las alimentaciones no se crean aquí: salen de la dieta (Registro de Dietas).
 const props = defineProps<{
-  animales: Animal[]
+  animales: AnimalReferencia[]
   recintos: Recinto[]
   fecha: string
   hora: string
@@ -363,7 +364,7 @@ async function guardar(permitirCruce = false) {
   }
 }
 
-const nombreAnimal = (a: Animal) => (a.nombre ? `${a.nombre} · ${a.taxonomia.nombre_comun}` : a.taxonomia.nombre_comun)
+const nombreAnimal = (a: AnimalReferencia) => (a.nombre ? `${a.nombre} · ${a.taxonomia.nombre_comun}` : a.taxonomia.nombre_comun)
 const textoCruce = (c: CruceHorario) => {
   const dia = deIso(c.fecha_programada)
   const fecha = `${diaCorto(c.fecha_programada)} ${dia.getDate()}/${dia.getMonth() + 1}`

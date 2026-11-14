@@ -3,13 +3,13 @@ import { computed, ref } from 'vue'
 import { hoyIso, iniciales } from '@/config/animales'
 import { useAuthStore } from '@/stores/auth'
 import type { Dieta, UnidadCantidad } from '@/types/actividades'
-import type { Animal } from '@/types/animales'
+import type { AnimalReferencia } from '@/types/actividades'
 
 // Registrar, cambiar la fecha de fin y finalizar dietas es solo de Manejo de Animales
 const auth = useAuthStore()
 
 const props = defineProps<{
-  animales: Animal[]
+  animales: AnimalReferencia[]
   dietasVigentes: Record<number, Dieta>
   historiales: Record<number, Dieta[]>
   extrasPorDieta: Record<number, { unidades: UnidadCantidad[]; restriccion: boolean }>
@@ -48,7 +48,7 @@ function finalizar(dieta: Dieta, nombre: string) {
 const filas = computed(() =>
   props.animales
     .map((animal) => ({ animal, dieta: props.dietasVigentes[animal.id_animal] }))
-    .filter((fila): fila is { animal: Animal; dieta: Dieta } => Boolean(fila.dieta))
+    .filter((fila): fila is { animal: AnimalReferencia; dieta: Dieta } => Boolean(fila.dieta))
     .sort((a, b) => (a.animal.nombre ?? a.animal.taxonomia.nombre_comun).localeCompare(b.animal.nombre ?? b.animal.taxonomia.nombre_comun)),
 )
 

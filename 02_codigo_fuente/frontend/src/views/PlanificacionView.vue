@@ -26,8 +26,17 @@ import {
 } from '@/config/actividades'
 import { useAhora } from '@/composables/useAhora'
 import { useAuthStore } from '@/stores/auth'
-import type { Actividad, Dieta, Observacion, ObservacionCreate, TipoActividad, UsuarioActividad } from '@/types/actividades'
-import type { Animal, Recinto } from '@/types/animales'
+import type {
+  Actividad,
+  AnimalReferencia,
+  Dieta,
+  Observacion,
+  ObservacionCreate,
+  ReferenciasPlanificacion,
+  TipoActividad,
+  UsuarioReferencia,
+} from '@/types/actividades'
+import type { Recinto } from '@/types/animales'
 
 type Pestana = 'actividades' | 'dietas'
 type EstadoFiltro = 'todas' | 'pend' | 'hechas'
@@ -52,9 +61,9 @@ const VISTAS: { id: VistaCalendario; texto: string }[] = [
 ]
 
 const pestana = ref<Pestana>('actividades')
-const animales = ref<Animal[]>([])
+const animales = ref<AnimalReferencia[]>([])
 const recintos = ref<Recinto[]>([])
-const usuariosAuditoria = ref<UsuarioActividad[]>([])
+const usuariosAuditoria = ref<UsuarioReferencia[]>([])
 const actividades = ref<Actividad[]>([])
 const obsPorActividad = ref<Record<number, number>>({})
 const dietasPorAnimal = ref<Record<number, Dieta[]>>({})
@@ -221,21 +230,22 @@ function mensajeError(error: unknown, predeterminado: string) {
   return error instanceof ApiError ? error.message : predeterminado
 }
 
-// Animales: se muestran los guardados y se confirman por detrás. Recintos y usuarios: una vez por sesión
+function aplicarReferencias(datos: ReferenciasPlanificacion) {
+  animales.value = datos.animales
+  recintos.value = datos.recintos
+  usuariosAuditoria.value = datos.usuarios
+}
+
+// Ejemplares, recintos y usuarios llegan en una sola petición al propio servicio de actividades
+// (antes eran tres, a Fichas y Accesos, que los roles como Voluntarios no pueden usar).
+// Se muestran los guardados y se confirman por detrás.
 async function cargarReferencias() {
-  const [rAnimales, rRecintos, rUsuarios] = await Promise.allSettled([
-    consultas.animales({}, { alActualizar: (lista) => (animales.value = lista) }),
-    consultas.recintos(),
-    consultas.usuariosAuditoria(),
-  ])
-  const errores: string[] = []
-  if (rAnimales.status === 'fulfilled') animales.value = rAnimales.value
-  else errores.push(`ejemplares: ${mensajeError(rAnimales.reason, 'no se pudieron cargar')}`)
-  if (rRecintos.status === 'fulfilled') recintos.value = rRecintos.value
-  else errores.push(`recintos: ${mensajeError(rRecintos.reason, 'no se pudieron cargar')}`)
-  if (rUsuarios.status === 'fulfilled') usuariosAuditoria.value = rUsuarios.value
-  else errores.push(`usuarios: ${mensajeError(rUsuarios.reason, 'no se pudieron cargar')}`)
-  errorReferencias.value = errores.length ? `No se pudieron cargar algunos datos de referencia (${errores.join('; ')}).` : ''
+  try {
+    aplicarReferencias(await consultas.referenciasPlanificacion({ alActualizar: aplicarReferencias }))
+    errorReferencias.value = ''
+  } catch (error) {
+    errorReferencias.value = `No se pudieron cargar los datos de referencia (${mensajeError(error, 'error desconocido')}).`
+  }
 }
 
 // El historial de dietas de todos los animales llega en una sola petición (antes, una por animal)

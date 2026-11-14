@@ -1,4 +1,4 @@
-import type { Animal, Recinto } from '@/types/animales'
+import type { Animal, EstadoAnimal, Recinto, Taxonomia } from '@/types/animales'
 
 export type TipoActividad =
   | 'alimentacion'
@@ -100,11 +100,34 @@ export interface FiltrosActividades {
   fecha_hasta?: string
 }
 
-export interface UsuarioActividad {
+// ---- Listas de referencia de Planificación (GET /api/actividades/referencias) ----
+// Solo lo necesario para mostrar nombres y llenar selectores: cualquier rol con el módulo de
+// Planificación las puede pedir, sin permisos sobre Fichas ni Accesos.
+
+export interface AnimalReferencia {
+  id_animal: number
+  codigo_animal: string
+  nombre: string | null
+  id_taxonomia: number
+  id_recinto: number
+  estado_actual: EstadoAnimal
+  taxonomia: Pick<Taxonomia, 'id_taxonomia' | 'nombre_comun' | 'especie' | 'clase'>
+  recinto: Recinto
+}
+
+// Nombre de quien programó o completó una actividad (y, más adelante, de los responsables)
+export interface UsuarioReferencia {
   id_usuario: number
   nombre: string
   apellido: string
-  correo: string
+  // Los inactivos se incluyen para mostrar actividades antiguas; los selectores solo ofrecen activos
+  activo: boolean
+}
+
+export interface ReferenciasPlanificacion {
+  animales: AnimalReferencia[]
+  recintos: Recinto[]
+  usuarios: UsuarioReferencia[]
 }
 
 // Observaciones de bienestar sobre una actividad (HU RF-10)

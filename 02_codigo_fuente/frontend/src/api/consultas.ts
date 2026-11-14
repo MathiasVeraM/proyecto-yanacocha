@@ -1,7 +1,7 @@
 // Lecturas de la API que pasan por la caché en memoria (ver cache.ts).
 // Aquí se decide, en un solo lugar, la clave de cada consulta y cuánto se puede reutilizar:
 //
-// - Catálogos que casi no cambian (recintos, especies, usuarios): una vez por sesión.
+// - Catálogos que casi no cambian (recintos, especies): una vez por sesión.
 //   Si alguien los edita, la petición de edición invalida la caché y se vuelven a pedir.
 // - Datos que cambian seguido (animales, actividades, registros veterinarios, dietas):
 //   por defecto se revalidan siempre. La pantalla decide si muestra lo guardado mientras
@@ -18,7 +18,7 @@ import type {
   FiltrosActividades,
   LimitesActividades,
   Observacion,
-  UsuarioActividad,
+  ReferenciasPlanificacion,
 } from '@/types/actividades'
 import type { Diagnostico, SignosVitalesHistorial, Tratamiento } from '@/types/veterinaria'
 
@@ -44,9 +44,11 @@ export const consultas = {
   especies: (op?: OpcionesConsulta<Taxonomia[]>) =>
     consultar(clave('animales', 'taxonomia'), () => taxonomiaApi.listar(), porSesion(op)),
 
-  // Solo para mostrar quién programó o completó una actividad
-  usuariosAuditoria: (op?: OpcionesConsulta<UsuarioActividad[]>) =>
-    consultar(clave('auth', 'usuarios'), () => planificacionReferenciasApi.usuariosAuditoria(), porSesion(op)),
+  // Ejemplares, recintos y usuarios de Planificación en una sola petición. Va con el servicio
+  // "animales" (como la lista de ejemplares que reemplaza): si se registra o edita un ejemplar o
+  // un recinto, se vuelve a pedir. Planificación la revalida en cada visita mostrando lo guardado.
+  referenciasPlanificacion: (op?: OpcionesConsulta<ReferenciasPlanificacion>) =>
+    consultar(clave('animales', 'referencias-planificacion'), () => planificacionReferenciasApi.todas(), op),
 
   // Límites de fechas y duración: cambian solo con el día, se revisan cada 5 minutos
   limitesActividades: (op?: OpcionesConsulta<LimitesActividades>) =>

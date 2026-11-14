@@ -5,9 +5,10 @@ import type {
   MedicamentoDosis,
   SeveridadObservacion,
   TipoActividad,
-  UsuarioActividad,
+  AnimalReferencia,
+  UsuarioReferencia,
 } from '@/types/actividades'
-import type { Animal, Recinto } from '@/types/animales'
+import type { Recinto } from '@/types/animales'
 
 // Orden en que aparecen los tipos en indicadores, leyenda y vista mes.
 // Las dosis de tratamiento las genera el sistema a partir de los tratamientos en curso
@@ -156,10 +157,10 @@ export function textoMedicamentos(actividad: Actividad) {
 // ---- Textos que dependen de ejemplares, recintos, dietas y usuarios ----
 
 export interface ContextoActividades {
-  animales: Animal[]
+  animales: AnimalReferencia[]
   recintos: Recinto[]
   dietasPorId: Record<number, Dieta>
-  usuarios: UsuarioActividad[]
+  usuarios: UsuarioReferencia[]
 }
 
 export function describirActividades(ctx: ContextoActividades) {

@@ -12,13 +12,9 @@ import type {
   FiltrosActividades,
   Observacion,
   ObservacionCreate,
+  ReferenciasPlanificacion,
   TipoEnriquecimiento,
-  UsuarioActividad,
 } from '@/types/actividades'
-import type { Recinto } from '@/types/animales'
-import { animalesApi, recintosApi } from '@/api/animales'
-import { usuariosApi } from '@/api/usuarios'
-import type { Animal } from '@/types/animales'
 
 const URL = '/api/actividades'
 
@@ -160,8 +156,9 @@ export function renovarHorizonteDeSesion() {
   return renovacion
 }
 
+// Ejemplares, recintos y usuarios de Planificación en UNA sola petición. Sale del propio servicio
+// de actividades: así los roles que solo ven Planificación no necesitan permisos sobre Fichas
+// ni Accesos para ver nombres ni para llenar los selectores.
 export const planificacionReferenciasApi = {
-  animales: (): Promise<Animal[]> => animalesApi.listar(),
-  recintos: (): Promise<Recinto[]> => recintosApi.listar(),
-  usuariosAuditoria: (): Promise<UsuarioActividad[]> => usuariosApi.listar(),
+  todas: () => request<ReferenciasPlanificacion>('GET', `${URL}/referencias`),
 }

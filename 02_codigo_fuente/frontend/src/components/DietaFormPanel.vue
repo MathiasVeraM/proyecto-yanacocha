@@ -5,12 +5,12 @@ import { consultas } from '@/api/consultas'
 import { sumarDias } from '@/config/actividades'
 import { ApiError } from '@/api/http'
 import { hoyIso, iniciales } from '@/config/animales'
-import type { Animal } from '@/types/animales'
+import type { AnimalReferencia } from '@/types/actividades'
 import type { Dieta, DietaCreate, UnidadCantidad, UnidadFrecuencia } from '@/types/actividades'
 
 const props = defineProps<{
   abierto: boolean
-  animales: Animal[]
+  animales: AnimalReferencia[]
   dietasVigentes: Record<number, Dieta>
   extrasPorDieta: Record<number, { unidades: UnidadCantidad[]; restriccion: boolean }>
 }>()
