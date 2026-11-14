@@ -119,3 +119,22 @@ def test_reemplazar_dieta_cancela_solo_tomas_futuras_pendientes(
         for t in restantes
         if t["id_dieta"] == dieta_con_alimentos["id_dieta"]
     )
+
+
+def test_ampliar_horizonte_crea_solo_las_tomas_que_faltan(client, dieta_con_alimentos):
+    # La generación en lote debe conservar las tomas existentes y agregar solo las nuevas
+    id_dieta = dieta_con_alimentos["id_dieta"]
+    primera = client.post(
+        "/api/actividades/tomas/generar", json={"id_dieta": id_dieta, "fecha_hasta": "2026-01-02"}
+    ).json()["tomas"]
+    segunda = client.post(
+        "/api/actividades/tomas/generar", json={"id_dieta": id_dieta, "fecha_hasta": "2026-01-04"}
+    ).json()["tomas"]
+
+    ids_primera = [t["id_actividad"] for t in primera]
+    assert [t["id_actividad"] for t in segunda[: len(primera)]] == ids_primera
+    assert len(segunda) > len(primera)
+    assert len({t["id_actividad"] for t in segunda}) == len(segunda)
+    assert all(t["id_dieta"] == id_dieta for t in segunda)
+    fechas = [t["fecha_programada"] for t in segunda]
+    assert fechas == sorted(fechas)

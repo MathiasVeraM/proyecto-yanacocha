@@ -277,33 +277,31 @@ class ActividadService:
             dieta.frecuencia_valor,
             dieta.frecuencia_unidad,
         )
-        # Las tomas que ya existen se traen de una vez y se buscan en memoria
-        existentes = {
-            (toma.fecha_programada, toma.hora_programada): toma
-            for toma in ActividadRepository.listar_tomas_rango(
-                db, dieta.id_dieta, fecha_inicio, fecha_limite
-            )
-        }
-        resultado = []
-        for fecha, hora in horarios:
-            toma = existentes.get((fecha, hora))
-            if toma is None:
-                toma = ActividadService.crear(
-                    db,
-                    "alimentacion",
-                    {
-                        "id_animal": dieta.id_animal,
-                        "id_dieta": dieta.id_dieta,
-                        "fecha_programada": fecha,
-                        "hora_programada": hora,
-                        "duracion_horas": 0,
-                        "duracion_minutos": 0,
-                        "observaciones": None,
-                    },
-                    id_usuario,
+        # Todo en lote: con la base remota cada ida y vuelta cuesta ~200 ms, así que crear las
+        # tomas una por una (unas 5 consultas cada una) superaba el tiempo de espera del gateway.
+        def tomas_existentes():
+            return {
+                (toma.fecha_programada, toma.hora_programada): toma
+                for toma in ActividadRepository.listar_tomas_rango(
+                    db, dieta.id_dieta, fecha_inicio, fecha_limite
                 )
-            resultado.append(toma)
-        return resultado
+            }
+
+        existentes = tomas_existentes()
+        faltantes = [horario for horario in horarios if horario not in existentes]
+        if faltantes:
+            # Las mismas validaciones que una alimentación individual, una sola vez para toda la dieta
+            ActividadService._verificar_referencias(
+                db,
+                "alimentacion",
+                {"id_animal": dieta.id_animal, "id_dieta": dieta.id_dieta},
+            )
+            ActividadRepository.crear_tomas(
+                db, dieta.id_dieta, dieta.id_animal, faltantes, id_usuario
+            )
+            # Se vuelven a leer en una sola consulta (ya con su id y su detalle)
+            existentes = tomas_existentes()
+        return [existentes[horario] for horario in horarios]
 
     @staticmethod
     def renovar_horizonte(db: Session, id_usuario: int) -> list:

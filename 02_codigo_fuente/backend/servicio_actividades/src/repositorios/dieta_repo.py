@@ -24,6 +24,19 @@ class DietaRepository:
         )
 
     @staticmethod
+    def obtener_todas(db: Session) -> list[DietaModel]:
+        # Mismo orden que el historial por animal, agrupado por animal
+        return (
+            db.query(DietaModel)
+            .order_by(
+                DietaModel.id_animal,
+                DietaModel.fecha_inicio.desc(),
+                DietaModel.id_dieta.desc(),
+            )
+            .all()
+        )
+
+    @staticmethod
     def obtener_vigente(db: Session, id_animal: int) -> DietaModel | None:
         return (
             db.query(DietaModel)

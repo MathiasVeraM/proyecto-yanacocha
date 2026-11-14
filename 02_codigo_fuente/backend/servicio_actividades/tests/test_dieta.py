@@ -161,3 +161,31 @@ def test_historial_ordena_dietas_de_la_mas_reciente_a_la_mas_antigua(
         nueva["id_dieta"],
         dieta_con_alimentos["id_dieta"],
     ]
+
+
+def test_listar_todas_las_dietas_en_una_sola_peticion(client, animal_prueba, dieta_con_alimentos):
+    # Planificación usa este endpoint en lugar de pedir el historial animal por animal
+    nueva = client.post(
+        "/api/actividades/dietas",
+        json=_nueva_dieta(
+            animal_prueba["id_animal"],
+            fecha_inicio="2026-03-01",
+            alimentos=[{"nombre_alimento": "Hojas", "cantidad_gramos": 90}],
+        ),
+    ).json()
+
+    respuesta = client.get("/api/actividades/dietas")
+
+    assert respuesta.status_code == 200
+    dietas = respuesta.json()
+    # Mismo orden que el historial por animal: de la más reciente a la más antigua
+    assert [d["id_dieta"] for d in dietas] == [nueva["id_dieta"], dieta_con_alimentos["id_dieta"]]
+    assert [d["vigente"] for d in dietas] == [True, False]
+    assert dietas[0]["alimentos"][0]["nombre_alimento"] == "Hojas"
+
+
+def test_listar_todas_las_dietas_sin_dietas_devuelve_lista_vacia(client):
+    respuesta = client.get("/api/actividades/dietas")
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == []

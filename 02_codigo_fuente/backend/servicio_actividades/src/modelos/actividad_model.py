@@ -101,27 +101,30 @@ class ActividadModel(Base):
     )
     fecha_completada = Column(TIMESTAMP)
 
+    # Detalle según el tipo (uno a uno). actividad_a_dict los lee para armar la respuesta, así
+    # que se cargan en la misma consulta que la actividad (LEFT JOIN): con "selectin" cada
+    # listado hacía 4 consultas extra a la base remota.
     alimentacion = relationship(
         "ActividadAlimentacionModel",
         back_populates="actividad",
         uselist=False,
-        lazy="selectin",
+        lazy="joined",
     )
     enriquecimiento = relationship(
         "ActividadEnriquecimientoModel",
         back_populates="actividad",
         uselist=False,
-        lazy="selectin",
+        lazy="joined",
     )
     entrenamiento = relationship(
         "ActividadEntrenamientoModel",
         back_populates="actividad",
         uselist=False,
-        lazy="selectin",
+        lazy="joined",
     )
     tratamiento = relationship(
         "ActividadTratamientoModel",
         back_populates="actividad",
         uselist=False,
-        lazy="selectin",
+        lazy="joined",
     )

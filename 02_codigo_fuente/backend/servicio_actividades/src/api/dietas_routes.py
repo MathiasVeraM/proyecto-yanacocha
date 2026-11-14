@@ -28,6 +28,13 @@ def crear_dieta(
     return DietaService.crear_dieta(db, usuario["id_usuario"], dieta_in)
 
 
+@router.get("/dietas", response_model=List[DietaResponse])
+def listar_todas_las_dietas(db: Session = Depends(get_db)):
+    # Historial de dietas de todos los animales en una sola petición (Planificación),
+    # en lugar de una petición por animal
+    return DietaService.listar_todas(db)
+
+
 @router.get(
     "/animales/{id_animal}/dietas",
     response_model=List[DietaResponse],

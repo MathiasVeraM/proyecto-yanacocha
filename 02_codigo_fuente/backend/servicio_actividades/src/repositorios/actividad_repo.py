@@ -88,6 +88,40 @@ class ActividadRepository:
         )
 
     @staticmethod
+    def crear_tomas(
+        db: Session,
+        id_dieta: int,
+        id_animal: int,
+        horarios: list[tuple[date, time]],
+        id_usuario: int,
+    ) -> None:
+        """Crea varias tomas de una dieta con un solo guardado (en lugar de uno por toma)."""
+        try:
+            db.add_all(
+                [
+                    ActividadModel(
+                        tipo_actividad="alimentacion",
+                        id_animal=id_animal,
+                        fecha_programada=fecha,
+                        hora_programada=hora,
+                        duracion_horas=0,
+                        duracion_minutos=0,
+                        id_usuario_programo=id_usuario,
+                        completada=False,
+                        observaciones=None,
+                        id_usuario_completo=None,
+                        fecha_completada=None,
+                        alimentacion=ActividadAlimentacionModel(id_dieta=id_dieta),
+                    )
+                    for fecha, hora in horarios
+                ]
+            )
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise
+
+    @staticmethod
     def listar_tomas_rango(
         db: Session,
         id_dieta: int,

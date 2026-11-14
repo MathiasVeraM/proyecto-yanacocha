@@ -67,6 +67,10 @@ class DietaService:
         return DietaRepository.crear_dieta(db, dieta_data, alimentos)
 
     @staticmethod
+    def listar_todas(db: Session):
+        return DietaRepository.obtener_todas(db)
+
+    @staticmethod
     def listar_por_animal(db: Session, id_animal: int):
         if not ReferenciasRepository.existe_animal(db, id_animal):
             raise HTTPException(
