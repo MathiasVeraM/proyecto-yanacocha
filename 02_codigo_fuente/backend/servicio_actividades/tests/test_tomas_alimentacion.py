@@ -1,5 +1,7 @@
 """Asume POST /api/actividades/tomas/generar y asociación con actividad_alimentacion."""
 
+from datetime import datetime
+
 import pytest
 
 
@@ -20,7 +22,10 @@ def test_generar_tomas_segun_frecuencia(
     desde,
     hasta,
     cantidad_esperada,
+    ahora_fijo,
 ):
+    # Una dieta puede empezar como máximo 30 días después de "hoy"
+    ahora_fijo(datetime(2026, 2, 20, 8, 0))
     dieta = client.post(
         "/api/actividades/dietas",
         json={
@@ -46,8 +51,9 @@ def test_generar_tomas_segun_frecuencia(
 
 
 def test_generar_tomas_respeta_horizonte_y_fecha_fin(
-    client, animal_prueba
+    client, animal_prueba, ahora_fijo
 ):
+    ahora_fijo(datetime(2026, 3, 20, 8, 0))
     dieta = client.post(
         "/api/actividades/dietas",
         json={
@@ -119,3 +125,22 @@ def test_reemplazar_dieta_cancela_solo_tomas_futuras_pendientes(
         for t in restantes
         if t["id_dieta"] == dieta_con_alimentos["id_dieta"]
     )
+
+
+def test_ampliar_horizonte_crea_solo_las_tomas_que_faltan(client, dieta_con_alimentos):
+    # La generación en lote debe conservar las tomas existentes y agregar solo las nuevas
+    id_dieta = dieta_con_alimentos["id_dieta"]
+    primera = client.post(
+        "/api/actividades/tomas/generar", json={"id_dieta": id_dieta, "fecha_hasta": "2026-01-02"}
+    ).json()["tomas"]
+    segunda = client.post(
+        "/api/actividades/tomas/generar", json={"id_dieta": id_dieta, "fecha_hasta": "2026-01-04"}
+    ).json()["tomas"]
+
+    ids_primera = [t["id_actividad"] for t in primera]
+    assert [t["id_actividad"] for t in segunda[: len(primera)]] == ids_primera
+    assert len(segunda) > len(primera)
+    assert len({t["id_actividad"] for t in segunda}) == len(segunda)
+    assert all(t["id_dieta"] == id_dieta for t in segunda)
+    fechas = [t["fecha_programada"] for t in segunda]
+    assert fechas == sorted(fechas)

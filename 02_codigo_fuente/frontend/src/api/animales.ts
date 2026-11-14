@@ -1,4 +1,5 @@
 import { API_URL, ApiError, request } from './http'
+import { invalidar } from './cache'
 import { useAuthStore } from '@/stores/auth'
 import type {
   Animal,
@@ -54,7 +55,10 @@ export const animalesApi = {
   subirImagen: async (id: number, archivo: File) => {
     const datos = new FormData()
     datos.append('archivo', archivo)
-    return (await (await fetchConToken('PUT', `${URL}/${id}/imagen`, datos)).json()) as Animal
+    const animal = (await (await fetchConToken('PUT', `${URL}/${id}/imagen`, datos)).json()) as Animal
+    // Cambió la url_imagen del animal: las listas guardadas deben volver a pedirse
+    invalidar('animales')
+    return animal
   },
 
   // Recibe la url_imagen del animal (ruta de la API) y devuelve la imagen para mostrarla

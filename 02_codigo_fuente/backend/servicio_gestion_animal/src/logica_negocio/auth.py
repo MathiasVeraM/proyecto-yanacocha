@@ -1,7 +1,7 @@
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from src.config import ALGORITHM, CODIGO_MODULO, ID_ROL_ADMIN, SECRET_KEY
+from src.config import ALGORITHM, CODIGO_MODULO, ID_ROL_ADMIN, ID_ROL_MANEJO_ANIMAL, ID_ROL_VETERINARIA, SECRET_KEY
 
 # El token lo emite el servicio de accesos; aquí solo se valida
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -29,5 +29,23 @@ def verificar_acceso_modulo(payload: dict = Depends(verificar_token_access)) -> 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes permiso para acceder a este módulo",
+        )
+    return payload
+
+def requiere_gestion_fichas(payload: dict = Depends(verificar_acceso_modulo)) -> dict:
+    # Registrar ingresos, editar fichas y registrar salidas: Veterinaria y Manejo de Animales
+    if payload.get("id_rol") not in (ID_ROL_VETERINARIA, ID_ROL_MANEJO_ANIMAL):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu rol no tiene permiso para realizar esta acción",
+        )
+    return payload
+
+def requiere_veterinaria(payload: dict = Depends(verificar_acceso_modulo)) -> dict:
+    # Diagnósticos y tratamientos solo los registra o modifica Veterinaria (también lo revisa el gateway)
+    if payload.get("id_rol") != ID_ROL_VETERINARIA:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu rol no tiene permiso para realizar esta acción",
         )
     return payload

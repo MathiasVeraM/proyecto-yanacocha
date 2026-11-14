@@ -1,10 +1,21 @@
 """Pruebas del reenvío de /api/animales/* al servicio de gestión animal (con el servicio simulado)."""
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 
 from src.config import GESTION_ANIMAL_SERVICE_URL
+from src.main import app
 from src.modulos import MODULO_ACCESOS, MODULO_FICHAS_EJEMPLARES
+from src.permisos_rol import ID_ROL_VETERINARIA
 from src.rutas.gestion_animal_router import URL_DESTINO
+
+
+@pytest.fixture
+def client(mock_http, crear_token, cabeceras):
+    # Veterinaria puede escribir diagnósticos y tratamientos: estas pruebas revisan
+    # el reenvío, no los permisos por rol (ver test_permisos_rol.py)
+    token = crear_token(id_rol=ID_ROL_VETERINARIA, modulos=[MODULO_FICHAS_EJEMPLARES])
+    return TestClient(app, headers=cabeceras(token))
 
 
 # ---- Reenvío de la petición ----
@@ -38,11 +49,11 @@ def test_reenvia_el_cuerpo(client, servicio):
     assert servicio.ultima.read() == httpx.Request("POST", "http://x", json=animal).read()
 
 
-def test_reenvia_el_token_de_autorizacion(client, servicio, headers_admin):
+def test_reenvia_el_token_de_autorizacion(client, servicio):
     # El servicio necesita el token para saber quién registra cada diagnóstico
     client.get("/api/animales/1")
 
-    assert servicio.ultima.headers["authorization"] == headers_admin["Authorization"]
+    assert servicio.ultima.headers["authorization"] == client.headers["Authorization"]
 
 
 def test_respeta_el_codigo_de_estado_del_servicio(client, servicio):

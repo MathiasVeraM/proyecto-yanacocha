@@ -23,6 +23,7 @@
   /* Tipografía */
   --font-sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-serif: 'Fraunces', Georgia, serif;
+  --font-menu: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   /* Forma */
   --radius-sm: 6px;

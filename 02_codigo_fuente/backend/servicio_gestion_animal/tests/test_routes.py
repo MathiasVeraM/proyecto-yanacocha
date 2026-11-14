@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 
 from src.modelos.fechas import hoy_local
+from src.logica_negocio import actividades_client
 
 URL = "/api/animales"
 CODIGO_PRIMER_ANIMAL = f"YC-{hoy_local().year}-0001"
@@ -31,7 +32,7 @@ def nuevo_animal(oso, recinto):
 @pytest.fixture
 def crear_animal(client, h, nuevo_animal):
     def _crear(**datos):
-        resp = client.post(URL, json={**nuevo_animal, **datos}, headers=h)
+        resp = client.post(URL, json={**nuevo_animal, "edad_anios": 0, **datos}, headers=h)
         assert resp.status_code == 201, resp.text
         return resp.json()
     return _crear
@@ -45,7 +46,14 @@ def _crear_diagnostico(client, h, id_animal, **datos):
 
 
 def _crear_tratamiento(client, h, id_diagnostico, **datos):
-    cuerpo = {"medicamento_o_proceso": "Suero oral", **datos}
+    cuerpo = {
+        "descripcion": "Administrar suero oral",
+        "frecuencia_valor": 8,
+        "frecuencia_unidad": "horas",
+        "hora_inicio": "08:00:00",
+        "medicamentos": [],
+        **datos,
+    }
     resp = client.post(f"{URL}/diagnosticos/{id_diagnostico}/tratamientos", json=cuerpo, headers=h)
     assert resp.status_code == 201, resp.text
     return resp.json()
@@ -61,9 +69,12 @@ ENDPOINTS = [
     ("POST", f"{URL}/1/diagnosticos", {"diagnostico": "X"}),
     ("PUT", f"{URL}/diagnosticos/1", {"diagnostico": "X"}),
     ("GET", f"{URL}/1/signos-vitales", None),
+    ("GET", f"{URL}/metricas/animales-con-tratamiento-en-curso", None),
+    ("GET", f"{URL}/1/tratamientos", None),
     ("GET", f"{URL}/diagnosticos/1/tratamientos", None),
     ("POST", f"{URL}/diagnosticos/1/tratamientos", {"medicamento_o_proceso": "X"}),
     ("PUT", f"{URL}/tratamientos/1", {"estado": "finalizado"}),
+    ("POST", f"{URL}/tratamientos/1/generar-actividades", None),
     ("GET", f"{URL}/taxonomia", None),
     ("GET", f"{URL}/taxonomia/sugerencias?buscar=oso", None),
     ("POST", f"{URL}/taxonomia", {"nombre_comun": "X", "especie": "X y"}),
@@ -90,6 +101,7 @@ def test_todas_las_rutas_sin_permiso_403(client, headers_sin_permiso, metodo, ur
 def test_crear_animal_genera_codigo_y_valores_por_defecto(crear_animal):
     animal = crear_animal()
     assert animal["codigo_animal"] == CODIGO_PRIMER_ANIMAL
+    assert (animal["edad_anios"], animal["edad_meses"]) == (0, 0)
     assert animal["estado_actual"] == "en_centro"
     assert animal["fecha_ingreso"] == hoy_local().isoformat()
     # La ficha incluye la taxonomía y el recinto completos
@@ -129,17 +141,25 @@ def test_si_no_logra_un_codigo_libre_responde_409(client, h, nuevo_animal, crear
     from src.repositorios.animal_repo import AnimalRepository
     crear_animal()
     monkeypatch.setattr(AnimalRepository, "obtener_codigos_con_prefijo", staticmethod(lambda db, prefijo: []))
-    assert client.post(URL, json=nuevo_animal, headers=h).status_code == 409
+    assert client.post(URL, json={**nuevo_animal, "edad_anios": 0}, headers=h).status_code == 409
 
 
 def test_crear_animal_especie_inexistente_400(client, h, recinto):
-    resp = client.post(URL, json={"id_taxonomia": 999, "id_recinto": recinto.id_recinto}, headers=h)
+    resp = client.post(
+        URL,
+        json={"id_taxonomia": 999, "id_recinto": recinto.id_recinto, "edad_anios": 0},
+        headers=h,
+    )
     assert resp.status_code == 400
     assert resp.json()["detail"] == "La especie indicada no existe en el catálogo"
 
 
 def test_crear_animal_recinto_inexistente_400(client, h, oso):
-    resp = client.post(URL, json={"id_taxonomia": oso.id_taxonomia, "id_recinto": 999}, headers=h)
+    resp = client.post(
+        URL,
+        json={"id_taxonomia": oso.id_taxonomia, "id_recinto": 999, "edad_anios": 0},
+        headers=h,
+    )
     assert resp.status_code == 400
     assert resp.json()["detail"] == "El recinto indicado no existe"
 
@@ -150,13 +170,47 @@ def test_crear_animal_sin_especie_o_recinto_422(client, h, nuevo_animal, faltant
     assert client.post(URL, json=cuerpo, headers=h).status_code == 422
 
 
+def test_crear_animal_requiere_edad_en_anios_o_meses(client, h, nuevo_animal):
+    resp = client.post(URL, json=nuevo_animal, headers=h)
+    assert resp.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "edad,esperada",
+    [
+        ({"edad_anios": 4}, (4, 0)),
+        ({"edad_anios": 200}, (200, 0)),
+        ({"edad_meses": 7}, (0, 7)),
+    ],
+)
+def test_crear_animal_completa_con_cero_la_unidad_omitida(client, h, nuevo_animal, edad, esperada):
+    resp = client.post(URL, json={**nuevo_animal, **edad}, headers=h)
+    assert resp.status_code == 201, resp.text
+    assert (resp.json()["edad_anios"], resp.json()["edad_meses"]) == esperada
+
+
+@pytest.mark.parametrize(
+    "edad",
+    [
+        {"edad_anios": -1},
+        {"edad_anios": 201},
+        {"edad_meses": -1},
+        {"edad_meses": 12},
+        {"edad_anios": 1, "edad_meses": 1.5},
+    ],
+)
+def test_crear_animal_edad_fuera_de_rango_422(client, h, nuevo_animal, edad):
+    resp = client.post(URL, json={**nuevo_animal, **edad}, headers=h)
+    assert resp.status_code == 422
+
+
 @pytest.mark.parametrize("cambio", [
     {"sexo": "otro"},
     {"estado_actual": "perdido"},
     {"fecha_ingreso": "no-es-fecha"},
 ])
 def test_crear_animal_datos_invalidos_422(client, h, nuevo_animal, cambio):
-    assert client.post(URL, json={**nuevo_animal, **cambio}, headers=h).status_code == 422
+    assert client.post(URL, json={**nuevo_animal, "edad_anios": 0, **cambio}, headers=h).status_code == 422
 
 
 # ---------- Animales: consulta, filtros y edición ----------
@@ -215,7 +269,7 @@ def test_listar_estado_invalido_422(client, h):
 
 
 def test_actualizar_animal(client, h, crear_animal):
-    animal = crear_animal(sexo="hembra", edad_aproximada="2 años")
+    animal = crear_animal(sexo="hembra", edad_anios=2, edad_meses=0)
     resp = client.put(
         f"{URL}/{animal['id_animal']}",
         json={"estado_actual": "liberado", "sexo": None},
@@ -224,7 +278,38 @@ def test_actualizar_animal(client, h, crear_animal):
     assert resp.status_code == 200
     datos = resp.json()
     # Los opcionales se pueden vaciar; lo no enviado se conserva
-    assert (datos["estado_actual"], datos["sexo"], datos["edad_aproximada"]) == ("liberado", None, "2 años")
+    assert (datos["estado_actual"], datos["sexo"], datos["edad_anios"], datos["edad_meses"]) == (
+        "liberado", None, 2, 0
+    )
+
+
+@pytest.mark.parametrize(
+    "edad,esperada",
+    [
+        ({"edad_anios": 5}, (5, 0)),
+        ({"edad_meses": 8}, (0, 8)),
+    ],
+)
+def test_actualizar_edad_completa_con_cero_el_valor_omitido(client, h, crear_animal, edad, esperada):
+    animal = crear_animal(edad_anios=3, edad_meses=4)
+    resp = client.put(f"{URL}/{animal['id_animal']}", json=edad, headers=h)
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["edad_anios"], resp.json()["edad_meses"]) == esperada
+
+
+@pytest.mark.parametrize(
+    "edad",
+    [
+        {"edad_anios": -1},
+        {"edad_anios": 201},
+        {"edad_meses": 12},
+        {"edad_anios": None, "edad_meses": None},
+    ],
+)
+def test_actualizar_edad_invalida_422(client, h, crear_animal, edad):
+    animal = crear_animal()
+    resp = client.put(f"{URL}/{animal['id_animal']}", json=edad, headers=h)
+    assert resp.status_code == 422
 
 
 def test_mover_animal_de_recinto(client, h, crear_animal, crear_recinto_db):
@@ -529,15 +614,69 @@ def diagnostico(client, h, crear_animal):
 
 
 def test_crear_tratamiento_con_valores_por_defecto(client, h, diagnostico):
-    tratamiento = _crear_tratamiento(client, h, diagnostico["id_diagnostico"], dosis="50 ml")
+    tratamiento = _crear_tratamiento(
+        client,
+        h,
+        diagnostico["id_diagnostico"],
+        medicamentos=[{"nombre_medicamento": "Suero oral", "dosis_ml": 50}],
+    )
     assert tratamiento["estado"] == "en_curso"
     assert tratamiento["fecha_inicio"] == hoy_local().isoformat()
     assert tratamiento["fecha_fin"] is None
-    assert tratamiento["dosis"] == "50 ml"
+    assert tratamiento["descripcion"] == "Administrar suero oral"
+    assert tratamiento["frecuencia_valor"] == 8
+    assert tratamiento["frecuencia_unidad"] == "horas"
+    assert tratamiento["medicamentos"][0]["dosis_ml"] == 50
+
+
+def test_crear_tratamiento_sin_medicamentos(client, h, diagnostico):
+    tratamiento = _crear_tratamiento(client, h, diagnostico["id_diagnostico"])
+    assert tratamiento["medicamentos"] == []
+
+
+def test_crear_tratamiento_con_varios_medicamentos_y_dosis_decimales(client, h, diagnostico):
+    tratamiento = _crear_tratamiento(
+        client,
+        h,
+        diagnostico["id_diagnostico"],
+        medicamentos=[
+            {"nombre_medicamento": "Medicamento A", "dosis_ml": 0.5},
+            {"nombre_medicamento": "Medicamento B", "dosis_ml": 1.25},
+        ],
+    )
+    assert [(m["nombre_medicamento"], m["dosis_ml"]) for m in tratamiento["medicamentos"]] == [
+        ("Medicamento A", 0.5),
+        ("Medicamento B", 1.25),
+    ]
+
+
+def test_crear_tratamiento_rechaza_dosis_no_positiva(client, h, diagnostico):
+    respuesta = client.post(
+        f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos",
+        json={
+            "descripcion": "Tratamiento",
+            "frecuencia_valor": 1,
+            "frecuencia_unidad": "dias",
+            "hora_inicio": "08:00:00",
+            "medicamentos": [{"nombre_medicamento": "Medicamento", "dosis_ml": 0}],
+        },
+        headers=h,
+    )
+    assert respuesta.status_code == 422
+
 
 
 def test_crear_tratamiento_diagnostico_inexistente_404(client, h):
-    resp = client.post(f"{URL}/diagnosticos/999/tratamientos", json={"medicamento_o_proceso": "X"}, headers=h)
+    resp = client.post(
+        f"{URL}/diagnosticos/999/tratamientos",
+        json={
+            "descripcion": "Tratamiento",
+            "frecuencia_valor": 1,
+            "frecuencia_unidad": "dias",
+            "hora_inicio": "08:00:00",
+        },
+        headers=h,
+    )
     assert resp.status_code == 404
 
 
@@ -545,7 +684,8 @@ def test_crear_tratamiento_fecha_fin_anterior_400(client, h, diagnostico):
     hoy = hoy_local()
     resp = client.post(
         f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos",
-        json={"medicamento_o_proceso": "X", "fecha_inicio": hoy.isoformat(),
+        json={"descripcion": "X", "frecuencia_valor": 1, "frecuencia_unidad": "dias",
+              "hora_inicio": "08:00:00", "fecha_inicio": hoy.isoformat(),
               "fecha_fin": (hoy - timedelta(days=1)).isoformat()},
         headers=h,
     )
@@ -557,7 +697,8 @@ def test_crear_tratamiento_fecha_fin_antes_de_hoy_sin_inicio_400(client, h, diag
     ayer = (hoy_local() - timedelta(days=1)).isoformat()
     resp = client.post(
         f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos",
-        json={"medicamento_o_proceso": "X", "fecha_fin": ayer},
+        json={"descripcion": "X", "frecuencia_valor": 1, "frecuencia_unidad": "dias",
+              "hora_inicio": "08:00:00", "fecha_fin": ayer},
         headers=h,
     )
     assert resp.status_code == 400
@@ -566,16 +707,40 @@ def test_crear_tratamiento_fecha_fin_antes_de_hoy_sin_inicio_400(client, h, diag
 def test_crear_tratamiento_estado_invalido_422(client, h, diagnostico):
     resp = client.post(
         f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos",
-        json={"medicamento_o_proceso": "X", "estado": "olvidado"},
+        json={"descripcion": "X", "frecuencia_valor": 1, "frecuencia_unidad": "dias",
+              "hora_inicio": "08:00:00", "estado": "olvidado"},
         headers=h,
     )
     assert resp.status_code == 422
 
 
 def test_listar_tratamientos(client, h, diagnostico):
-    _crear_tratamiento(client, h, diagnostico["id_diagnostico"], medicamento_o_proceso="Antibiótico")
+    _crear_tratamiento(client, h, diagnostico["id_diagnostico"], descripcion="Antibiótico")
     resp = client.get(f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos", headers=h)
-    assert [t["medicamento_o_proceso"] for t in resp.json()] == ["Antibiótico"]
+    assert [t["descripcion"] for t in resp.json()] == ["Antibiótico"]
+
+
+def test_metrica_cuenta_animales_distintos_con_tratamiento_en_curso(client, h, crear_animal):
+    animal_con_dos_tratamientos = crear_animal()
+    animal_con_un_tratamiento = crear_animal()
+    animal_sin_tratamiento_activo = crear_animal()
+
+    diagnostico_1 = _crear_diagnostico(client, h, animal_con_dos_tratamientos["id_animal"])
+    diagnostico_2 = _crear_diagnostico(client, h, animal_con_un_tratamiento["id_animal"])
+    diagnostico_3 = _crear_diagnostico(client, h, animal_sin_tratamiento_activo["id_animal"])
+
+    _crear_tratamiento(client, h, diagnostico_1["id_diagnostico"])
+    _crear_tratamiento(client, h, diagnostico_1["id_diagnostico"], descripcion="Segundo tratamiento")
+    _crear_tratamiento(client, h, diagnostico_2["id_diagnostico"])
+    _crear_tratamiento(client, h, diagnostico_3["id_diagnostico"], estado="finalizado")
+
+    respuesta = client.get(
+        f"{URL}/metricas/animales-con-tratamiento-en-curso",
+        headers=h,
+    )
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == 2
 
 
 def test_listar_tratamientos_diagnostico_inexistente_404(client, h):
@@ -604,3 +769,317 @@ def test_actualizar_tratamiento_fecha_fin_anterior_a_la_guardada_400(client, h, 
 
 def test_actualizar_tratamiento_inexistente_404(client, h):
     assert client.put(f"{URL}/tratamientos/999", json={"estado": "finalizado"}, headers=h).status_code == 404
+
+
+def test_actualizar_tratamiento_reemplaza_medicamentos(client, h, diagnostico):
+    tratamiento = _crear_tratamiento(
+        client,
+        h,
+        diagnostico["id_diagnostico"],
+        medicamentos=[{"nombre_medicamento": "Inicial", "dosis_ml": 1}],
+    )
+    respuesta = client.put(
+        f"{URL}/tratamientos/{tratamiento['id_tratamiento']}",
+        json={"medicamentos": [{"nombre_medicamento": "Nuevo", "dosis_ml": 0.25}]},
+        headers=h,
+    )
+
+    assert respuesta.status_code == 200
+    assert [(m["nombre_medicamento"], m["dosis_ml"]) for m in respuesta.json()["medicamentos"]] == [
+        ("Nuevo", 0.25)
+    ]
+
+
+def test_generar_actividades_de_tratamiento_reenvia_el_token(
+    client, h, diagnostico, monkeypatch
+):
+    tratamiento = _crear_tratamiento(client, h, diagnostico["id_diagnostico"])
+    llamada = {}
+
+    def generar(id_tratamiento, autorizacion):
+        llamada["id_tratamiento"] = id_tratamiento
+        llamada["autorizacion"] = autorizacion
+        return [{"id_actividad": 12}]
+
+    monkeypatch.setattr(actividades_client, "generar_actividades_tratamiento", generar)
+    respuesta = client.post(
+        f"{URL}/tratamientos/{tratamiento['id_tratamiento']}/generar-actividades",
+        headers=h,
+    )
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == [{"id_actividad": 12}]
+    assert llamada == {
+        "id_tratamiento": tratamiento["id_tratamiento"],
+        "autorizacion": h["Authorization"],
+    }
+
+
+def test_generar_actividades_de_tratamiento_inexistente_404(client, h):
+    respuesta = client.post(
+        f"{URL}/tratamientos/999/generar-actividades",
+        headers=h,
+    )
+    assert respuesta.status_code == 404
+
+
+def test_listar_tratamientos_del_animal_en_una_sola_peticion(client, h, crear_animal):
+    # La ficha usa este endpoint en lugar de pedir los tratamientos diagnóstico por diagnóstico
+    animal = crear_animal()
+    otro = crear_animal()
+    d1 = _crear_diagnostico(client, h, animal["id_animal"])
+    d2 = _crear_diagnostico(client, h, animal["id_animal"], diagnostico="Fractura")
+    d_otro = _crear_diagnostico(client, h, otro["id_animal"])
+    t1 = _crear_tratamiento(
+        client, h, d1["id_diagnostico"], descripcion="Suero",
+        medicamentos=[{"nombre_medicamento": "Lactato", "dosis_ml": 1.5}],
+    )
+    t2 = _crear_tratamiento(client, h, d2["id_diagnostico"], descripcion="Inmovilizar")
+    _crear_tratamiento(client, h, d_otro["id_diagnostico"], descripcion="De otro animal")
+
+    resp = client.get(f"{URL}/{animal['id_animal']}/tratamientos", headers=h)
+
+    assert resp.status_code == 200
+    tratamientos = resp.json()
+    # Solo los del animal, de todos sus diagnósticos, con sus medicamentos
+    assert {t["id_tratamiento"] for t in tratamientos} == {t1["id_tratamiento"], t2["id_tratamiento"]}
+    assert {t["id_diagnostico"] for t in tratamientos} == {d1["id_diagnostico"], d2["id_diagnostico"]}
+    suero = next(t for t in tratamientos if t["id_tratamiento"] == t1["id_tratamiento"])
+    assert [m["nombre_medicamento"] for m in suero["medicamentos"]] == ["Lactato"]
+
+
+def test_listar_tratamientos_del_animal_sin_tratamientos(client, h, crear_animal):
+    animal = crear_animal()
+    resp = client.get(f"{URL}/{animal['id_animal']}/tratamientos", headers=h)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_listar_tratamientos_de_animal_inexistente_404(client, h):
+    resp = client.get(f"{URL}/999/tratamientos", headers=h)
+    assert resp.status_code == 404
+
+
+# ---- Reglas de fechas (validaciones 34, 35 y 36) ----
+
+def test_tratamiento_no_empieza_antes_del_ingreso(client, h, crear_animal):
+    hoy = hoy_local()
+    animal = crear_animal(fecha_ingreso=hoy.isoformat())
+    diagnostico = _crear_diagnostico(client, h, animal["id_animal"])
+    resp = client.post(
+        f"{URL}/diagnosticos/{diagnostico['id_diagnostico']}/tratamientos",
+        json={"descripcion": "X", "frecuencia_valor": 1, "frecuencia_unidad": "dias",
+              "hora_inicio": "08:00:00", "fecha_inicio": (hoy - timedelta(days=3)).isoformat()},
+        headers=h,
+    )
+    assert resp.status_code == 422
+    assert "ingreso del animal" in resp.json()["detail"]
+
+
+def test_finalizar_tratamiento_guarda_la_fecha_de_hoy(client, h, diagnostico):
+    tratamiento = _crear_tratamiento(client, h, diagnostico["id_diagnostico"])
+    assert tratamiento["fecha_fin"] is None
+    resp = client.put(f"{URL}/tratamientos/{tratamiento['id_tratamiento']}", json={"estado": "finalizado"}, headers=h)
+    assert resp.status_code == 200
+    assert resp.json()["fecha_fin"] == hoy_local().isoformat()
+
+
+def test_ingreso_del_animal_no_puede_ser_futuro(client, h, nuevo_animal):
+    manana = (hoy_local() + timedelta(days=1)).isoformat()
+    resp = client.post(URL, json={**nuevo_animal, "edad_anios": 1, "fecha_ingreso": manana}, headers=h)
+    assert resp.status_code == 422
+
+
+def test_metrica_no_cuenta_tratamientos_vencidos_ni_animales_que_salieron(client, h, crear_animal):
+    hoy = hoy_local()
+    vencido = crear_animal(fecha_ingreso=(hoy - timedelta(days=10)).isoformat())
+    d1 = _crear_diagnostico(client, h, vencido["id_animal"])
+    _crear_tratamiento(
+        client, h, d1["id_diagnostico"],
+        fecha_inicio=hoy.isoformat(), fecha_fin=hoy.isoformat(),
+    )
+    url = f"{URL}/metricas/animales-con-tratamiento-en-curso"
+    assert client.get(url, headers=h).json() == 1
+    salio = crear_animal()
+    d2 = _crear_diagnostico(client, h, salio["id_animal"])
+    _crear_tratamiento(client, h, d2["id_diagnostico"])
+    assert client.get(url, headers=h).json() == 2
+    client.put(f"{URL}/{salio['id_animal']}", json={"estado_actual": "trasladado"}, headers=h)
+    assert client.get(url, headers=h).json() == 1
+
+
+# ---- Permisos por rol: diagnósticos y tratamientos solo los registra Veterinaria ----
+
+ID_ROL_MANEJO_ANIMAL = 3
+ID_ROL_VOLUNTARIO = 4
+
+ESCRITURAS_VETERINARIA = [
+    ("POST", f"{URL}/1/diagnosticos", {"diagnostico": "X"}),
+    ("PUT", f"{URL}/diagnosticos/1", {"diagnostico": "X"}),
+    ("POST", f"{URL}/diagnosticos/1/tratamientos", {"descripcion": "X"}),
+    ("PUT", f"{URL}/tratamientos/1", {"estado": "finalizado"}),
+    ("POST", f"{URL}/tratamientos/1/generar-actividades", None),
+]
+
+
+@pytest.mark.parametrize("metodo,url,cuerpo", ESCRITURAS_VETERINARIA)
+@pytest.mark.parametrize("id_rol", [1, ID_ROL_MANEJO_ANIMAL, ID_ROL_VOLUNTARIO])
+def test_otros_roles_no_escriben_diagnosticos_ni_tratamientos_403(
+    client, headers_con_token, metodo, url, cuerpo, id_rol
+):
+    # El administrador entra al módulo sin listarlo, pero tampoco puede registrar
+    headers = headers_con_token(id_rol=id_rol)
+    resp = client.request(metodo, url, json=cuerpo, headers=headers)
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Tu rol no tiene permiso para realizar esta acción"
+
+
+def test_otro_rol_no_crea_diagnostico_y_no_se_guarda(client, h, headers_con_token, crear_animal):
+    animal = crear_animal()
+    url = f"{URL}/{animal['id_animal']}/diagnosticos"
+    manejo = headers_con_token(id_rol=ID_ROL_MANEJO_ANIMAL)
+
+    assert client.post(url, json={"diagnostico": "X"}, headers=manejo).status_code == 403
+    assert client.get(url, headers=h).json() == []
+
+
+@pytest.mark.parametrize("id_rol", [1, ID_ROL_MANEJO_ANIMAL])
+def test_otros_roles_consultan_diagnosticos_y_tratamientos(client, h, headers_con_token, crear_animal, id_rol):
+    # El resumen de la ficha (línea de vida) los usa para todos los roles con el módulo
+    animal = crear_animal()
+    diagnostico = _crear_diagnostico(client, h, animal["id_animal"])
+    _crear_tratamiento(client, h, diagnostico["id_diagnostico"])
+    headers = headers_con_token(id_rol=id_rol)
+
+    assert len(client.get(f"{URL}/{animal['id_animal']}/diagnosticos", headers=headers).json()) == 1
+    assert len(client.get(f"{URL}/{animal['id_animal']}/tratamientos", headers=headers).json()) == 1
+
+
+def test_otros_roles_siguen_registrando_animales(client, headers_con_token, nuevo_animal):
+    # La restricción es solo para lo veterinario; el registro de animales no cambia
+    headers = headers_con_token(id_rol=ID_ROL_MANEJO_ANIMAL)
+    resp = client.post(URL, json={**nuevo_animal, "edad_anios": 1}, headers=headers)
+    assert resp.status_code == 201
+
+
+# ---- Alerta de tratamiento en curso en el listado ----
+
+def _alertas(client, h):
+    return {a["id_animal"]: a["tiene_tratamiento_en_curso"] for a in client.get(URL, headers=h).json()}
+
+
+def test_listado_marca_animales_con_tratamiento_en_curso(client, h, crear_animal):
+    con_tratamiento = crear_animal()
+    sin_tratamiento = crear_animal()
+    con_finalizado = crear_animal()
+    _crear_tratamiento(client, h, _crear_diagnostico(client, h, con_tratamiento["id_animal"])["id_diagnostico"])
+    _crear_tratamiento(
+        client, h, _crear_diagnostico(client, h, con_finalizado["id_animal"])["id_diagnostico"],
+        estado="finalizado",
+    )
+
+    assert _alertas(client, h) == {
+        con_tratamiento["id_animal"]: True,
+        sin_tratamiento["id_animal"]: False,
+        con_finalizado["id_animal"]: False,
+    }
+
+
+def test_alerta_coincide_con_la_metrica(client, h, crear_animal):
+    hoy = hoy_local()
+    vencido = crear_animal(fecha_ingreso=(hoy - timedelta(days=10)).isoformat())
+    activo = crear_animal()
+    salio = crear_animal()
+    futuro = crear_animal()
+    # Vence hoy: todavía cuenta
+    _crear_tratamiento(
+        client, h, _crear_diagnostico(client, h, vencido["id_animal"])["id_diagnostico"],
+        fecha_inicio=hoy.isoformat(), fecha_fin=hoy.isoformat(),
+    )
+    _crear_tratamiento(client, h, _crear_diagnostico(client, h, activo["id_animal"])["id_diagnostico"])
+    _crear_tratamiento(client, h, _crear_diagnostico(client, h, salio["id_animal"])["id_diagnostico"])
+    # Empieza mañana: todavía no está en curso
+    _crear_tratamiento(
+        client, h, _crear_diagnostico(client, h, futuro["id_animal"])["id_diagnostico"],
+        fecha_inicio=(hoy + timedelta(days=1)).isoformat(),
+    )
+    client.put(f"{URL}/{salio['id_animal']}", json={"estado_actual": "liberado"}, headers=h)
+
+    alertas = _alertas(client, h)
+    metrica = client.get(f"{URL}/metricas/animales-con-tratamiento-en-curso", headers=h).json()
+
+    assert alertas == {
+        vencido["id_animal"]: True,
+        activo["id_animal"]: True,
+        salio["id_animal"]: False,
+        futuro["id_animal"]: False,
+    }
+    assert sum(alertas.values()) == metrica == 2
+
+
+def test_alerta_se_apaga_al_finalizar_el_tratamiento(client, h, crear_animal):
+    animal = crear_animal()
+    tratamiento = _crear_tratamiento(
+        client, h, _crear_diagnostico(client, h, animal["id_animal"])["id_diagnostico"]
+    )
+    assert client.get(f"{URL}/{animal['id_animal']}", headers=h).json()["tiene_tratamiento_en_curso"] is True
+
+    client.put(f"{URL}/tratamientos/{tratamiento['id_tratamiento']}", json={"estado": "finalizado"}, headers=h)
+
+    assert _alertas(client, h) == {animal["id_animal"]: False}
+
+
+def test_alerta_se_combina_con_los_filtros_del_listado(client, h, crear_animal):
+    animal = crear_animal(nombre="Yaku")
+    crear_animal(nombre="Otro")
+    _crear_tratamiento(client, h, _crear_diagnostico(client, h, animal["id_animal"])["id_diagnostico"])
+
+    resp = client.get(URL, params={"buscar": "Yaku"}, headers=h).json()
+
+    assert [(a["id_animal"], a["tiene_tratamiento_en_curso"]) for a in resp] == [(animal["id_animal"], True)]
+
+
+# ---- Permisos por rol: registrar, editar y dar salida a un animal ----
+
+ESCRITURAS_FICHA = [
+    ("POST", URL, {"id_taxonomia": 1, "id_recinto": 1, "edad_anios": 1}),
+    ("PUT", f"{URL}/1", {"estado_actual": "liberado"}),
+    ("PUT", f"{URL}/1/imagen", None),
+]
+
+
+@pytest.mark.parametrize("metodo,url,cuerpo", ESCRITURAS_FICHA)
+@pytest.mark.parametrize("id_rol", [1, ID_ROL_VOLUNTARIO])
+def test_administrador_y_otros_roles_no_registran_ni_editan_fichas_403(
+    client, headers_con_token, metodo, url, cuerpo, id_rol
+):
+    headers = headers_con_token(id_rol=id_rol)
+    resp = client.request(metodo, url, json=cuerpo, headers=headers)
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Tu rol no tiene permiso para realizar esta acción"
+
+
+def test_administrador_no_da_salida_y_no_cambia_el_estado(client, h, headers_con_token, crear_animal):
+    animal = crear_animal()
+    admin = headers_con_token(id_rol=1, modulos=[])
+
+    resp = client.put(f"{URL}/{animal['id_animal']}", json={"estado_actual": "liberado"}, headers=admin)
+
+    assert resp.status_code == 403
+    assert client.get(f"{URL}/{animal['id_animal']}", headers=h).json()["estado_actual"] == "en_centro"
+
+
+def test_administrador_consulta_fichas(client, headers_con_token, crear_animal):
+    crear_animal()
+    admin = headers_con_token(id_rol=1, modulos=[])
+    assert len(client.get(URL, headers=admin).json()) == 1
+
+
+def test_manejo_de_animales_registra_edita_y_da_salida(client, headers_con_token, nuevo_animal):
+    manejo = headers_con_token(id_rol=ID_ROL_MANEJO_ANIMAL)
+    creado = client.post(URL, json={**nuevo_animal, "edad_anios": 1}, headers=manejo)
+    assert creado.status_code == 201
+
+    salida = client.put(f"{URL}/{creado.json()['id_animal']}", json={"estado_actual": "liberado"}, headers=manejo)
+    assert salida.status_code == 200
+    assert salida.json()["estado_actual"] == "liberado"

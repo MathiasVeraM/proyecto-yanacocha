@@ -17,14 +17,8 @@ export interface ItemNavegacion {
 
 // Orden en que aparecen en el menú lateral. Cada ítem solo se muestra si el usuario tiene permiso.
 export const ITEMS_NAVEGACION: ItemNavegacion[] = [
-  { label: 'Fichas de ejemplares', codigoServicio: MODULO_FICHAS_EJEMPLARES, ruta: 'fichas', badge: 4 },
+  { label: 'Fichas de ejemplares', codigoServicio: MODULO_FICHAS_EJEMPLARES, ruta: 'fichas' },
   { label: 'Planificación', codigoServicio: MODULO_PLANIFICACION, ruta: 'planificacion' },
-  {
-    label: 'Bienestar animal',
-    codigoServicio: MODULO_ESTADISTICAS,
-    ruta: 'bienestar',
-    badge: 3,
-    alert: true,
-  },
+  { label: 'Bienestar animal', codigoServicio: MODULO_ESTADISTICAS, ruta: 'bienestar' },
   { label: 'Seguridad & usuarios', codigoServicio: MODULO_ACCESOS, ruta: 'usuarios' },
 ]

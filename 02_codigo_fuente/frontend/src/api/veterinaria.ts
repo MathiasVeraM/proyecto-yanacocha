@@ -1,4 +1,5 @@
 import { request } from './http'
+import type { Actividad } from '@/types/actividades'
 import type {
   Diagnostico,
   DiagnosticoCreate,
@@ -12,6 +13,9 @@ import type {
 const URL = '/api/animales'
 
 export const veterinariaApi = {
+  contarAnimalesConTratamientoEnCurso: () =>
+    request<number>('GET', `${URL}/metricas/animales-con-tratamiento-en-curso`),
+
   listarDiagnosticos: (idAnimal: number) =>
     request<Diagnostico[]>('GET', `${URL}/${idAnimal}/diagnosticos`),
 
@@ -24,6 +28,10 @@ export const veterinariaApi = {
   actualizarDiagnostico: (id: number, datos: DiagnosticoUpdate) =>
     request<Diagnostico>('PUT', `${URL}/diagnosticos/${id}`, datos),
 
+  // Todos los tratamientos del animal (de todos sus diagnósticos) en una sola petición
+  listarTratamientosDelAnimal: (idAnimal: number) =>
+    request<Tratamiento[]>('GET', `${URL}/${idAnimal}/tratamientos`),
+
   listarTratamientos: (idDiagnostico: number) =>
     request<Tratamiento[]>('GET', `${URL}/diagnosticos/${idDiagnostico}/tratamientos`),
 
@@ -32,4 +40,7 @@ export const veterinariaApi = {
 
   actualizarTratamiento: (id: number, datos: TratamientoUpdate) =>
     request<Tratamiento>('PUT', `${URL}/tratamientos/${id}`, datos),
+
+  generarActividadesTratamiento: (id: number) =>
+    request<Actividad[]>('POST', `${URL}/tratamientos/${id}/generar-actividades`),
 }

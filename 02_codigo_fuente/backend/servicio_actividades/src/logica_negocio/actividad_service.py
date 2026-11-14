@@ -1,17 +1,26 @@
 from datetime import date, datetime, time, timedelta
+from math import ceil
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.config import HORIZONTE_TOMAS_DIAS
+from src.database import Base
 from src.esquemas.actividad_schema import ActividadBaseCreate
 from src.modelos.actividad_alimentacion_model import ActividadAlimentacionModel
 from src.modelos.actividad_enriquecimiento_model import ActividadEnriquecimientoModel
 from src.modelos.actividad_entrenamiento_model import ActividadEntrenamientoModel
+from src.modelos.actividad_tratamiento_model import ActividadTratamientoModel
 from src.modelos.fechas import ahora_local, hoy_local
-from src.repositorios.actividad_repo import ActividadRepository
+from src.logica_negocio import reglas_actividad as reglas
+from src.repositorios.actividad_repo import ActividadRepository, actividad_a_dict
 from src.repositorios.dieta_repo import DietaRepository
 from src.repositorios.referencias_repo import ReferenciasRepository
+
+
+HORIZONTE_TRATAMIENTOS_DIAS = 7
 
 
 class ActividadService:
@@ -113,49 +122,189 @@ class ActividadService:
                 )
 
     @staticmethod
-    def crear(
-        db: Session,
-        tipo: str,
-        datos: dict,
-        id_usuario: int,
-    ):
-        ActividadService._validar_datos(tipo, datos)
-        ActividadService._verificar_referencias(db, tipo, datos)
-        detalle = None
+    def _separar_detalle(tipo: str, datos: dict) -> dict | None:
+        """Saca de datos los campos de la tabla de detalle según el tipo (modifica datos)."""
         if tipo == "alimentacion":
-            detalle = {"_modelo": ActividadAlimentacionModel, "id_dieta": datos.pop("id_dieta")}
-        elif tipo == "enriquecimiento":
-            detalle = {
+            return {"_modelo": ActividadAlimentacionModel, "id_dieta": datos.pop("id_dieta")}
+        if tipo == "enriquecimiento":
+            return {
                 "_modelo": ActividadEnriquecimientoModel,
                 "tipo_enriquecimiento": datos.pop("tipo_enriquecimiento"),
                 "descripcion_estimulo": datos.pop("descripcion_estimulo"),
             }
-        elif tipo == "entrenamiento":
-            detalle = {
+        if tipo == "entrenamiento":
+            return {
                 "_modelo": ActividadEntrenamientoModel,
                 "objetivo_entrenamiento": datos.pop("objetivo_entrenamiento"),
                 "tipo_refuerzo": datos.pop("tipo_refuerzo"),
             }
+        return None
 
+    @staticmethod
+    def _completar_datos_comunes(tipo: str, datos: dict, id_usuario: int) -> None:
         datos["tipo_actividad"] = tipo
         datos["id_usuario_programo"] = id_usuario
         datos["completada"] = False
         datos["id_usuario_completo"] = None
         datos["fecha_completada"] = None
-        return ActividadRepository.crear(db, datos, detalle)
+
+    @staticmethod
+    def _error_duplicado_por_indice(tipo: str) -> HTTPException:
+        # Dos personas crearon la misma actividad a la vez: lo frena el índice único de la base
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=reglas.mensaje_duplicado(tipo))
+
+    @staticmethod
+    def crear(
+        db: Session,
+        tipo: str,
+        datos: dict,
+        id_usuario: int,
+        permitir_cruce: bool = False,
+    ):
+        ActividadService._validar_datos(tipo, datos)
+        reglas.validar_fecha(datos["fecha_programada"], datos.get("hora_programada"))
+        reglas.validar_duracion(tipo, datos)
+        ActividadService._verificar_referencias(db, tipo, datos)
+        relacionadas = reglas.actividades_relacionadas(
+            db, datos, datos["fecha_programada"], datos["fecha_programada"]
+        )
+        reglas.verificar_duplicado(db, tipo, datos, relacionadas=relacionadas)
+        if not permitir_cruce:
+            cruces = reglas.buscar_cruces(db, datos, relacionadas=relacionadas)
+            if cruces:
+                raise reglas.error_cruce(cruces)
+        detalle = ActividadService._separar_detalle(tipo, datos)
+        ActividadService._completar_datos_comunes(tipo, datos, id_usuario)
+        try:
+            return ActividadRepository.crear(db, datos, detalle)
+        except IntegrityError as error:
+            raise ActividadService._error_duplicado_por_indice(tipo) from error
+
+    @staticmethod
+    def crear_repetida(
+        db: Session,
+        tipo: str,
+        datos: dict,
+        repeticion: dict,
+        id_usuario: int,
+        permitir_cruce: bool = False,
+    ) -> list:
+        """Crea la misma actividad en varias fechas (todos los días o ciertos días) en un solo guardado."""
+        fechas = reglas.fechas_de_repeticion(
+            datos["fecha_programada"],
+            repeticion.get("dias_semana"),
+            repeticion.get("fecha_fin"),
+            repeticion.get("meses"),
+        )
+        ActividadService._validar_datos(tipo, datos)
+        reglas.validar_duracion(tipo, datos)
+        ActividadService._verificar_referencias(db, tipo, datos)
+        # Una sola consulta para revisar duplicados y cruces de todas las fechas
+        relacionadas = reglas.actividades_relacionadas(db, datos, fechas[0], fechas[-1])
+        filas, duplicadas, cruces = [], [], []
+        for fecha in fechas:
+            datos_fecha = {**datos, "fecha_programada": fecha}
+            reglas.validar_fecha(fecha, datos_fecha.get("hora_programada"))
+            if any(reglas.es_duplicado(o, tipo, datos_fecha) for o in relacionadas):
+                duplicadas.append(fecha)
+                continue
+            if not permitir_cruce:
+                cruces.extend(reglas.buscar_cruces(db, datos_fecha, relacionadas=relacionadas))
+            filas.append(datos_fecha)
+        if duplicadas:
+            ejemplos = ", ".join(f.strftime("%d/%m") for f in duplicadas[:5])
+            mas = f" y {len(duplicadas) - 5} más" if len(duplicadas) > 5 else ""
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Ya existen actividades iguales el {ejemplos}{mas}",
+            )
+        if cruces:
+            raise reglas.error_cruce(cruces)
+        preparadas = []
+        for datos_fecha in filas:
+            detalle = ActividadService._separar_detalle(tipo, datos_fecha)
+            ActividadService._completar_datos_comunes(tipo, datos_fecha, id_usuario)
+            preparadas.append((datos_fecha, detalle))
+        try:
+            return ActividadRepository.crear_varias(db, preparadas)
+        except IntegrityError as error:
+            raise ActividadService._error_duplicado_por_indice(tipo) from error
 
     @staticmethod
     def crear_desde_esquema(
         db: Session,
         datos: ActividadBaseCreate,
         id_usuario: int,
+        permitir_cruce: bool = False,
     ):
         return ActividadService.crear(
             db,
             datos.tipo_actividad,
             datos.model_dump(exclude={"tipo_actividad"}, exclude_none=True),
             id_usuario,
+            permitir_cruce,
         )
+
+    @staticmethod
+    def _editable(actividad) -> None:
+        if actividad.tipo_actividad == "tratamiento":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Las dosis de un tratamiento se cambian desde el tratamiento",
+            )
+        if actividad.completada:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="La actividad ya está completada; márcala como pendiente para cambiarla",
+            )
+
+    @staticmethod
+    def actualizar(db: Session, id_actividad: int, cambios: dict, permitir_cruce: bool = False):
+        actividad = ActividadService.actividad_o_404(db, id_actividad)
+        ActividadService._editable(actividad)
+        tipo = actividad.tipo_actividad
+        actual = actividad_a_dict(actividad)
+        campos = (
+            "id_animal", "id_recinto", "fecha_programada", "hora_programada", "duracion_horas",
+            "duracion_minutos", "observaciones", "id_dieta", "tipo_enriquecimiento",
+            "descripcion_estimulo", "objetivo_entrenamiento", "tipo_refuerzo",
+        )
+        datos = {campo: actual[campo] for campo in campos}
+        datos.update(cambios)
+        ActividadService._validar_datos(tipo, datos)
+        if (
+            datos["fecha_programada"] != actividad.fecha_programada
+            or datos["hora_programada"] != actividad.hora_programada
+        ):
+            reglas.validar_fecha(datos["fecha_programada"], datos["hora_programada"])
+        reglas.validar_duracion(tipo, datos)
+        relacionadas = reglas.actividades_relacionadas(
+            db, datos, datos["fecha_programada"], datos["fecha_programada"]
+        )
+        reglas.verificar_duplicado(db, tipo, datos, excluir_id=id_actividad, relacionadas=relacionadas)
+        if not permitir_cruce:
+            cruces = reglas.buscar_cruces(db, datos, excluir_id=id_actividad, relacionadas=relacionadas)
+            if cruces:
+                raise reglas.error_cruce(cruces)
+        detalle = ActividadService._separar_detalle(tipo, datos)
+        if detalle is not None:
+            detalle.pop("_modelo")
+        en_actividad = {
+            campo: datos[campo]
+            for campo in (
+                "fecha_programada", "hora_programada", "duracion_horas", "duracion_minutos", "observaciones",
+            )
+        }
+        try:
+            return ActividadRepository.actualizar(db, actividad, en_actividad, detalle or {})
+        except IntegrityError as error:
+            raise ActividadService._error_duplicado_por_indice(tipo) from error
+
+    @staticmethod
+    def eliminar(db: Session, id_actividad: int) -> None:
+        actividad = ActividadService.actividad_o_404(db, id_actividad)
+        ActividadService._editable(actividad)
+        ActividadRepository.eliminar(db, actividad)
 
     @staticmethod
     def actividad_o_404(db: Session, id_actividad: int):
@@ -188,6 +337,7 @@ class ActividadService:
             "enriquecimiento",
             "entrenamiento",
             "limpieza",
+            "tratamiento",
         }:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -217,6 +367,11 @@ class ActividadService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="La actividad ya está completada",
             )
+        if actividad.fecha_programada > reglas.ahora().date():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Solo se pueden completar actividades de hoy o de días anteriores",
+            )
         return ActividadRepository.completar(
             db,
             actividad,
@@ -225,6 +380,16 @@ class ActividadService:
             actualizar_observaciones,
             ahora_local(),
         )
+
+    @staticmethod
+    def reabrir(db: Session, id_actividad: int):
+        actividad = ActividadService.actividad_o_404(db, id_actividad)
+        if not actividad.completada:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="La actividad no está completada",
+            )
+        return ActividadRepository.reabrir(db, actividad)
 
     @staticmethod
     def generar_tomas(
@@ -258,26 +423,31 @@ class ActividadService:
             dieta.frecuencia_valor,
             dieta.frecuencia_unidad,
         )
-        resultado = []
-        for fecha, hora in horarios:
-            toma = ActividadRepository.obtener_toma(db, dieta.id_dieta, fecha, hora)
-            if toma is None:
-                toma = ActividadService.crear(
-                    db,
-                    "alimentacion",
-                    {
-                        "id_animal": dieta.id_animal,
-                        "id_dieta": dieta.id_dieta,
-                        "fecha_programada": fecha,
-                        "hora_programada": hora,
-                        "duracion_horas": 0,
-                        "duracion_minutos": 0,
-                        "observaciones": None,
-                    },
-                    id_usuario,
+        # Se hace en lote: con la base remota cada ida y vuelta cuesta ~200 ms, así que crear las
+        # tomas una por una (unas 5 consultas cada una) superaba el tiempo de espera del gateway.
+        def tomas_existentes():
+            return {
+                (toma.fecha_programada, toma.hora_programada): toma
+                for toma in ActividadRepository.listar_tomas_rango(
+                    db, dieta.id_dieta, fecha_inicio, fecha_limite
                 )
-            resultado.append(toma)
-        return resultado
+            }
+
+        existentes = tomas_existentes()
+        faltantes = [horario for horario in horarios if horario not in existentes]
+        if faltantes:
+            # Las mismas validaciones que una alimentación individual, una sola vez para toda la dieta
+            ActividadService._verificar_referencias(
+                db,
+                "alimentacion",
+                {"id_animal": dieta.id_animal, "id_dieta": dieta.id_dieta},
+            )
+            ActividadRepository.crear_tomas(
+                db, dieta.id_dieta, dieta.id_animal, faltantes, id_usuario
+            )
+            # Se vuelven a leer en una sola consulta (ya con su id y su detalle)
+            existentes = tomas_existentes()
+        return [existentes[horario] for horario in horarios]
 
     @staticmethod
     def renovar_horizonte(db: Session, id_usuario: int) -> list:
@@ -292,6 +462,196 @@ class ActividadService:
                 hoy_local() + timedelta(days=HORIZONTE_TOMAS_DIAS - 1),
             )
         ]
+
+    @staticmethod
+    def _tratamiento_para_generar(db: Session, id_tratamiento: int):
+        """Datos del tratamiento y su animal; falla si no existe o no tiene frecuencia y hora."""
+        tabla_tratamiento = Base.metadata.tables["gestion_animal.tratamiento"]
+        tabla_diagnostico = Base.metadata.tables["gestion_animal.diagnostico"]
+        consulta = (
+            select(
+                tabla_tratamiento.c.id_tratamiento,
+                tabla_tratamiento.c.fecha_inicio,
+                tabla_tratamiento.c.fecha_fin,
+                tabla_tratamiento.c.frecuencia_valor,
+                tabla_tratamiento.c.frecuencia_unidad,
+                tabla_tratamiento.c.hora_inicio,
+                tabla_tratamiento.c.estado,
+                tabla_diagnostico.c.id_animal,
+            )
+            .select_from(
+                tabla_tratamiento.join(
+                    tabla_diagnostico,
+                    tabla_diagnostico.c.id_diagnostico
+                    == tabla_tratamiento.c.id_diagnostico,
+                )
+            )
+            .where(tabla_tratamiento.c.id_tratamiento == id_tratamiento)
+        )
+        tratamiento = db.execute(consulta).mappings().first()
+        if tratamiento is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tratamiento no encontrado",
+            )
+        if (
+            tratamiento["frecuencia_valor"] is None
+            or tratamiento["frecuencia_unidad"] is None
+            or tratamiento["hora_inicio"] is None
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="El tratamiento requiere frecuencia y hora de inicio para generar actividades",
+            )
+        return tratamiento
+
+    @staticmethod
+    def _conservar_dosis(
+        db: Session,
+        id_tratamiento: int,
+        horarios_esperados: set,
+        ahora: datetime,
+    ) -> dict:
+        """Quita las dosis futuras pendientes que ya no corresponden y devuelve las que se conservan."""
+        conservadas = {}
+        for actividad in ActividadRepository.obtener_actividades_tratamiento(db, id_tratamiento):
+            detalle = actividad.tratamiento
+            programacion = (detalle.fecha_programada, detalle.hora_programada)
+            instante = datetime.combine(*programacion)
+            sobrante = (
+                not actividad.completada
+                and instante > ahora
+                and programacion not in horarios_esperados
+            )
+            if sobrante:
+                ActividadRepository.eliminar_actividad_tratamiento(db, actividad)
+            else:
+                conservadas[programacion] = actividad
+        return conservadas
+
+    @staticmethod
+    def _crear_dosis(db: Session, tratamiento, id_usuario: int, fecha: date, hora: time):
+        """Crea la dosis; si otra petición la creó a la vez, devuelve la que ya existe."""
+        id_tratamiento = tratamiento["id_tratamiento"]
+        try:
+            return ActividadRepository.crear(
+                db,
+                {
+                    "tipo_actividad": "tratamiento",
+                    "id_animal": tratamiento["id_animal"],
+                    "fecha_programada": fecha,
+                    "hora_programada": hora,
+                    "duracion_horas": 0,
+                    "duracion_minutos": 0,
+                    "id_usuario_programo": id_usuario,
+                    "completada": False,
+                    "observaciones": "Dosis programada de tratamiento",
+                    "id_usuario_completo": None,
+                    "fecha_completada": None,
+                },
+                {
+                    "_modelo": ActividadTratamientoModel,
+                    "id_tratamiento": id_tratamiento,
+                    "fecha_programada": fecha,
+                    "hora_programada": hora,
+                },
+            )
+        except IntegrityError:
+            actividad = ActividadRepository.obtener_actividad_tratamiento(
+                db, id_tratamiento, fecha, hora
+            )
+            if actividad is None:
+                raise
+            return actividad
+
+    @staticmethod
+    def generar_tratamiento(db: Session, id_tratamiento: int, id_usuario: int) -> list:
+        tratamiento = ActividadService._tratamiento_para_generar(db, id_tratamiento)
+
+        ahora = ahora_local()
+        horarios = (
+            ActividadService._horarios_tratamiento(
+                tratamiento["fecha_inicio"],
+                tratamiento["fecha_fin"],
+                tratamiento["hora_inicio"],
+                tratamiento["frecuencia_valor"],
+                tratamiento["frecuencia_unidad"],
+                ahora,
+            )
+            if tratamiento["estado"] == "en_curso"
+            else []
+        )
+        # Las dosis que se conservan se buscan en memoria, sin una consulta por horario
+        conservadas = ActividadService._conservar_dosis(db, id_tratamiento, set(horarios), ahora)
+
+        resultado = []
+        for fecha, hora in horarios:
+            actividad = conservadas.get((fecha, hora))
+            if actividad is None:
+                actividad = ActividadService._crear_dosis(db, tratamiento, id_usuario, fecha, hora)
+            resultado.append(actividad)
+        return resultado
+
+    @staticmethod
+    def renovar_horizonte_tratamientos(db: Session, id_usuario: int) -> list:
+        tabla_tratamiento = Base.metadata.tables["gestion_animal.tratamiento"]
+        ids = db.execute(
+            select(tabla_tratamiento.c.id_tratamiento).where(
+                tabla_tratamiento.c.estado == "en_curso",
+                tabla_tratamiento.c.frecuencia_valor.is_not(None),
+                tabla_tratamiento.c.frecuencia_unidad.is_not(None),
+                tabla_tratamiento.c.hora_inicio.is_not(None),
+            )
+        ).scalars().all()
+        return [
+            actividad
+            for id_tratamiento in ids
+            for actividad in ActividadService.generar_tratamiento(
+                db, id_tratamiento, id_usuario
+            )
+        ]
+
+    @staticmethod
+    def _horarios_tratamiento(
+        fecha_inicio: date,
+        fecha_fin: date | None,
+        hora_inicio: time,
+        frecuencia_valor: int,
+        frecuencia_unidad: str,
+        ahora: datetime,
+    ) -> list[tuple[date, time]]:
+        hoy = ahora.date()
+        fecha_limite = hoy + timedelta(days=HORIZONTE_TRATAMIENTOS_DIAS - 1)
+        if fecha_fin is not None:
+            fecha_limite = min(fecha_limite, fecha_fin)
+        if fecha_limite < max(fecha_inicio, hoy):
+            return []
+
+        primer_instante = datetime.combine(fecha_inicio, hora_inicio)
+        inicio_horizonte = max(ahora, datetime.combine(hoy, time.min))
+        fin_horizonte = datetime.combine(fecha_limite, time.max)
+        paso_segundos = frecuencia_valor * (
+            60 * 60 if frecuencia_unidad == "horas" else 24 * 60 * 60
+        )
+        if primer_instante < inicio_horizonte:
+            segundos_hasta_inicio = (inicio_horizonte - primer_instante).total_seconds()
+            saltos = ceil(segundos_hasta_inicio / paso_segundos)
+            desplazamiento = saltos * paso_segundos
+            if desplazamiento > (fin_horizonte - primer_instante).total_seconds():
+                return []
+            primer_instante += timedelta(seconds=desplazamiento)
+        if primer_instante > fin_horizonte:
+            return []
+
+        horarios = []
+        instante = primer_instante
+        while instante <= fin_horizonte:
+            if instante >= inicio_horizonte:
+                horarios.append((instante.date(), instante.time()))
+            if paso_segundos > (fin_horizonte - instante).total_seconds():
+                break
+            instante += timedelta(seconds=paso_segundos)
+        return horarios
 
     @staticmethod
     def _horarios_tomas(

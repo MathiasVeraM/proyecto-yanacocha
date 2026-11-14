@@ -55,13 +55,17 @@ export interface Animal {
   nombre: string | null
   id_taxonomia: number
   id_recinto: number
-  edad_aproximada: string | null
+  edad_anios: number | null
+  edad_meses: number | null
+  edad_aproximada?: string | null
   sexo: Sexo | null
   estado_actual: EstadoAnimal
   fecha_ingreso: string
   url_imagen: string | null
   taxonomia: Taxonomia
   recinto: Recinto
+  // Tiene un tratamiento en curso hoy (lo calcula el servicio en la misma consulta del listado)
+  tiene_tratamiento_en_curso?: boolean
 }
 
 // El código no se envía: lo genera el servicio a partir del nombre científico.
@@ -70,7 +74,8 @@ export interface AnimalCreate {
   id_taxonomia: number
   id_recinto: number
   nombre?: string | null
-  edad_aproximada?: string | null
+  edad_anios: number
+  edad_meses: number
   sexo?: Sexo | null
   estado_actual?: EstadoAnimal
   fecha_ingreso?: string
