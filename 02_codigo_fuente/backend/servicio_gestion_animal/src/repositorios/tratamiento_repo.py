@@ -29,6 +29,17 @@ class TratamientoRepository:
         )
 
     @staticmethod
+    def obtener_por_animal(db: Session, id_animal: int):
+        # Una consulta con JOIN (más una para los medicamentos), sin importar cuántos diagnósticos tenga
+        return (
+            db.query(TratamientoModel)
+            .join(DiagnosticoModel, DiagnosticoModel.id_diagnostico == TratamientoModel.id_diagnostico)
+            .filter(DiagnosticoModel.id_animal == id_animal)
+            .order_by(TratamientoModel.fecha_inicio.desc(), TratamientoModel.id_tratamiento.desc())
+            .all()
+        )
+
+    @staticmethod
     def obtener_por_id(db: Session, id_tratamiento: int):
         return (
             db.query(TratamientoModel)

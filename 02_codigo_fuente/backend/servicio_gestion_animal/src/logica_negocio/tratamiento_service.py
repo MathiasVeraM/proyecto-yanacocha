@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+from src.logica_negocio.animal_service import AnimalService
 from src.logica_negocio.diagnostico_service import DiagnosticoService
 from src.logica_negocio.utilidades import datos_a_actualizar
 from src.modelos.fechas import hoy_local
@@ -46,6 +47,11 @@ class TratamientoService:
         if not tratamiento:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tratamiento no encontrado")
         return tratamiento
+
+    @staticmethod
+    def listar_por_animal(db: Session, id_animal: int):
+        AnimalService.animal_o_404(db, id_animal)
+        return TratamientoRepository.obtener_por_animal(db, id_animal)
 
     @staticmethod
     def listar_por_diagnostico(db: Session, id_diagnostico: int):

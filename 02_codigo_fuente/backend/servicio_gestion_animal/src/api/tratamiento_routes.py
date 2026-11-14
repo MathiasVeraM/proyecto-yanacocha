@@ -21,6 +21,13 @@ def contar_animales_con_tratamiento_en_curso(db: Session = Depends(get_db)):
     return TratamientoService.contar_animales_con_tratamiento_en_curso(db)
 
 
+@router.get("/{id_animal}/tratamientos", response_model=List[TratamientoResponse])
+def listar_tratamientos_del_animal(id_animal: int, db: Session = Depends(get_db)):
+    # Todos los tratamientos de todos los diagnósticos del animal en una sola petición
+    # (la ficha pedía uno por diagnóstico)
+    return TratamientoService.listar_por_animal(db, id_animal)
+
+
 @router.get("/diagnosticos/{id_diagnostico}/tratamientos", response_model=List[TratamientoResponse])
 def listar_tratamientos(id_diagnostico: int, db: Session = Depends(get_db)):
     return TratamientoService.listar_por_diagnostico(db, id_diagnostico)

@@ -70,6 +70,7 @@ ENDPOINTS = [
     ("PUT", f"{URL}/diagnosticos/1", {"diagnostico": "X"}),
     ("GET", f"{URL}/1/signos-vitales", None),
     ("GET", f"{URL}/metricas/animales-con-tratamiento-en-curso", None),
+    ("GET", f"{URL}/1/tratamientos", None),
     ("GET", f"{URL}/diagnosticos/1/tratamientos", None),
     ("POST", f"{URL}/diagnosticos/1/tratamientos", {"medicamento_o_proceso": "X"}),
     ("PUT", f"{URL}/tratamientos/1", {"estado": "finalizado"}),
@@ -820,3 +821,40 @@ def test_generar_actividades_de_tratamiento_inexistente_404(client, h):
         headers=h,
     )
     assert respuesta.status_code == 404
+
+
+def test_listar_tratamientos_del_animal_en_una_sola_peticion(client, h, crear_animal):
+    # La ficha usa este endpoint en lugar de pedir los tratamientos diagnóstico por diagnóstico
+    animal = crear_animal()
+    otro = crear_animal()
+    d1 = _crear_diagnostico(client, h, animal["id_animal"])
+    d2 = _crear_diagnostico(client, h, animal["id_animal"], diagnostico="Fractura")
+    d_otro = _crear_diagnostico(client, h, otro["id_animal"])
+    t1 = _crear_tratamiento(
+        client, h, d1["id_diagnostico"], descripcion="Suero",
+        medicamentos=[{"nombre_medicamento": "Lactato", "dosis_ml": 1.5}],
+    )
+    t2 = _crear_tratamiento(client, h, d2["id_diagnostico"], descripcion="Inmovilizar")
+    _crear_tratamiento(client, h, d_otro["id_diagnostico"], descripcion="De otro animal")
+
+    resp = client.get(f"{URL}/{animal['id_animal']}/tratamientos", headers=h)
+
+    assert resp.status_code == 200
+    tratamientos = resp.json()
+    # Solo los del animal, de todos sus diagnósticos, con sus medicamentos
+    assert {t["id_tratamiento"] for t in tratamientos} == {t1["id_tratamiento"], t2["id_tratamiento"]}
+    assert {t["id_diagnostico"] for t in tratamientos} == {d1["id_diagnostico"], d2["id_diagnostico"]}
+    suero = next(t for t in tratamientos if t["id_tratamiento"] == t1["id_tratamiento"])
+    assert [m["nombre_medicamento"] for m in suero["medicamentos"]] == ["Lactato"]
+
+
+def test_listar_tratamientos_del_animal_sin_tratamientos(client, h, crear_animal):
+    animal = crear_animal()
+    resp = client.get(f"{URL}/{animal['id_animal']}/tratamientos", headers=h)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_listar_tratamientos_de_animal_inexistente_404(client, h):
+    resp = client.get(f"{URL}/999/tratamientos", headers=h)
+    assert resp.status_code == 404
