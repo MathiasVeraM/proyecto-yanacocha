@@ -56,7 +56,7 @@ services:
     environment:
       <<: *psql
     volumes:
-      - ./docker/db-init.sh:/docker/db-init.sh:ro
+      - ./db-init.sh:/docker/db-init.sh:ro
       - ./servicio_accesos/sql:/sql/accesos:ro
       - ./servicio_gestion_animal/sql:/sql/gestion_animal:ro
       - ./servicio_actividades/sql:/sql/actividades:ro
@@ -66,7 +66,8 @@ services:
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
     read_only: true
-    tmpfs: ["/tmp"]
+    # La imagen de postgres declara un VOLUME en el directorio de datos; con tmpfs no se crea un volumen anónimo
+    tmpfs: ["/tmp", "/var/lib/postgresql/data"]
     networks: [datos]
 
   # One-shot: crea el primer administrador (crear_admin.py es idempotente)

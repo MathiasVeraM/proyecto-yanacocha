@@ -88,8 +88,10 @@ services:
     entrypoint: ["/bin/sh", "/docker/db-init.sh"]
     environment:
       <<: *psql
+    # La imagen de postgres declara un VOLUME en el directorio de datos; con tmpfs no se crea un volumen anónimo
+    tmpfs: ["/tmp", "/var/lib/postgresql/data"]
     volumes:
-      - ./docker/db-init.sh:/docker/db-init.sh:ro
+      - ./db-init.sh:/docker/db-init.sh:ro
       - ./servicio_accesos/sql:/sql/accesos:ro
       - ./servicio_gestion_animal/sql:/sql/gestion_animal:ro
       - ./servicio_actividades/sql:/sql/actividades:ro
