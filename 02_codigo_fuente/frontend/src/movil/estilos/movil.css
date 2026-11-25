@@ -1,0 +1,74 @@
+/* Estilos de la app móvil. Reutilizan la paleta y tipografía de main.css; todo cuelga de
+   clases .m-* o de html.movil para no afectar a la versión web. */
+
+html.movil,
+html.movil body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.movil body {
+  font-size: 16px;
+}
+
+html.movil button {
+  touch-action: manipulation;
+}
+
+.m-tipo-alimentacion { --m-tipo: #2e6b34; --m-tipo-soft: #e2ebd6; }
+.m-tipo-enriquecimiento { --m-tipo: #87661a; --m-tipo-soft: #f5e9c4; }
+.m-tipo-entrenamiento { --m-tipo: #2d6a9a; --m-tipo-soft: #dde9f3; }
+.m-tipo-limpieza { --m-tipo: #4a538f; --m-tipo-soft: #e3e6f3; }
+.m-tipo-tratamiento { --m-tipo: #a8326a; --m-tipo-soft: #f6dfeb; }
+
+/* Botones grandes: objetivo táctil mínimo de 48 px */
+.m-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 20px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.m-btn-primario { background: var(--color-primary); color: #fff; }
+.m-btn-primario:active:not(:disabled) { background: var(--color-primary-hover); }
+.m-btn-secundario { background: var(--color-surface-alt); border: 1px solid var(--color-border-strong); color: var(--color-text); }
+.m-btn-bloque { width: 100%; }
+
+.m-input {
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 14px;
+  background: var(--color-input);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-size: 16px;
+  outline: none;
+}
+
+.m-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(46, 107, 52, 0.15);
+}
+
+.m-chip {
+  min-height: 48px;
+  padding: 0 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.m-chip[aria-pressed='true'] {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}

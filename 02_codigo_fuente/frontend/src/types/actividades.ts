@@ -192,3 +192,30 @@ export interface ActividadCambios {
   objetivo_entrenamiento?: string
   tipo_refuerzo?: string
 }
+
+// ---- Sincronización de lo registrado sin conexión (app móvil) ----
+
+export interface SincronizacionCompletada {
+  id_actividad: number
+  fecha_completada: string
+  observaciones?: string
+}
+
+export interface SincronizacionObservacion extends ObservacionCreate {
+  id_cliente: string
+  id_actividad: number
+  fecha_registro: string
+}
+
+export interface ResultadoSincronizacion {
+  id_actividad: number
+  id_cliente: string | null
+  // creada: se guardó · duplicada: ya estaba guardada · rechazada: no se puede guardar nunca
+  resultado: 'creada' | 'duplicada' | 'rechazada'
+  detalle: string | null
+}
+
+export interface RespuestaSincronizacion {
+  completadas: ResultadoSincronizacion[]
+  observaciones: ResultadoSincronizacion[]
+}

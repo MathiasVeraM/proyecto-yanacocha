@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Yanacocha</string>
+    <string name="title_activity_main">Yanacocha</string>
+    <string name="package_name">ec.yanacocha.fauna</string>
+    <string name="custom_url_scheme">ec.yanacocha.fauna</string>
+</resources>

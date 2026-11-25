@@ -13,6 +13,9 @@ import type {
   Observacion,
   ObservacionCreate,
   ReferenciasPlanificacion,
+  RespuestaSincronizacion,
+  SincronizacionCompletada,
+  SincronizacionObservacion,
   TipoEnriquecimiento,
 } from '@/types/actividades'
 
@@ -65,6 +68,10 @@ export const actividadesApi = {
 
   completar: (id: number, observaciones?: string) =>
     request<Actividad>('POST', `${URL}/${id}/completar`, { observaciones }),
+
+  // App móvil: sube de una vez lo completado y observado sin conexión (idempotente)
+  sincronizar: (lote: { completadas: SincronizacionCompletada[]; observaciones: SincronizacionObservacion[] }) =>
+    request<RespuestaSincronizacion>('POST', `${URL}/sincronizar`, lote),
 
   // Vuelve a dejar pendiente una actividad completada
   reabrir: (id: number) => request<Actividad>('POST', `${URL}/${id}/reabrir`),
