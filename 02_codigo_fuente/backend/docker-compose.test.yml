@@ -1,0 +1,184 @@
+# Entorno de PRUEBAS DE INTEGRACIÓN: gateway, los tres servicios y una base PostgreSQL EFÍMERA.
+# Es un archivo independiente (no un override de docker-compose.yml) a propósito: así no puede heredar
+# volúmenes, puertos ni credenciales del entorno de desarrollo.
+#
+#   Local:    ver 03_pruebas/integracion/README.md (o la sección "Pruebas de integración" del README de backend)
+#   Pipeline: .github/workflows/integracion.yml (genera los secretos al vuelo, nada queda en el repositorio)
+#
+#   docker compose --env-file .env.test -f docker-compose.test.yml up -d --build --wait
+#   ... pytest ...
+#   docker compose --env-file .env.test -f docker-compose.test.yml down -v
+#
+# Garantías:
+#   - La base vive solo en memoria (tmpfs): sin volumen, desaparece al terminar. Nombre y usuario propios.
+#   - Solo el gateway publica un puerto, y solo en 127.0.0.1. La base y los servicios no son alcanzables desde fuera.
+#   - Las redes de datos y de servicios son internas: sin salida a internet.
+#   - Todos los contenedores: no-new-privileges y cap_drop ALL; los de la aplicación, además, sistema de archivos de solo lectura.
+name: yanacocha-test
+
+# ---------- Bloques reutilizables ----------
+
+x-endurecido: &endurecido
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs: ["/tmp"]
+  restart: "no"
+
+# La MISMA clave para el gateway y los tres servicios. Obligatoria y sin valor por defecto
+# (accesos tiene un "fallback_secret" en su config.py que aquí nunca debe usarse).
+x-jwt: &jwt
+  SECRET_KEY: ${SECRET_KEY:?Define SECRET_KEY (el pipeline la genera; en local, ver .env.test.example)}
+  ALGORITHM: HS256
+
+# Base de datos fija de pruebas: nombre y usuario distintos de cualquier entorno real
+x-database-url: &database-url postgresql://yanacocha_test:${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD (ver .env.test.example)}@db:5432/yanacocha_test
+
+x-psql: &psql
+  PGHOST: db
+  PGUSER: yanacocha_test
+  PGPASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD (ver .env.test.example)}
+  PGDATABASE: yanacocha_test
+  PGCLIENTENCODING: UTF8
+
+x-accesos-imagen: &accesos-imagen
+  build:
+    context: ./servicio_accesos
+    target: runtime
+  image: yanacocha-accesos:test
+
+x-espera-inicializacion: &espera-inicializacion
+  db:
+    condition: service_healthy
+  admin-init:
+    condition: service_completed_successfully
+
+services:
+  db:
+    image: postgres:17.6-alpine
+    restart: "no"
+    # Se ejecuta como el usuario postgres (uid 70): no necesita ninguna capacidad de Linux
+    user: postgres
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
+    environment:
+      POSTGRES_DB: yanacocha_test
+      POSTGRES_USER: yanacocha_test
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD (ver .env.test.example)}
+    # Sin volumen: los datos viven en memoria y se pierden al detener el contenedor
+    tmpfs:
+      - /var/lib/postgresql/data:uid=70,gid=70,mode=0700
+      - /var/run/postgresql:uid=70,gid=70,mode=0755
+      - /tmp
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+    networks: [datos]
+
+  # One-shot: ejecuta los scripts SQL en orden (montados en solo lectura, no se copian a ninguna imagen)
+  db-init:
+    <<: *endurecido
+    image: postgres:17.6-alpine
+    user: postgres
+    entrypoint: ["/bin/sh", "/docker/db-init.sh"]
+    environment:
+      <<: *psql
+    volumes:
+      - ./docker/db-init.sh:/docker/db-init.sh:ro
+      - ./servicio_accesos/sql:/sql/accesos:ro
+      - ./servicio_gestion_animal/sql:/sql/gestion_animal:ro
+      - ./servicio_actividades/sql:/sql/actividades:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [datos]
+
+  # One-shot: crea el primer administrador de pruebas con crear_admin.py
+  admin-init:
+    <<: [*accesos-imagen, *endurecido]
+    command: ["python", "crear_admin.py"]
+    environment:
+      <<: *jwt
+      DATABASE_URL: *database-url
+      ADMIN_CORREO: ${ADMIN_CORREO:?Define ADMIN_CORREO (ver .env.test.example)}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Define ADMIN_PASSWORD (ver .env.test.example)}
+    healthcheck:
+      disable: true
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    networks: [datos]
+
+  accesos:
+    <<: [*accesos-imagen, *endurecido]
+    environment:
+      <<: *jwt
+      DATABASE_URL: *database-url
+      ACCESS_TOKEN_EXPIRE_HOURS: "8"
+    depends_on: *espera-inicializacion
+    networks: [datos, servicios]
+    # El HEALTHCHECK (GET /health) viene definido en el Dockerfile
+
+  gestion-animal:
+    <<: *endurecido
+    build:
+      context: ./servicio_gestion_animal
+      target: runtime
+    image: yanacocha-gestion-animal:test
+    environment:
+      <<: *jwt
+      DATABASE_URL: *database-url
+      ACTIVIDADES_SERVICE_URL: http://actividades:8003
+    depends_on: *espera-inicializacion
+    networks: [datos, servicios]
+
+  actividades:
+    <<: *endurecido
+    build:
+      context: ./servicio_actividades
+      target: runtime
+    image: yanacocha-actividades:test
+    environment:
+      <<: *jwt
+      DATABASE_URL: *database-url
+    depends_on: *espera-inicializacion
+    networks: [datos, servicios]
+
+  gateway:
+    <<: *endurecido
+    build:
+      context: ./gateway
+      target: runtime
+    image: yanacocha-gateway:test
+    environment:
+      <<: *jwt
+      ACCESSOS_SERVICE_URL: http://accesos:8001
+      GESTION_ANIMAL_SERVICE_URL: http://gestion-animal:8002
+      ACTIVIDADES_SERVICE_URL: http://actividades:8003
+      CORS_ORIGINS: http://localhost:5173
+    ports:
+      # Único puerto publicado, solo en la máquina local
+      - "127.0.0.1:${GATEWAY_PORT:-8000}:8000"
+    depends_on:
+      accesos:
+        condition: service_healthy
+      gestion-animal:
+        condition: service_healthy
+      actividades:
+        condition: service_healthy
+    networks: [servicios, edge]
+
+networks:
+  # La base de datos solo es alcanzable desde los servicios (el gateway no entra aquí)
+  datos:
+    internal: true
+  # Tráfico gateway <-> servicios y entre servicios
+  servicios:
+    internal: true
+  # Solo para poder publicar el puerto del gateway en el host
+  edge:

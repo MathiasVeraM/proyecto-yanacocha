@@ -8,8 +8,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Variables de entorno y secretos
+# Variables de entorno y secretos (solo se versionan los archivos *.example)
 .env
+.env.*
+!.env.example
+!.env.test.example
 
 # Cobertura de pruebas de manera local
 .coverage

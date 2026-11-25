@@ -1,0 +1,83 @@
+# Levanta el gateway y los tres servicios en contenedores. Pensado para desarrollo y para el servidor.
+#
+# NO incluye base de datos: cada servicio usa el DATABASE_URL de SU PROPIO .env, igual que al
+# ejecutarlo a mano. Los secretos (DATABASE_URL, SECRET_KEY, ...) no están en este archivo.
+#
+#   Requisitos: que existan  gateway/.env, servicio_accesos/.env, servicio_gestion_animal/.env y
+#   servicio_actividades/.env  (ver el .env.example de cada carpeta). La SECRET_KEY debe ser la misma en los cuatro.
+#
+#   docker compose up -d --build --wait
+#   docker compose down
+#
+# Con una base PostgreSQL local y limpia (sin tocar la real), sumar el archivo docker-compose.local-db.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.local-db.yml up -d --build --wait
+#
+# Las pruebas de integración usan docker-compose.test.yml (base efímera, independiente de este archivo).
+name: yanacocha-dev
+
+x-endurecido: &endurecido
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs: ["/tmp"]
+  restart: unless-stopped
+
+services:
+  accesos:
+    <<: *endurecido
+    build:
+      context: ./servicio_accesos
+      target: runtime
+    image: yanacocha-accesos:local
+    env_file: ./servicio_accesos/.env
+    networks: [backend]
+    # El HEALTHCHECK (GET /health) viene definido en el Dockerfile
+
+  gestion-animal:
+    <<: *endurecido
+    build:
+      context: ./servicio_gestion_animal
+      target: runtime
+    image: yanacocha-gestion-animal:local
+    env_file: ./servicio_gestion_animal/.env
+    environment:
+      # Dentro de Docker los servicios se llaman por su nombre, no por localhost
+      ACTIVIDADES_SERVICE_URL: http://actividades:8003
+    networks: [backend]
+
+  actividades:
+    <<: *endurecido
+    build:
+      context: ./servicio_actividades
+      target: runtime
+    image: yanacocha-actividades:local
+    env_file: ./servicio_actividades/.env
+    networks: [backend]
+
+  gateway:
+    <<: *endurecido
+    build:
+      context: ./gateway
+      target: runtime
+    image: yanacocha-gateway:local
+    env_file: ./gateway/.env
+    environment:
+      ACCESSOS_SERVICE_URL: http://accesos:8001
+      GESTION_ANIMAL_SERVICE_URL: http://gestion-animal:8002
+      ACTIVIDADES_SERVICE_URL: http://actividades:8003
+    ports:
+      # Único puerto publicado. En local escucha solo en 127.0.0.1; en el servidor se puede
+      # cambiar con GATEWAY_BIND_ADDRESS=0.0.0.0 (ver .env.example)
+      - "${GATEWAY_BIND_ADDRESS:-127.0.0.1}:${GATEWAY_PORT:-8000}:8000"
+    depends_on:
+      accesos:
+        condition: service_healthy
+      gestion-animal:
+        condition: service_healthy
+      actividades:
+        condition: service_healthy
+    networks: [backend]
+
+networks:
+  # Tráfico entre el gateway y los servicios, y salida hacia la base de datos y servicios externos
+  backend:

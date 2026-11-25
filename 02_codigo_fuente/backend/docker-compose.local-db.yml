@@ -1,0 +1,119 @@
+# Complemento de docker-compose.yml: agrega una base PostgreSQL LOCAL y LIMPIA (con volumen) y apunta a ella
+# los tres servicios. Sirve para probar sin tocar la base real.
+#
+#   cp .env.example .env     # y completar POSTGRES_PASSWORD
+#   docker compose -f docker-compose.yml -f docker-compose.local-db.yml up -d --build --wait
+#   docker compose -f docker-compose.yml -f docker-compose.local-db.yml down      # conserva los datos; down -v los borra
+#
+# Orden de arranque: db -> db-init (scripts SQL) -> admin-init (primer administrador) -> servicios -> gateway.
+# El DATABASE_URL de los .env de cada servicio NO se usa aquí: lo reemplaza el de este archivo.
+# El administrador se crea con ADMIN_CORREO y ADMIN_PASSWORD de servicio_accesos/.env.
+name: yanacocha-dev
+
+x-database-url: &database-url postgresql://${POSTGRES_USER:-yanacocha}:${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env (ver .env.example)}@db:5432/${POSTGRES_DB:-yanacocha_dev}
+
+x-psql: &psql
+  PGHOST: db
+  PGUSER: ${POSTGRES_USER:-yanacocha}
+  PGPASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env (ver .env.example)}
+  PGDATABASE: ${POSTGRES_DB:-yanacocha_dev}
+  PGCLIENTENCODING: UTF8
+
+x-espera-inicializacion: &espera-inicializacion
+  db:
+    condition: service_healthy
+  admin-init:
+    condition: service_completed_successfully
+
+services:
+  db:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-yanacocha_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-yanacocha}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env (ver .env.example)}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    security_opt: ["no-new-privileges:true"]
+    # El primer arranque necesita estas capacidades para preparar el directorio de datos
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [datos]
+
+  # One-shot: ejecuta los scripts SQL en orden (montados en solo lectura, no se copian a ninguna imagen)
+  db-init:
+    image: postgres:17.6-alpine
+    restart: "no"
+    user: postgres
+    entrypoint: ["/bin/sh", "/docker/db-init.sh"]
+    environment:
+      <<: *psql
+    volumes:
+      - ./docker/db-init.sh:/docker/db-init.sh:ro
+      - ./servicio_accesos/sql:/sql/accesos:ro
+      - ./servicio_gestion_animal/sql:/sql/gestion_animal:ro
+      - ./servicio_actividades/sql:/sql/actividades:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: ["/tmp"]
+    networks: [datos]
+
+  # One-shot: crea el primer administrador (crear_admin.py es idempotente)
+  admin-init:
+    image: yanacocha-accesos:local
+    build:
+      context: ./servicio_accesos
+      target: runtime
+    restart: "no"
+    command: ["python", "crear_admin.py"]
+    env_file: ./servicio_accesos/.env
+    environment:
+      DATABASE_URL: *database-url
+    healthcheck:
+      disable: true
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: ["/tmp"]
+    networks: [datos]
+
+  # Los servicios apuntan a la base local y esperan a que esté inicializada
+  accesos:
+    environment:
+      DATABASE_URL: *database-url
+    depends_on: *espera-inicializacion
+    networks: [datos]
+
+  gestion-animal:
+    environment:
+      DATABASE_URL: *database-url
+    depends_on: *espera-inicializacion
+    networks: [datos]
+
+  actividades:
+    environment:
+      DATABASE_URL: *database-url
+    depends_on: *espera-inicializacion
+    networks: [datos]
+
+networks:
+  # La base solo es alcanzable desde los servicios (el gateway no entra aquí)
+  datos:
+    internal: true
+
+volumes:
+  pgdata:
