@@ -1,0 +1,10 @@
+# Dependencias de las pruebas de integración (el entorno de pruebas se levanta con docker compose, no con pip)
+pytest==9.1.1
+# Ejecución en paralelo (pytest -n auto)
+pytest-xdist==3.8.0
+# Cliente HTTP real contra el gateway
+httpx==0.28.1
+# Para fabricar tokens inválidos o vencidos en las pruebas de autenticación
+PyJWT==2.15.1
+# Zona horaria America/Guayaquil en cualquier sistema operativo
+tzdata==2026.5
