@@ -28,6 +28,7 @@ def completar_actividad(
         usuario["id_usuario"],
         datos.observaciones,
         "observaciones" in datos.model_fields_set,
+        datos.fecha_completada,
     )
     resultado = actividad_a_dict(actividad)
     resultado["id_actividad"] = actividad.id_actividad

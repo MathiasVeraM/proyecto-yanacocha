@@ -42,6 +42,8 @@ class ObservacionActividadModel(Base):
     detalle = Column(Text, nullable=False)
     genera_alerta = Column(Boolean, nullable=False, default=False, server_default=false())
     id_usuario = Column(Integer, nullable=False)
+    # UUID generado en el móvil: hace idempotente la sincronización offline.
+    id_cliente = Column(String(64), unique=True)
     fecha_registro = Column(
         TIMESTAMP,
         nullable=False,

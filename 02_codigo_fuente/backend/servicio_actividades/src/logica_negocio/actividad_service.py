@@ -360,6 +360,7 @@ class ActividadService:
         id_usuario: int,
         observaciones: str | None,
         actualizar_observaciones: bool = True,
+        fecha_completada: datetime | None = None,
     ):
         actividad = ActividadService.actividad_o_404(db, id_actividad)
         if actividad.completada:
@@ -372,13 +373,19 @@ class ActividadService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Solo se pueden completar actividades de hoy o de días anteriores",
             )
+        # Offline: la hora real la reporta el dispositivo; en línea, la del servidor.
+        momento = (
+            reglas.validar_hora_dispositivo(fecha_completada, actividad.fecha_programada)
+            if fecha_completada is not None
+            else ahora_local()
+        )
         return ActividadRepository.completar(
             db,
             actividad,
             id_usuario,
             observaciones,
             actualizar_observaciones,
-            ahora_local(),
+            momento,
         )
 
     @staticmethod

@@ -20,6 +20,7 @@ from src.config import (
     DURACION_MAX_MINUTOS,
     DURACION_MINIMA_CRUCE_MINUTOS,
     REPETICION_MESES_MAX,
+    ZONA_HORARIA,
 )
 from src.modelos.actividad_model import ActividadModel
 from src.modelos.fechas import ahora_local
@@ -30,6 +31,30 @@ CODIGO_CRUCE = "cruce_horario"
 def ahora() -> datetime:
     # Punto único para "ahora" en estas reglas (las pruebas lo fijan en una fecha conocida)
     return ahora_local()
+
+
+TOLERANCIA_RELOJ_MINUTOS = 5
+
+
+def validar_hora_dispositivo(valor: datetime, fecha_minima: date) -> datetime:
+    """Normaliza la hora que reporta el móvil a la zona del centro (sin tz).
+
+    No puede estar en el futuro (con una pequeña tolerancia por desajuste de relojes) ni ser
+    anterior al día en que estaba programada la actividad.
+    """
+    if valor.tzinfo is not None:
+        valor = valor.astimezone(ZONA_HORARIA).replace(tzinfo=None)
+    if valor > ahora() + timedelta(minutes=TOLERANCIA_RELOJ_MINUTOS):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La hora del dispositivo no puede ser futura",
+        )
+    if valor.date() < fecha_minima:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La hora del dispositivo es anterior a la fecha de la actividad",
+        )
+    return valor
 
 
 def limites() -> dict:

@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.esquemas.observacion_schema import ObservacionCreate
+from src.logica_negocio import reglas_actividad as reglas
 from src.logica_negocio.actividad_service import ActividadService
 from src.modelos.fechas import ahora_local
 from src.repositorios.observacion_repo import ObservacionRepository
@@ -25,7 +26,17 @@ class ObservacionService:
         datos: ObservacionCreate,
         id_usuario: int,
     ):
-        ActividadService.actividad_o_404(db, id_actividad)
+        actividad = ActividadService.actividad_o_404(db, id_actividad)
+        if datos.id_cliente:
+            existente = ObservacionRepository.obtener_por_id_cliente(db, datos.id_cliente)
+            if existente is not None:
+                # Reintento de una sincronización: se devuelve la ya guardada, sin duplicar.
+                return existente
+        fecha_registro = (
+            reglas.validar_hora_dispositivo(datos.fecha_registro, actividad.fecha_programada)
+            if datos.fecha_registro is not None
+            else ahora_local()
+        )
         return ObservacionRepository.crear(
             db,
             {
@@ -38,7 +49,8 @@ class ObservacionService:
                     datos.severidad,
                 ),
                 "id_usuario": id_usuario,
-                "fecha_registro": ahora_local(),
+                "fecha_registro": fecha_registro,
+                "id_cliente": datos.id_cliente,
             },
         )
 

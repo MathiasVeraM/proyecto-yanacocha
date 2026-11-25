@@ -14,6 +14,9 @@ class ObservacionCreate(BaseModel):
     categoria: CategoriaObservacion
     severidad: SeveridadObservacion
     detalle: str = Field(min_length=10)
+    # Solo los envía la app móvil: identificador único y hora real del dispositivo.
+    id_cliente: str | None = Field(default=None, min_length=8, max_length=64)
+    fecha_registro: datetime | None = None
 
 
 class ObservacionResponse(BaseModel):
@@ -25,5 +28,6 @@ class ObservacionResponse(BaseModel):
     genera_alerta: bool
     id_usuario: int
     fecha_registro: datetime
+    id_cliente: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

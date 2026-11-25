@@ -40,6 +40,7 @@ ESCRITURAS_MANEJO_Y_VOLUNTARIOS = [
     ("POST", "/api/actividades/7/completar"),
     ("PATCH", "/api/actividades/7/completar"),
     ("POST", "/api/actividades/7/observaciones"),
+    ("POST", "/api/actividades/sincronizar"),
 ]
 
 LECTURAS = [

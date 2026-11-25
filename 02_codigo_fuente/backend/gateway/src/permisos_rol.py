@@ -51,6 +51,11 @@ REGLAS_ESCRITURA: list[tuple[re.Pattern, Optional[frozenset[int]]]] = [
         re.compile(r"^/api/actividades/\d+/(completar|observaciones)$"),
         frozenset({ID_ROL_MANEJO_ANIMAL, ID_ROL_VOLUNTARIO}),
     ),
+    # Sube de una vez lo completado y observado sin conexión (app móvil)
+    (
+        re.compile(r"^/api/actividades/sincronizar$"),
+        frozenset({ID_ROL_MANEJO_ANIMAL, ID_ROL_VOLUNTARIO}),
+    ),
     # Cualquier otra operación (crear, editar, eliminar, reabrir, dietas y tomas) es de Manejo de Animales
     (
         re.compile(r"^/api/actividades(/.*)?$"),

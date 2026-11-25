@@ -112,6 +112,8 @@ class CompletarActividad(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=False, extra="ignore")
 
     observaciones: str | None = None
+    # Hora real del dispositivo al marcar (app móvil); si no llega, la pone el servidor.
+    fecha_completada: datetime | None = None
 
 
 class EventoCalendario(BaseModel):
