@@ -39,7 +39,7 @@ Workflows (en `.github/workflows/`):
 | `ci.yml` | Orquesta tests, SonarQube y notificaciones en cada PR y push |
 | `_backend-tests.yml` | Pytest por servicio (matriz) con reporte de cobertura |
 | `_frontend-tests.yml` | Lint, tipos y pruebas del frontend |
-| `integracion-tests.yml` | Pruebas de integración con Docker Compose |
+| `integracion.yml` | Pruebas de integración con Docker Compose (solo PR hacia `test`); ver `estrategia_pruebas.md` |
 | `security.yml` | CodeQL y Gitleaks |
 | `dependabot.yml` | Actualización de dependencias (en `.github/`) |
 
@@ -55,6 +55,9 @@ Workflows (en `.github/workflows/`):
 | Merge a `main` | ✅ | ✅ | ✅ | ✅ | ✅ (fase CD) |
 
 Detalle de cada nivel en `estrategia_pruebas.md`; criterios de aprobación en `quality_gates.md`.
+
+> Hoy `integracion.yml` se dispara solo en los PR hacia `test`. Si se exige como check obligatorio en `main`,
+> hay que agregar `main` a sus ramas; un check obligatorio que no se ejecuta deja el PR bloqueado.
 
 ## 6. Notificaciones
 

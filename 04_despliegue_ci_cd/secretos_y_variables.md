@@ -30,6 +30,38 @@ Valores no sensibles como el archivo de `sonar.projectKey`, `sonar.organization`
 - Cada token con los **permisos mínimos** (el de Docker Hub, solo lectura y escritura del repositorio de imágenes).
 - Los secretos no están disponibles en PRs que vienen de forks; el pipeline está pensado para ramas del mismo repositorio.
 - Gitleaks revisa cada PR para detectar secretos subidos por error.
-- Las credenciales del entorno de integración son valores de prueba definidos en `docker-compose.test.yml`; nunca credenciales reales.
+- Las credenciales del entorno de integración no están escritas en ningún archivo: el pipeline las genera al azar en cada ejecución (ver más abajo) y nunca se reutilizan credenciales reales.
+- Ningún Dockerfile, `docker-compose*.yml` ni workflow contiene valores sensibles; las variables obligatorias se declaran como `${VARIABLE:?mensaje}` y el compose falla si faltan.
+- Los `.env` y `.env.test` están en `.gitignore`; solo se versionan los `.env.example` y `.env.test.example`, con valores claramente falsos.
 - Rotar los tokens cuando cambie un integrante con acceso (al ser proyecto academico no se llevará a cabo)
 - Si un secreto se filtra: (1) revocarlo de inmediato en el servicio de origen, (2) generar uno nuevo y actualizarlo en GitHub, (3) retirarlo del historial si llegó a un commit. Ver `runbook.md`.
+
+## Variables de entorno de la aplicación (solo nombres)
+
+Cada servicio lee su propio `.env` (hay un `.env.example` en su carpeta). Nunca se escriben valores aquí.
+
+| Variable | Dónde | Para qué |
+|---|---|---|
+| `SECRET_KEY` | gateway y los tres servicios | Firma y valida los JWT. **Debe ser la misma** en los cuatro |
+| `ALGORITHM` | los cuatro | Algoritmo del JWT (por defecto `HS256`) |
+| `DATABASE_URL` | accesos, gestión animal, actividades | Conexión a PostgreSQL |
+| `ACCESSOS_SERVICE_URL`, `GESTION_ANIMAL_SERVICE_URL`, `ACTIVIDADES_SERVICE_URL` | gateway (la última, también gestión animal) | URLs de los servicios. `ACCESSOS_...` lleva doble S: así se llama en el código |
+| `CORS_ORIGINS` | gateway | Orígenes del frontend permitidos |
+| `ADMIN_CORREO`, `ADMIN_PASSWORD` | accesos (solo `crear_admin.py`) | Primer administrador |
+| `GATEWAY_BIND_ADDRESS`, `GATEWAY_PORT` | `.env` de `backend/` (opcionales) | Dirección y puerto en que el gateway escucha en el host |
+| `POSTGRES_PASSWORD` | `.env` de `backend/` | Solo con `docker-compose.local-db.yml` (base local y limpia) |
+
+## Secretos de la corrida de integración
+
+`integracion.yml` **no usa Secrets de GitHub**. En cada ejecución genera, con `openssl rand`, valores nuevos y los
+enmascara (`::add-mask::`) antes de exportarlos al resto de los pasos:
+
+| Variable | Qué es |
+|---|---|
+| `SECRET_KEY` | Clave JWT de esa corrida, igual para gateway y servicios |
+| `POSTGRES_PASSWORD` | Contraseña de la base efímera |
+| `ADMIN_CORREO`, `ADMIN_PASSWORD` | Administrador de pruebas que crea `admin-init` |
+
+Los valores desaparecen al terminar la corrida (`docker compose down -v`). En local se usan los mismos nombres con un
+`.env.test` propio (ver `.env.test.example`).
+

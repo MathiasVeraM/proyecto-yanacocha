@@ -19,39 +19,50 @@ workflow de pruebas unitarias descubre las carpetas de ese directorio y las corr
 `conftest.py` aborta antes de la primera prueba si:
 
 - `GATEWAY_URL` no apunta a `localhost` o `127.0.0.1`;
-- existe `DATABASE_URL` en el entorno (estas pruebas solo usan HTTP y no necesitan la base);
+- existe `DATABASE_URL` en el entorno (estas pruebas solo usan HTTP y no necesitan la base).
 
 ## Cómo correrlas en local
 
-Desde `02_codigo_fuente/backend`, con un `.env.test` propio (copia de `.env.test.example` con valores aleatorios;
-ver el encabezado de ese archivo):
+Necesitas un `.env.test` propio en `02_codigo_fuente/backend` (copia de `.env.test.example` con valores aleatorios
+nuevos; ver el encabezado de ese archivo). Las variables se cargan en la terminal donde corres `pytest`.
 
-```bash
+### PowerShell
+
+```powershell
+cd 02_codigo_fuente\backend
 docker compose --env-file .env.test -f docker-compose.test.yml up -d --build --wait
+Get-Content .env.test | ForEach-Object { if ($_ -match '^\s*([^#=\s]+)=(.*)$') { Set-Item "env:$($Matches[1])" $Matches[2] } }
+
+cd ..\..\03_pruebas\integracion
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements-dev.txt
+pytest -m "not destructivo" -n auto     # el grueso, en paralelo
+pytest -m destructivo                   # detiene y vuelve a levantar Actividades; va solo
+
+cd ..\..\02_codigo_fuente\backend
+docker compose --env-file .env.test -f docker-compose.test.yml down -v
 ```
 
-Cargar las variables y ejecutar (Git Bash):
+### Git Bash / Linux / macOS
 
 ```bash
+cd 02_codigo_fuente/backend
+docker compose --env-file .env.test -f docker-compose.test.yml up -d --build --wait
 set -a; . ./.env.test; set +a
+
 cd ../../03_pruebas/integracion
 python -m venv venv && . venv/Scripts/activate      # en Linux/macOS: . venv/bin/activate
 pip install -r requirements-dev.txt
-pytest -m "not destructivo" -n auto                 # el grueso, en paralelo
-pytest -m destructivo                               # detiene y vuelve a levantar Actividades; va solo
-```
+pytest -m "not destructivo" -n auto
+pytest -m destructivo
 
-En PowerShell, en lugar de `set -a`:
-
-```powershell
-Get-Content .env.test | ForEach-Object { if ($_ -match '^\s*([^#=\s]+)=(.*)$') { Set-Item "env:$($Matches[1])" $Matches[2] } }
-```
-
-Al terminar (borra la base, que no tiene volumen):
-
-```bash
+cd ../../02_codigo_fuente/backend
 docker compose --env-file .env.test -f docker-compose.test.yml down -v
 ```
+
+`down -v` borra la base, que no tiene volumen. En el pipeline hace lo mismo `.github/workflows/integracion.yml`,
+generando los secretos al azar en cada ejecución.
 
 ## Notas
 

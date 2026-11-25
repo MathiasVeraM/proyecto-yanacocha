@@ -21,9 +21,12 @@ En caso de existir algún error, el proceso es abrir el PR → pestaña *Checks*
 
 | Síntoma | Causa probable | Qué hacer |
 |---|---|---|
-| `up --wait` se queda esperando o expira | Un contenedor no pasa su `healthcheck` | Ver el paso "Logs si algo falla" del job. Reproducir en local con `docker compose -f 02_codigo_fuente/docker-compose.test.yml up --build`. |
+| `up --wait` se queda esperando o expira | Un contenedor no pasa su `healthcheck` | Ver el paso "Logs de los contenedores" del job. Reproducir en local desde `02_codigo_fuente/backend` con `docker compose --env-file .env.test -f docker-compose.test.yml up --build`. |
 | Contenedor termina al arrancar | Error en el Dockerfile, variable de entorno faltante o dependencia | Revisar logs del servicio; probar la imagen en local. |
-| `Connection refused` en las pruebas | Servicio aún no listo o puerto incorrecto | Confirmar `healthcheck` y los puertos en `docker-compose.test.yml` y en `conftest.py`. |
+| `Connection refused` en las pruebas | Servicio aún no listo o puerto incorrecto | Confirmar `healthcheck` y el puerto del gateway (`GATEWAY_URL`, por defecto `127.0.0.1:8000`). |
+| Las pruebas se detienen al inicio: "No se pudo iniciar sesión con ADMIN_CORREO/ADMIN_PASSWORD" | El entorno se levantó con otro `.env.test` que el cargado en la terminal | `down -v`, volver a levantar y recargar las variables en la misma terminal. |
+| `db-init` o `admin-init` terminan con error | Un script SQL falló, o el administrador no pudo crearse | `docker compose logs db-init admin-init`. En local, `down -v` para partir de una base vacía. |
+| Error de variable obligatoria al hacer `docker compose` | Falta una variable `${VAR:?...}` | Cargar el `.env.test` (o el `.env`) y reintentar; los nombres están en `secretos_y_variables.md`. |
 | Pasa en local pero falla en CI | Diferencias de entorno o datos previos | Usar `down -v` antes de probar en local para partir de cero; revisar versiones. |
 | Pruebas que fallan a veces | Dependen del orden o de datos de otras pruebas | Hacer que cada prueba cree sus propios datos con nombres únicos. |
 
