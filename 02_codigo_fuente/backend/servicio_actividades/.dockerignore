@@ -1,0 +1,23 @@
+# Nada de esto debe entrar al contexto de construcción
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage*.xml
+.git/
+.gitignore
+
+# Secretos y configuración local (las variables se inyectan al ejecutar)
+.env
+.env.*
+
+# Los scripts SQL se montan como volumen de solo lectura en docker compose; no se copian a la imagen
+sql/
+
+# Documentación y archivos de Docker
+*.md
+Dockerfile
+.dockerignore
