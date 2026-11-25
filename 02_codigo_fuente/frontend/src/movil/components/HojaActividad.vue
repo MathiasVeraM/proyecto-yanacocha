@@ -14,6 +14,8 @@ const props = defineProps<{
   modo: ModoHoja
   describir: ReturnType<typeof describirActividades>
   pendienteEnvio: boolean
+  puedeCompletar: boolean
+  puedeObservar: boolean
 }>()
 const emit = defineEmits<{
   cerrar: []
@@ -55,10 +57,10 @@ const hora = computed(() => {
         </div>
       </dl>
       <div class="acciones">
-        <button v-if="!actividad.completada" class="m-btn m-btn-primario" @click="emit('cambiarModo', 'completar')">
+        <button v-if="puedeCompletar && !actividad.completada" class="m-btn m-btn-primario" @click="emit('cambiarModo', 'completar')">
           Marcar como hecha
         </button>
-        <button class="m-btn m-btn-secundario" @click="emit('cambiarModo', 'observar')">Agregar observación</button>
+        <button v-if="puedeObservar" class="m-btn m-btn-secundario" @click="emit('cambiarModo', 'observar')">Agregar observación</button>
       </div>
     </template>
 

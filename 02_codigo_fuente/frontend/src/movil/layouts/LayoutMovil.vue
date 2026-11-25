@@ -53,7 +53,13 @@ onBeforeUnmount(() => void escucha?.remove())
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M5 6.5l1.5 1.5L9 5.5M5 12.5L6.5 14 9 11.5M5 18.5L6.5 20 9 17.5M12 7h7M12 13h7M12 19h7" />
         </svg>
-        Actividades
+        Hoy
+      </RouterLink>
+      <RouterLink :to="{ name: 'calendario' }" class="pestana">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4.5 6.5h15v13h-15ZM4.5 10.5h15M8.5 4v4M15.5 4v4" />
+        </svg>
+        Calendario
       </RouterLink>
       <RouterLink :to="{ name: 'envio' }" class="pestana">
         <span class="icono-envio">

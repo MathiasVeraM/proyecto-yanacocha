@@ -21,7 +21,12 @@ export function crearRouterMovil() {
           {
             path: '',
             name: 'actividades',
-            component: () => import('./views/ActividadesMovilView.vue'),
+            component: () => import('./views/HoyMovilView.vue'),
+          },
+          {
+            path: 'calendario',
+            name: 'calendario',
+            component: () => import('./views/CalendarioMovilView.vue'),
           },
           {
             path: 'envio',
