@@ -4,6 +4,7 @@ from sqlalchemy import (
     Column,
     Date,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
@@ -11,6 +12,7 @@ from sqlalchemy import (
     Time,
     TIMESTAMP,
     false,
+    text,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -24,7 +26,7 @@ class ActividadModel(Base):
     __tablename__ = "actividad"
     __table_args__ = (
         CheckConstraint(
-            "tipo_actividad IN ('alimentacion', 'enriquecimiento', 'entrenamiento', 'limpieza')",
+            "tipo_actividad IN ('alimentacion', 'enriquecimiento', 'entrenamiento', 'limpieza', 'tratamiento')",
             name="ck_actividad_tipo",
         ),
         CheckConstraint("duracion_horas >= 0", name="ck_actividad_duracion_horas"),
@@ -42,7 +44,12 @@ class ActividadModel(Base):
             )
             OR
             (
-                tipo_actividad IN ('alimentacion', 'enriquecimiento', 'entrenamiento')
+                tipo_actividad IN (
+                    'alimentacion',
+                    'enriquecimiento',
+                    'entrenamiento',
+                    'tratamiento'
+                )
                 AND id_animal IS NOT NULL
             )
             """,
@@ -55,6 +62,19 @@ class ActividadModel(Base):
         CheckConstraint(
             "NOT completada OR (id_usuario_completo IS NOT NULL AND fecha_completada IS NOT NULL)",
             name="ck_actividad_completada",
+        ),
+        # Duplicado exacto de una actividad programada a mano: mismo tipo, ejemplar o recinto, día y
+        # hora (las tomas y las dosis las genera el sistema y tienen su propio control)
+        Index(
+            "ux_actividad_manual_unica",
+            "tipo_actividad",
+            func.coalesce(text("id_animal"), 0),
+            func.coalesce(text("id_recinto"), 0),
+            "fecha_programada",
+            "hora_programada",
+            unique=True,
+            postgresql_where=text("tipo_actividad IN ('enriquecimiento', 'entrenamiento', 'limpieza')"),
+            sqlite_where=text("tipo_actividad IN ('enriquecimiento', 'entrenamiento', 'limpieza')"),
         ),
         {"schema": DB_SCHEMA},
     )
@@ -96,21 +116,30 @@ class ActividadModel(Base):
     )
     fecha_completada = Column(TIMESTAMP)
 
+    # Detalle según el tipo (uno a uno). actividad_a_dict los lee para armar la respuesta, así
+    # que se cargan en la misma consulta que la actividad (LEFT JOIN): con "selectin" cada
+    # listado hacía 4 consultas extra a la base remota.
     alimentacion = relationship(
         "ActividadAlimentacionModel",
         back_populates="actividad",
         uselist=False,
-        lazy="selectin",
+        lazy="joined",
     )
     enriquecimiento = relationship(
         "ActividadEnriquecimientoModel",
         back_populates="actividad",
         uselist=False,
-        lazy="selectin",
+        lazy="joined",
     )
     entrenamiento = relationship(
         "ActividadEntrenamientoModel",
         back_populates="actividad",
         uselist=False,
-        lazy="selectin",
+        lazy="joined",
+    )
+    tratamiento = relationship(
+        "ActividadTratamientoModel",
+        back_populates="actividad",
+        uselist=False,
+        lazy="joined",
     )

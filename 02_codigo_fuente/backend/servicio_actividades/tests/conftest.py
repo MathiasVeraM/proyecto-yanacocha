@@ -11,7 +11,19 @@ from datetime import datetime, timedelta, timezone
 import jwt
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Column, Integer, Table, create_engine, event
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+    Time,
+    create_engine,
+    event,
+)
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -32,18 +44,71 @@ Table(
     "animal",
     Base.metadata,
     Column("id_animal", Integer, primary_key=True),
+    Column("estado_actual", String(30), nullable=False, server_default="en_centro"),
+    # Para las listas de referencia de Planificación (GET /api/actividades/referencias)
+    Column("codigo_animal", String(30)),
+    Column("nombre", String(100)),
+    Column("id_taxonomia", Integer),
+    Column("id_recinto", Integer),
+    schema="gestion_animal",
+)
+Table(
+    "taxonomia",
+    Base.metadata,
+    Column("id_taxonomia", Integer, primary_key=True),
+    Column("nombre_comun", String(100)),
+    Column("especie", String(150)),
+    Column("clase", String(100)),
+    schema="gestion_animal",
+)
+Table(
+    "diagnostico",
+    Base.metadata,
+    Column("id_diagnostico", Integer, primary_key=True),
+    Column(
+        "id_animal",
+        Integer,
+        ForeignKey("gestion_animal.animal.id_animal", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    schema="gestion_animal",
+)
+Table(
+    "tratamiento",
+    Base.metadata,
+    Column("id_tratamiento", Integer, primary_key=True),
+    Column(
+        "id_diagnostico",
+        Integer,
+        ForeignKey("gestion_animal.diagnostico.id_diagnostico", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column("descripcion", Text, nullable=False, server_default="Tratamiento de prueba"),
+    Column("fecha_inicio", Date, nullable=False),
+    Column("fecha_fin", Date),
+    Column("frecuencia_valor", Integer),
+    Column("frecuencia_unidad", String(10)),
+    Column("hora_inicio", Time),
+    Column("estado", String(20), nullable=False),
     schema="gestion_animal",
 )
 Table(
     "recinto",
     Base.metadata,
     Column("id_recinto", Integer, primary_key=True),
+    Column("nombre_recinto", String(100)),
+    Column("tipo", String(50)),
+    Column("capacidad", Integer),
+    Column("estado", String(20)),
     schema="gestion_animal",
 )
 Table(
     "usuario",
     Base.metadata,
     Column("id_usuario", Integer, primary_key=True),
+    Column("nombre", String(100)),
+    Column("apellido", String(100)),
+    Column("activo", Boolean),
     schema="public",
 )
 
@@ -228,3 +293,22 @@ def actividad_limpieza(crear_actividad):
     )
     assert respuesta.status_code == 201
     return respuesta.json()
+
+
+# ---- "Ahora" fijo para las reglas de fechas (reglas_actividad) ----
+# Las pruebas usan fechas fijas de 2026; sin esto, "no programar en el pasado" dependería del día
+# en que se ejecuten. Una prueba puede cambiarlo con: ahora_fijo(datetime(...)).
+AHORA_PRUEBAS = datetime(2026, 1, 2, 8, 0)
+
+
+@pytest.fixture(autouse=True)
+def ahora_fijo(monkeypatch):
+    from src.logica_negocio import reglas_actividad
+
+    estado = {"ahora": AHORA_PRUEBAS}
+    monkeypatch.setattr(reglas_actividad, "ahora", lambda: estado["ahora"])
+
+    def fijar(momento):
+        estado["ahora"] = momento
+
+    return fijar

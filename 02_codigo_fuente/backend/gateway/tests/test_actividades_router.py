@@ -2,10 +2,21 @@
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 
 from src.config import ACTIVIDADES_SERVICE_URL
+from src.main import app
 from src.modulos import MODULO_ACCESOS, MODULO_PLANIFICACION
+from src.permisos_rol import ID_ROL_MANEJO_ANIMAL
 from src.rutas.actividades_router import URL_DESTINO
+
+
+@pytest.fixture
+def client(mock_http, crear_token, cabeceras):
+    # Manejo de Animales puede usar todos los métodos de planificación: estas pruebas
+    # revisan el reenvío, no los permisos por rol (ver test_permisos_rol.py)
+    token = crear_token(id_rol=ID_ROL_MANEJO_ANIMAL, modulos=[MODULO_PLANIFICACION])
+    return TestClient(app, headers=cabeceras(token))
 
 
 @pytest.mark.parametrize("metodo", ["GET", "POST", "PUT", "PATCH", "DELETE"])
@@ -37,10 +48,10 @@ def test_reenvia_cuerpo_y_query_params(client, servicio):
     assert servicio.ultima.content == httpx.Request("POST", "http://x", json=solicitud).read()
 
 
-def test_reenvia_el_token_de_autorizacion(client, servicio, headers_admin):
+def test_reenvia_el_token_de_autorizacion(client, servicio):
     client.get("/api/actividades")
 
-    assert servicio.ultima.headers["authorization"] == headers_admin["Authorization"]
+    assert servicio.ultima.headers["authorization"] == client.headers["Authorization"]
 
 
 def test_respeta_estado_y_respuesta_del_servicio(client, servicio):
@@ -88,7 +99,7 @@ def test_token_sin_modulo_de_planificacion_devuelve_403(
 def test_token_con_modulo_de_planificacion_pasa_al_servicio(
     client_anonimo, servicio, crear_token, cabeceras
 ):
-    token = crear_token(modulos=[MODULO_PLANIFICACION])
+    token = crear_token(id_rol=ID_ROL_MANEJO_ANIMAL, modulos=[MODULO_PLANIFICACION])
 
     respuesta = client_anonimo.post(
         "/api/actividades/tomas/generar",

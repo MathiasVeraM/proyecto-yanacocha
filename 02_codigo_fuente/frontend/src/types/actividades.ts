@@ -1,6 +1,11 @@
-import type { Animal, Recinto } from '@/types/animales'
+import type { Animal, EstadoAnimal, Recinto, Taxonomia } from '@/types/animales'
 
-export type TipoActividad = 'alimentacion' | 'limpieza' | 'enriquecimiento' | 'entrenamiento'
+export type TipoActividad =
+  | 'alimentacion'
+  | 'limpieza'
+  | 'enriquecimiento'
+  | 'entrenamiento'
+  | 'tratamiento'
 export type TipoEnriquecimiento = 'social' | 'sensorial' | 'alimenticio' | 'cognitivo'
 export type UnidadFrecuencia = 'horas' | 'dias' | 'semanas'
 export type UnidadCantidad = 'g' | 'kg' | 'unidad'
@@ -27,6 +32,11 @@ export interface Dieta {
   es_restriccion?: boolean
 }
 
+export interface MedicamentoDosis {
+  nombre_medicamento: string
+  dosis_ml: number
+}
+
 export interface Actividad {
   id_actividad: number
   tipo_actividad: TipoActividad
@@ -47,6 +57,11 @@ export interface Actividad {
   descripcion_estimulo: string | null
   objetivo_entrenamiento: string | null
   tipo_refuerzo: string | null
+  id_tratamiento: number | null
+  // Qué se aplica en una dosis (solo en actividades de tipo tratamiento)
+  descripcion_tratamiento?: string | null
+  // Medicamentos y dosis a administrar (solo en actividades de tipo tratamiento)
+  medicamentos_tratamiento?: MedicamentoDosis[]
   cancelada: boolean
   animal?: Animal
   recinto?: Recinto
@@ -85,9 +100,95 @@ export interface FiltrosActividades {
   fecha_hasta?: string
 }
 
-export interface UsuarioActividad {
+// ---- Listas de referencia de Planificación (GET /api/actividades/referencias) ----
+// Solo lo necesario para mostrar nombres y llenar selectores: cualquier rol con el módulo de
+// Planificación las puede pedir, sin permisos sobre Fichas ni Accesos.
+
+export interface AnimalReferencia {
+  id_animal: number
+  codigo_animal: string
+  nombre: string | null
+  id_taxonomia: number
+  id_recinto: number
+  estado_actual: EstadoAnimal
+  taxonomia: Pick<Taxonomia, 'id_taxonomia' | 'nombre_comun' | 'especie' | 'clase'>
+  recinto: Recinto
+}
+
+// Nombre de quien programó o completó una actividad (y, más adelante, de los responsables)
+export interface UsuarioReferencia {
   id_usuario: number
   nombre: string
   apellido: string
-  correo: string
+  // Los inactivos se incluyen para mostrar actividades antiguas; los selectores solo ofrecen activos
+  activo: boolean
+}
+
+export interface ReferenciasPlanificacion {
+  animales: AnimalReferencia[]
+  recintos: Recinto[]
+  usuarios: UsuarioReferencia[]
+}
+
+// Observaciones de bienestar sobre una actividad (HU RF-10)
+export type CategoriaObservacion = 'recinto' | 'comportamiento' | 'estado_fisico'
+export type SeveridadObservacion = 'bajo' | 'medio' | 'alto'
+
+export interface Observacion {
+  id_observacion: number
+  id_actividad: number
+  categoria: CategoriaObservacion
+  severidad: SeveridadObservacion
+  detalle: string
+  // Lo calcula el servicio: estado físico o comportamiento con severidad media o alta
+  genera_alerta: boolean
+  id_usuario: number
+  fecha_registro: string
+}
+
+export interface ObservacionCreate {
+  categoria: CategoriaObservacion
+  severidad: SeveridadObservacion
+  detalle: string
+}
+
+// Límites que define el backend (config.py); se usan como min y max de los campos
+export interface LimitesActividades {
+  hoy: string
+  hora_actual: string
+  fecha_min: string
+  fecha_max: string
+  duracion_max_minutos: number
+  duracion_enriquecimiento_minutos: number
+  repeticion_meses_max: number
+  dieta_inicio_fecha_max: string
+}
+
+// Cómo se repite una actividad. dias_semana: 0 = lunes … 6 = domingo; null = todos los días
+export interface Repeticion {
+  dias_semana: number[] | null
+  fecha_fin?: string
+  meses?: number
+}
+
+// Actividad con la que se cruza en horario la que se quiere crear o mover (409 "cruce_horario")
+export interface CruceHorario {
+  id_actividad: number
+  tipo_actividad: TipoActividad
+  fecha_programada: string
+  hora_programada: string | null
+  duracion_minutos: number
+}
+
+// Lo que se puede cambiar de una actividad pendiente
+export interface ActividadCambios {
+  fecha_programada?: string
+  hora_programada?: string
+  duracion_horas?: number
+  duracion_minutos?: number
+  observaciones?: string | null
+  tipo_enriquecimiento?: TipoEnriquecimiento
+  descripcion_estimulo?: string
+  objetivo_entrenamiento?: string
+  tipo_refuerzo?: string
 }

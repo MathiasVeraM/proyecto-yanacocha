@@ -10,6 +10,7 @@ const auth = useAuthStore()
 const form = reactive({ correo: '', password: '', recordar: false })
 const error = ref('')
 const cargando = ref(false)
+const mostrarPassword = ref(false)
 
 async function iniciarSesion() {
   error.value = ''
@@ -51,15 +52,62 @@ async function iniciarSesion() {
 
           <div class="field">
             <label for="password">Contraseña</label>
-            <input
-              id="password"
-              v-model="form.password"
-              type="password"
-              class="input"
-              placeholder="••••••••"
-              autocomplete="current-password"
-              required
-            />
+            <div class="password-control">
+              <input
+                id="password"
+                v-model="form.password"
+                :type="mostrarPassword ? 'text' : 'password'"
+                class="input"
+                placeholder="••••••••"
+                autocomplete="current-password"
+                required
+              />
+              <button
+                class="password-toggle"
+                type="button"
+                :aria-label="mostrarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+                :aria-pressed="mostrarPassword"
+                @click="mostrarPassword = !mostrarPassword"
+              >
+                <svg
+                  v-if="mostrarPassword"
+                  viewBox="0 0 24 24"
+                  width="19"
+                  height="19"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M2.5 12s3.2-6 9.5-6 9.5 6 9.5 6-3.2 6-9.5 6-9.5-6-9.5-6Z"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                  />
+                  <circle cx="12" cy="12" r="2.7" stroke="currentColor" stroke-width="1.7" />
+                </svg>
+                <svg
+                  v-else
+                  viewBox="0 0 24 24"
+                  width="19"
+                  height="19"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M3 3l18 18M10.6 6.2A9.8 9.8 0 0 1 12 6c6.3 0 9.5 6 9.5 6a15 15 0 0 1-3.1 3.7M6.2 6.7C3.8 8.3 2.5 12 2.5 12s3.2 6 9.5 6c1 0 1.9-.2 2.7-.5"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <path
+                    d="M9.9 9.9a3 3 0 0 0 4.2 4.2"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <label class="remember">
@@ -126,6 +174,39 @@ h1 {
   flex-direction: column;
   gap: 18px;
   margin-top: 32px;
+}
+
+.password-control {
+  position: relative;
+}
+
+.password-control .input {
+  padding-right: 46px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.password-toggle:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
 }
 
 .remember {

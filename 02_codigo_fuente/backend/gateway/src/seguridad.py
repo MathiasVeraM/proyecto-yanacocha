@@ -3,9 +3,10 @@ import jwt
 from fastapi import HTTPException, Request, status
 from src.config import ALGORITHM, SECRET_KEY
 from src.mapa_rutas import NIVEL_PUBLICA, NIVEL_TOKEN, resolver_regla
+from src.permisos_rol import ID_ROL_ADMIN, rol_autorizado
 
-# Este rol accede a todos los módulos sin necesitar que estén listados en su token
-ID_ROL_ADMIN = 1
+# ID_ROL_ADMIN accede a todos los módulos sin necesitar que estén listados en su token,
+# pero dentro de cada módulo solo puede hacer lo que permite permisos_rol
 
 def _no_autenticado(detalle: str) -> HTTPException:
     return HTTPException(
@@ -57,4 +58,11 @@ def verificar_acceso(request: Request) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes permiso para acceder a este módulo",
+        )
+
+    # Dentro del módulo, cada rol solo puede hacer las operaciones que le corresponden
+    if not rol_autorizado(request.method, request.url.path, payload.get("id_rol")):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu rol no tiene permiso para realizar esta acción",
         )

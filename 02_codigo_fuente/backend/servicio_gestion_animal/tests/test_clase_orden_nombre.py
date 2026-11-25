@@ -54,7 +54,9 @@ def test_registrar_animal_con_nombre_propio(client, h, crear_taxonomia_db, crear
     r = crear_recinto_db()
 
     animal = client.post(
-        URL, json={"id_taxonomia": t.id_taxonomia, "id_recinto": r.id_recinto, "nombre": " Yaku "}, headers=h
+        URL,
+        json={"id_taxonomia": t.id_taxonomia, "id_recinto": r.id_recinto, "nombre": " Yaku ", "edad_anios": 0},
+        headers=h,
     ).json()
 
     assert animal["nombre"] == "Yaku"

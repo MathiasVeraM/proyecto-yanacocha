@@ -3,9 +3,10 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AnimalCard from '@/components/AnimalCard.vue'
 import AnimalFormModal from '@/components/AnimalFormModal.vue'
-import { animalesApi, recintosApi, taxonomiaApi } from '@/api/animales'
+import { consultas } from '@/api/consultas'
 import { ApiError } from '@/api/http'
-import { CLASES, ESTADOS_ANIMAL, nombreClase } from '@/config/animales'
+import { useAuthStore } from '@/stores/auth'
+import { CLASES, ESTADOS_ANIMAL, ESTADOS_EN_CENTRO, nombreClase } from '@/config/animales'
 import type { Animal, EstadoAnimal, Recinto, Taxonomia } from '@/types/animales'
 
 const router = useRouter()
@@ -15,7 +16,14 @@ const especies = ref<Taxonomia[]>([])
 const recintos = ref<Recinto[]>([])
 const cargando = ref(true)
 const error = ref('')
+const errorMetricas = ref('')
 const formAbierto = ref(false)
+// Registrar ingresos es solo de Veterinaria y Manejo de Animales
+const auth = useAuthStore()
+// Todos los ejemplares sin filtros, solo para las métricas de arriba
+const todos = ref<Animal[] | null>(null)
+const animalesConTratamientoEnCurso = ref<number | null>(null)
+const opcionesCargadas = ref(false)
 
 const filtros = reactive({
   buscar: '',
@@ -43,13 +51,17 @@ async function cargarAnimales() {
   cargando.value = true
   error.value = ''
   try {
-    const resultado = await animalesApi.listar({
-      buscar: filtros.buscar.trim() || undefined,
-      estado: filtros.estado || undefined,
-      id_taxonomia: filtros.id_taxonomia || undefined,
-      id_recinto: filtros.id_recinto || undefined,
-      clase: filtros.clase || undefined,
-    })
+    // Si ya se vio esta lista, se muestra al instante y se confirma con la API por detrás
+    const resultado = await consultas.animales(
+      {
+        buscar: filtros.buscar.trim() || undefined,
+        estado: filtros.estado || undefined,
+        id_taxonomia: filtros.id_taxonomia || undefined,
+        id_recinto: filtros.id_recinto || undefined,
+        clase: filtros.clase || undefined,
+      },
+      { alActualizar: (lista) => id === consultaActual && (animales.value = lista) },
+    )
     if (id === consultaActual) animales.value = resultado
   } catch (e) {
     if (id === consultaActual) {
@@ -62,11 +74,51 @@ async function cargarAnimales() {
 
 async function cargarOpcionesDeFiltro() {
   try {
-    ;[especies.value, recintos.value] = await Promise.all([taxonomiaApi.listar(), recintosApi.listar()])
+    ;[especies.value, recintos.value] = await Promise.all([consultas.especies(), consultas.recintos()])
+    opcionesCargadas.value = true
   } catch {
     // Sin estas listas solo se pierden los filtros por especie y recinto
   }
 }
+
+async function cargarMetricas() {
+  errorMetricas.value = ''
+  // La lista sin filtros es la misma consulta que la del catálogo al abrir: se pide una sola vez
+  const [lista, conteoTratamientos] = await Promise.allSettled([
+    consultas.animales({}, { alActualizar: (nueva) => (todos.value = nueva) }),
+    consultas.animalesConTratamientoEnCurso({
+      alActualizar: (n) => (animalesConTratamientoEnCurso.value = n),
+    }),
+  ])
+  if (lista.status === 'fulfilled') todos.value = lista.value
+  else errorMetricas.value = 'No se pudo cargar el total de ejemplares.'
+  if (conteoTratamientos.status === 'fulfilled') {
+    animalesConTratamientoEnCurso.value = conteoTratamientos.value
+  } else {
+    errorMetricas.value = [
+      errorMetricas.value,
+      'No se pudo cargar el conteo de tratamientos en curso.',
+    ]
+      .filter(Boolean)
+      .join(' ')
+  }
+}
+
+const metricas = computed(() => {
+  const formato = (n: number | null) => (n === null ? '—' : new Intl.NumberFormat('es-EC').format(n))
+  const lista = todos.value
+  return [
+    {
+      etiqueta: 'ejemplares en el centro',
+      valor: formato(lista ? lista.filter((a) => ESTADOS_EN_CENTRO.includes(a.estado_actual)).length : null),
+    },
+    { etiqueta: 'recintos', valor: formato(opcionesCargadas.value ? recintos.value.length : null) },
+    {
+      etiqueta: 'animales con tratamientos en curso',
+      valor: formato(animalesConTratamientoEnCurso.value),
+    },
+  ]
+})
 
 // El texto espera a que el usuario deje de escribir; los demás filtros se aplican al instante
 let temporizador: ReturnType<typeof setTimeout> | undefined
@@ -89,47 +141,68 @@ function onRegistrado(animal: Animal, aviso?: string) {
 onMounted(() => {
   cargarAnimales()
   cargarOpcionesDeFiltro()
+  cargarMetricas()
 })
 </script>
 
 <template>
-  <div class="toolbar">
-    <label class="search">
-      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-        <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
-        <path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-      </svg>
-      <input v-model="filtros.buscar" type="search" placeholder="Buscar por nombre, código o especie…" />
-    </label>
-
-    <select v-model.number="filtros.id_taxonomia" class="input select" aria-label="Filtrar por especie">
-      <option :value="0">Todas las especies</option>
-      <option v-for="t in especies" :key="t.id_taxonomia" :value="t.id_taxonomia">{{ t.nombre_comun }}</option>
-    </select>
-
-    <select v-model.number="filtros.id_recinto" class="input select" aria-label="Filtrar por recinto">
-      <option :value="0">Todos los recintos</option>
-      <option v-for="r in recintos" :key="r.id_recinto" :value="r.id_recinto">{{ r.nombre_recinto }}</option>
-    </select>
-
-    <select v-model="filtros.estado" class="input select" aria-label="Filtrar por estado">
-      <option value="">Todos los estados</option>
-      <option v-for="[valor, { label }] in ESTADOS" :key="valor" :value="valor">{{ label }}</option>
-    </select>
-
-    <button class="btn btn-primary registrar" @click="formAbierto = true">+ Registrar ingreso</button>
+  <!-- Métricas generales del centro (sin aplicar filtros) -->
+  <div class="metricas">
+    <article v-for="m in metricas" :key="m.etiqueta" class="metrica">
+      <strong>{{ m.valor }}</strong>
+      <span>{{ m.etiqueta }}</span>
+    </article>
   </div>
+  <p v-if="errorMetricas" class="alert-error" role="alert">{{ errorMetricas }}</p>
 
-  <div class="chips" role="group" aria-label="Filtrar por clase">
-    <button :class="{ activo: !filtros.clase }" @click="filtros.clase = ''">Todas</button>
-    <button
-      v-for="clase in clases"
-      :key="clase"
-      :class="{ activo: filtros.clase === clase }"
-      @click="filtros.clase = clase"
-    >
-      {{ nombreClase(clase) }}
-    </button>
+  <!-- Una sola fila: filtros a la izquierda; buscador y registrar ingreso a la derecha -->
+  <div class="toolbar">
+    <div class="filtros">
+      <div class="chips" role="group" aria-label="Filtrar por clase">
+        <button :class="{ activo: !filtros.clase }" @click="filtros.clase = ''">Todas</button>
+        <button
+          v-for="clase in clases"
+          :key="clase"
+          :class="{ activo: filtros.clase === clase }"
+          @click="filtros.clase = clase"
+        >
+          {{ nombreClase(clase) }}
+        </button>
+      </div>
+
+      <select v-model.number="filtros.id_taxonomia" class="input select" aria-label="Filtrar por especie">
+        <option :value="0">Todas las especies</option>
+        <option v-for="t in especies" :key="t.id_taxonomia" :value="t.id_taxonomia">{{ t.nombre_comun }}</option>
+      </select>
+
+      <select v-model.number="filtros.id_recinto" class="input select" aria-label="Filtrar por recinto">
+        <option :value="0">Todos los recintos</option>
+        <option v-for="r in recintos" :key="r.id_recinto" :value="r.id_recinto">{{ r.nombre_recinto }}</option>
+      </select>
+
+      <select v-model="filtros.estado" class="input select" aria-label="Filtrar por estado">
+        <option value="">Todos los estados</option>
+        <option v-for="[valor, { label }] in ESTADOS" :key="valor" :value="valor">{{ label }}</option>
+      </select>
+    </div>
+
+    <div class="acciones">
+      <label class="search">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
+          <path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        <input
+          v-model="filtros.buscar"
+          type="search"
+          placeholder="Buscar por nombre, código o especie…"
+          aria-label="Buscar ejemplares"
+        />
+      </label>
+      <button v-if="auth.permisos.gestionarFichas" class="btn btn-primary registrar" @click="formAbierto = true">
+        + Registrar ingreso
+      </button>
+    </div>
   </div>
 
   <p v-if="error" class="alert-error">{{ error }}</p>
@@ -147,20 +220,66 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.metricas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.metrica {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.metrica strong {
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.metrica span {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 12px 16px;
+  margin-bottom: 20px;
+}
+
+.filtros,
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.acciones {
+  flex: 1 1 360px;
+  justify-content: flex-end;
 }
 
 .search {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
-  min-width: 220px;
-  padding: 10px 14px;
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 320px;
+  height: 40px;
+  padding: 0 14px;
   background: var(--color-surface);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
@@ -177,30 +296,43 @@ onMounted(() => {
 
 .select {
   width: auto;
-  min-width: 170px;
-  padding: 10px 12px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
   background: var(--color-surface);
 }
 
 .registrar {
-  margin-left: auto;
-  padding: 11px 18px;
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 18px;
+  white-space: nowrap;
 }
 
 .chips {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 16px 0 20px;
-}
-
-.chips button {
-  padding: 8px 14px;
+  gap: 2px;
+  padding: 3px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+}
+
+.chips button {
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
   font-size: 13px;
   font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.chips button:hover:not(.activo) {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
 }
 
 .chips button.activo {
@@ -230,5 +362,18 @@ onMounted(() => {
 
 .alert-error {
   margin-bottom: 16px;
+}
+
+@media (max-width: 640px) {
+  .metricas {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .acciones,
+  .search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
 }
 </style>

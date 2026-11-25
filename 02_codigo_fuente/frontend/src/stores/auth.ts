@@ -1,12 +1,14 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { authApi } from '@/api/auth'
+import { limpiarCache } from '@/api/cache'
+import { ROL, permisosDeRol } from '@/config/permisos'
 import type { TokenPayload } from '@/types'
 
 const TOKEN_KEY = 'yanacocha_token'
 
 // El administrador accede a todos los módulos sin que estén listados en su token (igual que en el gateway)
-const ID_ROL_ADMIN = 1
+const ID_ROL_ADMIN = ROL.ADMIN
 
 function decodificarToken(token: string): TokenPayload | null {
   try {
@@ -29,6 +31,9 @@ export const useAuthStore = defineStore('auth', () => {
     () => !!payload.value && payload.value.exp * 1000 > Date.now(),
   )
 
+  // Qué botones ve o puede usar el rol dentro de cada módulo (el gateway aplica el permiso real)
+  const permisos = computed(() => permisosDeRol(payload.value?.id_rol))
+
   // Solo oculta o muestra pantallas: el permiso real lo aplica el gateway
   function tieneAcceso(codigoServicio: string) {
     if (!payload.value) return false
@@ -38,15 +43,19 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(correo: string, password: string, recordar: boolean) {
     const { access_token } = await authApi.login(correo, password)
+    // Nada de una sesión anterior debe verse con el usuario nuevo
+    limpiarCache()
     token.value = access_token
     ;(recordar ? localStorage : sessionStorage).setItem(TOKEN_KEY, access_token)
   }
 
   function logout() {
+    // Los datos en memoria (fichas, actividades, fotos) se borran al salir
+    limpiarCache()
     token.value = null
     localStorage.removeItem(TOKEN_KEY)
     sessionStorage.removeItem(TOKEN_KEY)
   }
 
-  return { token, payload, isAuthenticated, tieneAcceso, login, logout }
+  return { token, payload, isAuthenticated, permisos, tieneAcceso, login, logout }
 })

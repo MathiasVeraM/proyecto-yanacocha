@@ -26,6 +26,7 @@ const form = reactive({
 })
 const error = ref('')
 const guardando = ref(false)
+const mostrarPassword = ref(false)
 
 const esEdicion = computed(() => props.usuario !== null)
 
@@ -35,6 +36,8 @@ watch(
   (abierto) => {
     if (!abierto) return
     error.value = ''
+    // La contraseña vuelve a ocultarse cada vez que se abre el formulario
+    mostrarPassword.value = false
     const u = props.usuario
     Object.assign(form, {
       nombre: u?.nombre ?? '',
@@ -108,15 +111,44 @@ async function guardar() {
           Contraseña
           <span v-if="esEdicion" class="hint">(déjala vacía para no cambiarla)</span>
         </label>
-        <input
-          id="password"
-          v-model="form.password"
-          type="password"
-          class="input"
-          autocomplete="new-password"
-          minlength="8"
-          :required="!esEdicion"
-        />
+        <!-- Mismo botón de ojo que en el inicio de sesión, para revisar lo que se escribió -->
+        <div class="password-control">
+          <input
+            id="password"
+            v-model="form.password"
+            :type="mostrarPassword ? 'text' : 'password'"
+            class="input"
+            autocomplete="new-password"
+            minlength="8"
+            :required="!esEdicion"
+          />
+          <button
+            class="password-toggle"
+            type="button"
+            :aria-label="mostrarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+            :aria-pressed="mostrarPassword"
+            @click="mostrarPassword = !mostrarPassword"
+          >
+            <svg v-if="mostrarPassword" viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true">
+              <path
+                d="M2.5 12s3.2-6 9.5-6 9.5 6 9.5 6-3.2 6-9.5 6-9.5-6-9.5-6Z"
+                stroke="currentColor"
+                stroke-width="1.7"
+              />
+              <circle cx="12" cy="12" r="2.7" stroke="currentColor" stroke-width="1.7" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true">
+              <path
+                d="M3 3l18 18M10.6 6.2A9.8 9.8 0 0 1 12 6c6.3 0 9.5 6 9.5 6a15 15 0 0 1-3.1 3.7M6.2 6.7C3.8 8.3 2.5 12 2.5 12s3.2 6 9.5 6c1 0 1.9-.2 2.7-.5"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div class="field">
@@ -164,6 +196,40 @@ async function guardar() {
 
 .hint {
   color: var(--color-text-subtle);
+}
+
+.password-control {
+  position: relative;
+}
+
+.password-control .input {
+  width: 100%;
+  padding-right: 46px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.password-toggle:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
 }
 
 .check {

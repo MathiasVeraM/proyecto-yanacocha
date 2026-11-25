@@ -1,7 +1,15 @@
 <script lang="ts">
+import { alLimpiar } from '@/api/cache'
+
 // Fotos ya descargadas en esta sesión. La url_imagen cambia (?v=...) cada vez que se sube una foto nueva,
 // así que una misma url siempre es la misma imagen y se puede reutilizar entre el catálogo y la ficha
 const cache = new Map<string, Promise<string>>()
+
+// Al iniciar o cerrar sesión se liberan las fotos guardadas en memoria
+alLimpiar(() => {
+  for (const promesa of cache.values()) promesa.then((url) => URL.revokeObjectURL(url)).catch(() => {})
+  cache.clear()
+})
 </script>
 
 <script setup lang="ts">

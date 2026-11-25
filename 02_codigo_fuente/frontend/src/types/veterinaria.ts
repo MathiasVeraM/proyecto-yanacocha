@@ -1,4 +1,5 @@
 export type EstadoTratamiento = 'en_curso' | 'finalizado' | 'suspendido'
+export type UnidadFrecuenciaTratamiento = 'horas' | 'dias'
 export type Hidratacion =
   | 'normal'
   | 'deshidratacion_leve'
@@ -54,18 +55,36 @@ export type DiagnosticoUpdate = Partial<Omit<DiagnosticoCreate, 'signos_vitales'
 export interface Tratamiento {
   id_tratamiento: number
   id_diagnostico: number
-  medicamento_o_proceso: string
-  dosis: string | null
-  frecuencia: string | null
+  descripcion: string
+  medicamento_o_proceso?: string | null
+  dosis?: string | null
+  frecuencia?: string | null
   fecha_inicio: string
   fecha_fin: string | null
+  frecuencia_valor: number | null
+  frecuencia_unidad: UnidadFrecuenciaTratamiento | null
+  hora_inicio: string | null
   estado: EstadoTratamiento
+  medicamentos: TratamientoMedicamento[]
+}
+
+export interface TratamientoMedicamento {
+  id_tratamiento_medicamento: number
+  nombre_medicamento: string
+  dosis_ml: number
+}
+
+export interface TratamientoMedicamentoCreate {
+  nombre_medicamento: string
+  dosis_ml: number
 }
 
 export interface TratamientoCreate {
-  medicamento_o_proceso: string
-  dosis?: string | null
-  frecuencia?: string | null
+  descripcion: string
+  frecuencia_valor: number
+  frecuencia_unidad: UnidadFrecuenciaTratamiento
+  hora_inicio: string
+  medicamentos: TratamientoMedicamentoCreate[]
   fecha_inicio?: string | null
   fecha_fin?: string | null
   estado?: EstadoTratamiento

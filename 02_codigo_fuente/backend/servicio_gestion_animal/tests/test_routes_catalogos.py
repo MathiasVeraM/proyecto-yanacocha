@@ -199,7 +199,7 @@ def test_la_especie_importada_sirve_para_registrar_un_animal(client, h, crear_re
 
     animal = client.post(
         "/api/animales",
-        json={"id_taxonomia": especie["id_taxonomia"], "id_recinto": recinto.id_recinto},
+        json={"id_taxonomia": especie["id_taxonomia"], "id_recinto": recinto.id_recinto, "edad_anios": 0},
         headers=h,
     ).json()
 
@@ -214,7 +214,7 @@ def test_actualizar_animal_con_taxonomia_importada_de_inaturalist(
     recinto = crear_recinto_db()
     animal = client.post(
         "/api/animales",
-        json={"id_taxonomia": oso["id_taxonomia"], "id_recinto": recinto.id_recinto},
+        json={"id_taxonomia": oso["id_taxonomia"], "id_recinto": recinto.id_recinto, "edad_anios": 0},
         headers=h,
     ).json()
 

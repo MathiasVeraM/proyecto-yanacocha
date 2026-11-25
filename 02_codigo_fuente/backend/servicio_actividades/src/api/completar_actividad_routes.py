@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from src.database import get_db
 from src.esquemas.actividad_schema import ActividadResponse, CompletarActividad
 from src.logica_negocio.actividad_service import ActividadService
-from src.logica_negocio.auth import verificar_token_access
+from src.logica_negocio.auth import manejo_o_voluntario, solo_manejo_animal, verificar_token_access
 from src.repositorios.actividad_repo import actividad_a_dict
 
 router = APIRouter(
@@ -20,7 +20,7 @@ def completar_actividad(
     id_actividad: int,
     datos: CompletarActividad,
     db: Session = Depends(get_db),
-    usuario: dict = Depends(verificar_token_access),
+    usuario: dict = Depends(manejo_o_voluntario),
 ):
     actividad = ActividadService.completar(
         db,
@@ -32,3 +32,13 @@ def completar_actividad(
     resultado = actividad_a_dict(actividad)
     resultado["id_actividad"] = actividad.id_actividad
     return resultado
+
+
+@router.post(
+    "/{id_actividad}/reabrir",
+    response_model=ActividadResponse,
+    dependencies=[Depends(solo_manejo_animal)],
+)
+def reabrir_actividad(id_actividad: int, db: Session = Depends(get_db)):
+    actividad = ActividadService.reabrir(db, id_actividad)
+    return actividad_a_dict(actividad)

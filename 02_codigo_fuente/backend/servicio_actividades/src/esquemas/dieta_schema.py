@@ -66,3 +66,9 @@ class DietaResponse(BaseModel):
     alimentos: list[DietaAlimentoResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DietaFin(BaseModel):
+    """Nueva fecha de fin de una dieta vigente (null = sin fecha de fin)."""
+
+    fecha_fin: date | None = None
