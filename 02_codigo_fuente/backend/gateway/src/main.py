@@ -31,6 +31,13 @@ app.include_router(accesos_router.router)
 app.include_router(gestion_animal_router.router)
 app.include_router(actividades_router.router)
 
+# Liveness del propio gateway. Va directo en la app, fuera de los routers /api/*, así que no pasa por
+# mapa_rutas ni por el proxy: no se agrega al mapa ni se reenvía a ningún servicio. No consulta a los
+# servicios internos (si uno cae, el gateway sigue vivo y responde 503 en sus rutas).
+@app.get("/health")
+def liveness():
+    return {"status": "ok"}
+
 @app.get("/")
 def health_check():
     return {"message": "API Gateway operando correctamente y listo para redirigir tráfico"}

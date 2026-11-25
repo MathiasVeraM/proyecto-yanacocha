@@ -1,8 +1,10 @@
 from fastapi import FastAPI
+from src.api.health_routes import router as health_router
 from src.api.routes import router as auth_router
 
 app = FastAPI(title="Servicio de Accesos - Yanacocha", version="1.0.0")
 
+app.include_router(health_router)
 app.include_router(auth_router)
 
 @app.get("/")

@@ -6,6 +6,7 @@ from src.api.completar_actividad_routes import router as completar_actividad_rou
 from src.api.dietas_routes import router as dietas_router
 from src.api.enriquecimientos_routes import router as enriquecimientos_router
 from src.api.entrenamientos_routes import router as entrenamientos_router
+from src.api.health_routes import router as health_router
 from src.api.limpiezas_routes import router as limpiezas_router
 from src.api.observaciones_routes import router as observaciones_router
 from src.api.referencias_routes import router as referencias_router
@@ -15,6 +16,7 @@ from src.logica_negocio.auth import verificar_token_access
 
 app = FastAPI(title="Servicio de Actividades - Yanacocha", version="1.0.0")
 
+app.include_router(health_router)
 app.include_router(dietas_router)
 app.include_router(alimentaciones_router)
 app.include_router(enriquecimientos_router)
